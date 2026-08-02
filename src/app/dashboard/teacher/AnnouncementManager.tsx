@@ -12,6 +12,8 @@ interface Announcement {
   date: string;
   sender: string;
   created_at?: string;
+  target_type?: 'all' | 'teachers' | 'individual';
+  target_user_id?: string;
 }
 
 interface AnnouncementManagerProps {
@@ -19,13 +21,15 @@ interface AnnouncementManagerProps {
   userRole: string;
   token: string;
   userEmail: string;
+  allProfiles?: { id: string; email: string; role: string }[];
 }
 
 export default function AnnouncementManager({
   initialAnnouncements,
   userRole,
   token,
-  userEmail
+  userEmail,
+  allProfiles = []
 }: AnnouncementManagerProps) {
   const supabase = createSupabaseClient(token);
   const [announcements, setAnnouncements] = useState<Announcement[]>(initialAnnouncements);
@@ -37,6 +41,8 @@ export default function AnnouncementManager({
   const [imageUrl, setImageUrl] = useState('');
   const [content, setContent] = useState('');
   const [sender, setSender] = useState(userRole === 'head_of_department' ? 'Trưởng bộ môn' : userRole === 'admin' ? 'Ban Giám Hiệu' : 'Tổ chuyên môn');
+  const [targetType, setTargetType] = useState<'all' | 'teachers' | 'individual'>('all');
+  const [targetUserId, setTargetUserId] = useState('');
 
   const contentRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -68,6 +74,11 @@ export default function AnnouncementManager({
       return;
     }
 
+    if (userRole === 'admin' && targetType === 'individual' && !targetUserId) {
+      alert('Vui lòng chọn tài khoản cá nhân nhận thông báo.');
+      return;
+    }
+
     try {
       const today = new Date();
       const dateStr = today.toLocaleDateString('vi-VN', {
@@ -81,7 +92,9 @@ export default function AnnouncementManager({
         content: content.trim(),
         image_url: imageUrl.trim() || null,
         date: dateStr,
-        sender: sender.trim()
+        sender: sender.trim(),
+        target_type: userRole === 'admin' ? targetType : 'all',
+        target_user_id: userRole === 'admin' && targetType === 'individual' ? targetUserId || null : null
       };
 
       const { data, error } = await supabase
@@ -96,6 +109,8 @@ export default function AnnouncementManager({
       setTitle('');
       setImageUrl('');
       setContent('');
+      setTargetType('all');
+      setTargetUserId('');
       setShowForm(false);
       alert('Đăng thông báo mới thành công!');
     } catch (err) {
@@ -156,7 +171,47 @@ export default function AnnouncementManager({
                   className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
                 />
               </div>
-              <div className="space-y-1">
+
+            {/* PHÂN VÙNG CHỌN ĐỐI TƯỢNG GỬI (CHỈ ADMIN THẤY) */}
+            {userRole === 'admin' && (
+              <div className="grid gap-3 sm:grid-cols-2 bg-muted/20 p-3 rounded-xl border border-border/50">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Đối tượng nhận thông báo</label>
+                  <select
+                    value={targetType}
+                    onChange={(e) => {
+                      setTargetType(e.target.value as any);
+                      if (e.target.value !== 'individual') setTargetUserId('');
+                    }}
+                    className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-bold text-primary"
+                  >
+                    <option value="all">Gửi tất cả mọi người (All)</option>
+                    <option value="teachers">Gửi riêng Thầy Cô (Teachers & HOD)</option>
+                    <option value="individual">Gửi riêng Cá nhân cụ thể (Individual)</option>
+                  </select>
+                </div>
+
+                {targetType === 'individual' && (
+                  <div className="space-y-1 animate-fade-in">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Chọn tài khoản nhận tin</label>
+                    <select
+                      value={targetUserId}
+                      onChange={(e) => setTargetUserId(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-foreground"
+                    >
+                      <option value="">-- Chọn tài khoản nhận tin --</option>
+                      {allProfiles.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.email} ({p.role === 'student' ? 'Học sinh' : p.role === 'teacher' ? 'Giáo viên' : p.role === 'head_of_department' ? 'HOD' : 'Admin'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1">
                 <label className="text-[10px] font-bold text-muted-foreground uppercase">Danh xưng người gửi</label>
                 <input
                   type="text"
@@ -277,7 +332,22 @@ export default function AnnouncementManager({
               <div className="flex justify-between items-start gap-3">
                 <h3 className="font-extrabold text-sm text-foreground group-hover:text-primary transition-colors">{ann.title}</h3>
                 
-                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {userRole === 'admin' && (
+                    <div className="flex items-center gap-1">
+                      {ann.target_type === 'teachers' && (
+                        <span className="bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded text-[9px] font-bold">Chỉ Thầy Cô</span>
+                      )}
+                      {ann.target_type === 'individual' && (
+                        <span className="bg-orange-500/10 text-orange-500 border border-orange-500/20 px-2 py-0.5 rounded text-[9px] font-bold">
+                          Gửi riêng: {allProfiles?.find(p => p.id === ann.target_user_id)?.email || 'Tài khoản'}
+                        </span>
+                      )}
+                      {(!ann.target_type || ann.target_type === 'all') && (
+                        <span className="bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded text-[9px] font-bold">Tất cả</span>
+                      )}
+                    </div>
+                  )}
                   <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
                     <Calendar className="h-3 w-3" /> {ann.date} &bull; {ann.sender}
                   </span>

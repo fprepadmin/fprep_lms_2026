@@ -70,10 +70,11 @@ export default async function StudentDashboardPage() {
     ? Math.round(logs.reduce((acc: number, log: any) => acc + log.duration_seconds, 0) / 60)
     : 0;
 
-  // 5. Lấy danh sách thông báo động từ Mock DB/Supabase
+  // 5. Lấy danh sách thông báo động từ Mock DB/Supabase (Lọc theo đối tượng nhận tin)
   const { data: dbAnnouncements } = await supabase
     .from('announcements')
     .select('*')
+    .or(`target_type.eq.all,and(target_type.eq.individual,target_user_id.eq.${studentId}),target_type.is.null`)
     .order('created_at', { ascending: false });
 
   const announcements = dbAnnouncements && dbAnnouncements.length > 0 

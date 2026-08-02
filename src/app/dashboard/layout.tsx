@@ -7,7 +7,8 @@ import { createSupabaseClient } from '@/lib/supabase';
 import { 
   GraduationCap, LogOut, BookOpen, User, 
   Menu, X, Sun, Moon, Home, ChevronRight,
-  Users, ClipboardList, Activity, Library, MessageSquare
+  Users, ClipboardList, Activity, Library, MessageSquare,
+  Bell
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -186,6 +187,7 @@ export default function DashboardLayout({
     admin: [
       { name: 'Trang chủ', path: '/dashboard/admin', icon: <Home className="h-4.5 w-4.5" /> },
       { name: 'Tài khoản & Phân quyền', path: '/dashboard/admin/users', icon: <Users className="h-4.5 w-4.5" /> },
+      { name: 'Quản lý thông báo', path: '/dashboard/admin/announcements', icon: <Bell className="h-4.5 w-4.5" /> },
       { name: 'Nhật ký bảo mật', path: '/dashboard/admin/logs', icon: <Activity className="h-4.5 w-4.5" /> }
     ]
   };

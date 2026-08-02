@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS public.subjects CASCADE;
 DROP TABLE IF EXISTS public.student_details CASCADE;
 DROP TABLE IF EXISTS public.classes CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
+DROP TABLE IF EXISTS public.announcements CASCADE;
 
 -- Kích hoạt extension UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -148,6 +149,19 @@ CREATE TABLE public.support_requests (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 13. Bảng announcements (Thông báo hệ thống)
+CREATE TABLE public.announcements (
+    id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    image_url TEXT,
+    date VARCHAR(50) NOT NULL,
+    sender VARCHAR(100) NOT NULL,
+    target_type VARCHAR(50) DEFAULT 'all' CHECK (target_type IN ('all', 'teachers', 'individual')),
+    target_user_id VARCHAR(255) REFERENCES public.profiles(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- =========================================================================
 -- II. TẠO CÁC INDEX TỐI ƯU TRUY VẤN
 -- =========================================================================
@@ -176,6 +190,7 @@ ALTER TABLE public.study_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.study_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.support_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
 
 -- 1. BẢN CẤU HÌNH MỞ KHÓA CHO PHÉP KEY PUBLIC (ANON KEY) ĐỌC/GHI TỰ DO
 -- (Khắc phục triệt để lỗi RLS 42501 khi chạy local mà không cần SUPABASE_SERVICE_ROLE_KEY)
@@ -191,6 +206,7 @@ CREATE POLICY allow_all_progress ON public.study_progress FOR ALL TO public USIN
 CREATE POLICY allow_all_logs ON public.study_logs FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY allow_all_audit_logs ON public.audit_logs FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY allow_all_support_requests ON public.support_requests FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY allow_all_announcements ON public.announcements FOR ALL TO public USING (true) WITH CHECK (true);
 
 -- Hàm helper lấy vai trò trực tiếp từ Custom JWT Claims (vẫn giữ để tham chiếu)
 CREATE OR REPLACE FUNCTION public.get_user_role()

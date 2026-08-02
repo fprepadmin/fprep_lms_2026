@@ -104,10 +104,11 @@ export default async function TeacherDashboardPage() {
     };
   }) || [];
 
-  // 5. Lấy danh sách thông báo động từ Mock DB/Supabase
+  // 5. Lấy danh sách thông báo động từ Mock DB/Supabase (Lọc theo đối tượng nhận tin)
   const { data: dbAnnouncements } = await supabase
     .from('announcements')
     .select('*')
+    .or(`target_type.eq.all,target_type.eq.teachers,and(target_type.eq.individual,target_user_id.eq.${teacherId}),target_type.is.null`)
     .order('created_at', { ascending: false });
 
   const announcements = dbAnnouncements && dbAnnouncements.length > 0 

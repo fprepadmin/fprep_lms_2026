@@ -259,6 +259,10 @@ class MockBuilder {
     return this;
   }
 
+  or(query: string) {
+    return this;
+  }
+
   order(column: string, options?: any) {
     return this;
   }
