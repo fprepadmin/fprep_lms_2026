@@ -169,10 +169,10 @@ export default function AdminDashboardClient({
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserFptName, setNewUserFptName] = useState('');
   const [gasUrl, setGasUrl] = useState(() => {
-    const defaultUrl = 'https://script.google.com/macros/s/AKfycbzuOEvlnZaKmBXpPgRIMtTf_q-si8rAua-Y-ZCKUGpzqfFCsc4bQSFpQC4gvejXu0Tt8Q/exec';
+    const defaultUrl = 'https://script.google.com/macros/s/AKfycbxcX76M0TLzCpdgz5RFtdo3a5A7Wkx7zRWuILtX8SYJ9fGj-BF129RpVb37GrJxcX6Hkw/exec';
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('fprep-gas-url');
-      if (stored && (stored.includes('AKfycbwg') || stored.includes('AKfycbwh'))) {
+      if (stored && (stored.includes('AKfycbwg') || stored.includes('AKfycbwh') || stored.includes('AKfycbzu'))) {
         localStorage.setItem('fprep-gas-url', defaultUrl);
         return defaultUrl;
       }
