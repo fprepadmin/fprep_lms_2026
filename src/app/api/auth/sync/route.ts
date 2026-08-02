@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server';
-import { firebaseAdmin } from '@/lib/firebase-admin';
-import { getAuth } from 'firebase-admin/auth';
 import { supabaseAdmin, isDemoMode } from '@/lib/supabase';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
@@ -97,9 +95,6 @@ export async function POST(request: Request) {
 
     let decodedToken;
     try {
-      decodedToken = await getAuth().verifyIdToken(idToken);
-    } catch (adminError) {
-      console.warn('Firebase Admin verifyIdToken failed, using public key verification fallback:', adminError);
       const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'fprep-fschool';
       
       const jwtDecoded = jwt.decode(idToken, { complete: true }) as any;
@@ -130,6 +125,9 @@ export async function POST(request: Request) {
         name: verified.name || verified.email.split('@')[0],
         ...verified
       };
+    } catch (tokenError: any) {
+      console.error('Lỗi giải mã và xác thực Google Token:', tokenError);
+      return NextResponse.json({ error: 'Xác thực Google Token không hợp lệ: ' + tokenError.message }, { status: 401 });
     }
 
     const { uid, email, name } = decodedToken;
