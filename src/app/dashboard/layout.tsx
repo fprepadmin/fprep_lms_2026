@@ -399,13 +399,13 @@ export default function DashboardLayout({
             <div className="flex flex-wrap justify-center md:justify-start gap-x-12 gap-y-6 text-xs text-muted-foreground font-semibold">
               <div className="flex flex-col gap-2">
                 <span className="text-[10px] uppercase tracking-wider text-foreground font-black">Thông tin & Giới thiệu</span>
-                <a href="#about" className="hover:text-primary transition-colors">Giới thiệu</a>
-                <a href="#guide" className="hover:text-primary transition-colors">Hướng dẫn sử dụng</a>
+                <a href="/guide?tab=about" className="hover:text-primary transition-colors">Giới thiệu</a>
+                <a href="/guide?tab=usage" className="hover:text-primary transition-colors">Hướng dẫn sử dụng</a>
               </div>
               <div className="flex flex-col gap-2">
                 <span className="text-[10px] uppercase tracking-wider text-foreground font-black">Pháp lý & Điều khoản</span>
-                <a href="#terms" className="hover:text-primary transition-colors">Điều khoản sử dụng</a>
-                <a href="#data-policy" className="hover:text-primary transition-colors">Điều khoản dữ liệu người dùng</a>
+                <a href="/guide?tab=terms" className="hover:text-primary transition-colors">Điều khoản sử dụng</a>
+                <a href="/guide?tab=privacy" className="hover:text-primary transition-colors">Điều khoản dữ liệu người dùng</a>
               </div>
             </div>
           </div>

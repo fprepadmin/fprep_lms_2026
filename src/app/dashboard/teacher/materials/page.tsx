@@ -33,14 +33,14 @@ export default async function TeacherMaterialsPage() {
     .eq('teacher_id', teacherId);
 
   // 2. Lấy danh sách học sinh thuộc các lớp giáo viên phụ trách
-  const classIds = assignments?.map((a: any) => a.class_id) || [];
+  const classIds = assignments?.map((a: any) => a.class_id).filter(Boolean) || [];
   const { data: students } = await supabase
     .from('student_details')
     .select('*, classes(*)')
     .in('class_id', classIds.length > 0 ? classIds : [crypto.randomUUID()]);
 
   // 3. Lấy tất cả chương học và bài giảng để vẽ cây quản lý học liệu và tính tiến độ
-  const subjectIds = assignments?.map((a: any) => a.subject_id) || [];
+  const subjectIds = assignments?.map((a: any) => a.subject_id).filter(Boolean) || [];
   const { data: chapters } = await supabase
     .from('chapters')
     .select('*, lessons(*, lesson_materials(*))')

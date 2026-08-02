@@ -63,7 +63,7 @@ CREATE TABLE public.subjects (
 CREATE TABLE public.teacher_classes (
     id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
     teacher_id VARCHAR(255) NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    class_id VARCHAR(255) NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    class_id VARCHAR(255) REFERENCES public.classes(id) ON DELETE CASCADE,
     subject_id VARCHAR(255) NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(teacher_id, class_id, subject_id)

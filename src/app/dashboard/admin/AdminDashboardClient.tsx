@@ -293,7 +293,7 @@ export default function AdminDashboardClient({
 
     const assignments = localTeacherClasses.filter(tc => tc.teacher_id === profile.id);
     setEditingUserSubjectId(assignments[0]?.subject_id || '');
-    setEditingUserClassIds(assignments.map(tc => tc.class_id));
+    setEditingUserClassIds(assignments.map(tc => tc.class_id).filter(Boolean));
   };
 
   const handleUpdateUser = async () => {
@@ -362,12 +362,22 @@ export default function AdminDashboardClient({
 
       if (editingUserRole === 'teacher' || editingUserRole === 'head_of_department') {
         const otherAssignments = localTeacherClasses.filter(tc => tc.teacher_id !== editingUserId);
-        const newAssignments = editingUserClassIds.map(cid => ({
-          id: 'tc-' + Math.random(),
-          teacher_id: editingUserId,
-          class_id: cid,
-          subject_id: editingUserSubjectId
-        }));
+        let newAssignments = [];
+        if (editingUserClassIds && editingUserClassIds.length > 0) {
+          newAssignments = editingUserClassIds.map(cid => ({
+            id: 'tc-' + Math.random(),
+            teacher_id: editingUserId,
+            class_id: cid,
+            subject_id: editingUserSubjectId
+          }));
+        } else {
+          newAssignments = [{
+            id: 'tc-' + Math.random(),
+            teacher_id: editingUserId,
+            class_id: null,
+            subject_id: editingUserSubjectId
+          }];
+        }
         setLocalTeacherClasses([...otherAssignments, ...newAssignments]);
       } else {
         setLocalTeacherClasses(prev => prev.filter(tc => tc.teacher_id !== editingUserId));
@@ -491,12 +501,22 @@ export default function AdminDashboardClient({
 
       if (newUserRole === 'teacher' || newUserRole === 'head_of_department') {
         const otherAssignments = localTeacherClasses.filter(tc => tc.teacher_id !== data.id);
-        const newAssignments = newUserClassIds.map(cid => ({
-          id: 'tc-' + Math.random(),
-          teacher_id: data.id,
-          class_id: cid,
-          subject_id: newUserSubjectId
-        }));
+        let newAssignments = [];
+        if (newUserClassIds && newUserClassIds.length > 0) {
+          newAssignments = newUserClassIds.map(cid => ({
+            id: 'tc-' + Math.random(),
+            teacher_id: data.id,
+            class_id: cid,
+            subject_id: newUserSubjectId
+          }));
+        } else {
+          newAssignments = [{
+            id: 'tc-' + Math.random(),
+            teacher_id: data.id,
+            class_id: null,
+            subject_id: newUserSubjectId
+          }];
+        }
         setLocalTeacherClasses([...otherAssignments, ...newAssignments]);
       } else {
         setLocalTeacherClasses(prev => prev.filter(tc => tc.teacher_id !== data.id));

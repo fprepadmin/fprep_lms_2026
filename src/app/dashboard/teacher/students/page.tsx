@@ -44,8 +44,8 @@ export default async function TeacherStudentsPage() {
   }
   const { data: assignments } = await assignmentQuery;
 
-  const classIds = assignments?.map((a: any) => a.class_id) || [];
-  const subjectIds = assignments?.map((a: any) => a.subject_id) || [];
+  const classIds = assignments?.map((a: any) => a.class_id).filter(Boolean) || [];
+  const subjectIds = assignments?.map((a: any) => a.subject_id).filter(Boolean) || [];
 
   // 2. Lấy danh sách học sinh
   // Trưởng bộ môn lấy tất cả học sinh, giáo viên thường chỉ lấy học sinh các lớp phụ trách

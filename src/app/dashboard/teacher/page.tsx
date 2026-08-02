@@ -59,8 +59,8 @@ export default async function TeacherDashboardPage() {
     .select('*, classes(*), subjects(*)')
     .eq('teacher_id', teacherId);
 
-  const classIds = assignments?.map((a: any) => a.class_id) || [];
-  const subjectIds = assignments?.map((a: any) => a.subject_id) || [];
+  const classIds = assignments?.map((a: any) => a.class_id).filter(Boolean) || [];
+  const subjectIds = assignments?.map((a: any) => a.subject_id).filter(Boolean) || [];
 
   // 2. Lấy danh sách học sinh thuộc các lớp giáo viên phụ trách
   const { data: students } = await supabase

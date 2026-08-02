@@ -168,14 +168,24 @@ export async function POST(request: Request) {
       await supabaseAdmin.from('teacher_classes').delete().eq('teacher_id', targetUserId);
       
       // B. Thêm phân công mới
-      if (subjectId && classIds && Array.isArray(classIds) && classIds.length > 0) {
-        const newAssignments = classIds.map(cid => ({
-          teacher_id: targetUserId,
-          class_id: cid,
-          subject_id: subjectId
-        }));
-        const { error: assignError } = await supabaseAdmin.from('teacher_classes').insert(newAssignments);
-        if (assignError) console.error('Lỗi insert teacher_classes:', assignError);
+      if (subjectId) {
+        if (classIds && Array.isArray(classIds) && classIds.length > 0) {
+          const newAssignments = classIds.map(cid => ({
+            teacher_id: targetUserId,
+            class_id: cid,
+            subject_id: subjectId
+          }));
+          const { error: assignError } = await supabaseAdmin.from('teacher_classes').insert(newAssignments);
+          if (assignError) console.error('Lỗi insert teacher_classes:', assignError);
+        } else {
+          // Lưu phân công môn nhưng chưa xếp lớp (class_id = null)
+          const { error: assignError } = await supabaseAdmin.from('teacher_classes').insert({
+            teacher_id: targetUserId,
+            class_id: null,
+            subject_id: subjectId
+          });
+          if (assignError) console.error('Lỗi insert teacher_classes (no classes):', assignError);
+        }
       }
     } else {
       // Xóa phân công giảng dạy nếu không phải là giáo viên/HOD
@@ -283,14 +293,24 @@ export async function PUT(request: Request) {
       await supabaseAdmin.from('teacher_classes').delete().eq('teacher_id', userId);
       
       // B. Thêm phân công mới
-      if (subjectId && classIds && Array.isArray(classIds) && classIds.length > 0) {
-        const newAssignments = classIds.map(cid => ({
-          teacher_id: userId,
-          class_id: cid,
-          subject_id: subjectId
-        }));
-        const { error: assignError } = await supabaseAdmin.from('teacher_classes').insert(newAssignments);
-        if (assignError) console.error('Lỗi insert teacher_classes:', assignError);
+      if (subjectId) {
+        if (classIds && Array.isArray(classIds) && classIds.length > 0) {
+          const newAssignments = classIds.map(cid => ({
+            teacher_id: userId,
+            class_id: cid,
+            subject_id: subjectId
+          }));
+          const { error: assignError } = await supabaseAdmin.from('teacher_classes').insert(newAssignments);
+          if (assignError) console.error('Lỗi insert teacher_classes:', assignError);
+        } else {
+          // Lưu phân công môn nhưng chưa xếp lớp (class_id = null)
+          const { error: assignError } = await supabaseAdmin.from('teacher_classes').insert({
+            teacher_id: userId,
+            class_id: null,
+            subject_id: subjectId
+          });
+          if (assignError) console.error('Lỗi insert teacher_classes (no classes):', assignError);
+        }
       }
     } else {
       // Xóa phân công giảng dạy nếu không phải là giáo viên/HOD
