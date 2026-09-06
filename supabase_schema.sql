@@ -16,6 +16,9 @@ DROP TABLE IF EXISTS public.student_details CASCADE;
 DROP TABLE IF EXISTS public.classes CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
 DROP TABLE IF EXISTS public.announcements CASCADE;
+DROP TABLE IF EXISTS public.exam_results CASCADE;
+DROP TABLE IF EXISTS public.questions CASCADE;
+DROP TABLE IF EXISTS public.exams CASCADE;
 
 -- Kích hoạt extension UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -84,6 +87,7 @@ CREATE TABLE public.lessons (
     id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
     chapter_id VARCHAR(255) NOT NULL REFERENCES public.chapters(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
+    theory_content TEXT, -- Nội dung lý thuyết Markdown & LaTeX KaTeX
     order_index INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -162,6 +166,55 @@ CREATE TABLE public.announcements (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 14. Bảng exams (Đề thi)
+CREATE TABLE public.exams (
+    id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    subject_id VARCHAR(255) NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    lesson_id VARCHAR(255) REFERENCES public.lessons(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    exam_type VARCHAR(20) NOT NULL DEFAULT 'lesson' CHECK (exam_type IN ('lesson', 'test', 'thptqg', 'dgnl')),
+    duration_minutes INTEGER NOT NULL DEFAULT 15,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 15. Bảng questions (Câu hỏi trắc nghiệm của đề thi)
+CREATE TABLE public.questions (
+    id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    exam_id VARCHAR(255) NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    options TEXT[] NOT NULL,
+    correct_option_index INTEGER NOT NULL,
+    order_index INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 16. Bảng exam_results (Kết quả làm bài thi của học sinh)
+CREATE TABLE public.exam_results (
+    id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    student_id VARCHAR(255) NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    exam_id VARCHAR(255) NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+    score NUMERIC NOT NULL,
+    correct_answers INTEGER NOT NULL,
+    total_questions INTEGER NOT NULL,
+    time_spent_seconds INTEGER NOT NULL,
+    answers JSONB, -- Lưu chi tiết đáp án từng câu học sinh chọn
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 17. Bảng exam_assignments (Giao bài thi/bài tập cho lớp - Chuẩn LMS FMATH)
+CREATE TABLE public.exam_assignments (
+    id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
+    exam_id VARCHAR(255) NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+    class_id VARCHAR(255) NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    teacher_id VARCHAR(255) REFERENCES public.profiles(id) ON DELETE SET NULL,
+    due_date TIMESTAMP WITH TIME ZONE,
+    start_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    note TEXT,
+    score_weight VARCHAR(50) DEFAULT '15p',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(exam_id, class_id)
+);
+
 -- =========================================================================
 -- II. TẠO CÁC INDEX TỐI ƯU TRUY VẤN
 -- =========================================================================
@@ -172,6 +225,8 @@ CREATE INDEX idx_lessons_chapter ON public.lessons(chapter_id);
 CREATE INDEX idx_materials_lesson ON public.lesson_materials(lesson_id);
 CREATE INDEX idx_progress_student ON public.study_progress(student_id);
 CREATE INDEX idx_logs_student ON public.study_logs(student_id);
+CREATE INDEX idx_exam_assignments_class ON public.exam_assignments(class_id);
+CREATE INDEX idx_exam_assignments_exam ON public.exam_assignments(exam_id);
 
 -- =========================================================================
 -- III. THIẾT LẬP CHÍNH SÁCH BẢO MẬT (RLS) - BẢN MỞ KHÓA CHO NHÀ PHÁT TRIỂN
@@ -191,6 +246,10 @@ ALTER TABLE public.study_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.support_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exam_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exam_assignments ENABLE ROW LEVEL SECURITY;
 
 -- 1. BẢN CẤU HÌNH MỞ KHÓA CHO PHÉP KEY PUBLIC (ANON KEY) ĐỌC/GHI TỰ DO
 -- (Khắc phục triệt để lỗi RLS 42501 khi chạy local mà không cần SUPABASE_SERVICE_ROLE_KEY)
@@ -207,6 +266,10 @@ CREATE POLICY allow_all_logs ON public.study_logs FOR ALL TO public USING (true)
 CREATE POLICY allow_all_audit_logs ON public.audit_logs FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY allow_all_support_requests ON public.support_requests FOR ALL TO public USING (true) WITH CHECK (true);
 CREATE POLICY allow_all_announcements ON public.announcements FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY allow_all_exams ON public.exams FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY allow_all_questions ON public.questions FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY allow_all_exam_results ON public.exam_results FOR ALL TO public USING (true) WITH CHECK (true);
+CREATE POLICY allow_all_exam_assignments ON public.exam_assignments FOR ALL TO public USING (true) WITH CHECK (true);
 
 -- Hàm helper lấy vai trò trực tiếp từ Custom JWT Claims (vẫn giữ để tham chiếu)
 CREATE OR REPLACE FUNCTION public.get_user_role()

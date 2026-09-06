@@ -51,7 +51,7 @@ export default async function ExamPage({ params }: PageProps) {
     .order('order_index', { ascending: true });
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="w-full min-h-screen">
       <ExamSessionClient 
         exam={exam} 
         questions={questions || []} 

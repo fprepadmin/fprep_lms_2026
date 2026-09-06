@@ -1,8 +1,11 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin, getSupabaseServerClient } from '@/lib/supabase';
 import jwt from 'jsonwebtoken';
-import { Users, GraduationCap, Calendar, Mail, BookOpen } from 'lucide-react';
+import { Users } from 'lucide-react';
+import ClassroomClient from './ClassroomClient';
+
+export const dynamic = 'force-dynamic';
 
 export default async function ClassroomPage() {
   // 1. Xác thực học sinh
@@ -21,16 +24,14 @@ export default async function ClassroomPage() {
     redirect('/');
   }
 
-  if (!supabaseAdmin) {
-    redirect('/dashboard/student');
-  }
+  const supabase = (await getSupabaseServerClient()) || supabaseAdmin;
 
   // 2. Lấy thông tin lớp học của học sinh
-  const { data: studentDetail } = await supabaseAdmin
+  const { data: studentDetail } = await supabase
     .from('student_details')
     .select('*, classes(*)')
     .eq('student_id', studentId)
-    .single();
+    .maybeSingle();
 
   if (!studentDetail || !studentDetail.class_id) {
     return (
@@ -43,118 +44,72 @@ export default async function ClassroomPage() {
   }
 
   const classInfo = studentDetail.classes;
+  const groupType = classInfo.group_type || 'T';
 
-  // 3. Lấy danh sách bạn học cùng lớp
-  const { data: classmates } = await supabaseAdmin
-    .from('student_details')
-    .select('*')
-    .eq('class_id', studentDetail.class_id)
-    .order('full_name');
+  // 3. TỐI ƯU TRUY VẤN SONG SONG BẰNG PROMISE.ALL
+  const [
+    classmatesRes,
+    rawTeacherAssignmentsRes,
+    announcementsRes,
+    subjectsRes,
+    examResultsRes
+  ] = await Promise.all([
+    // Danh sách bạn cùng lớp
+    supabase.from('student_details').select('student_id, mshs, full_name').eq('class_id', studentDetail.class_id).order('full_name'),
+    // Giáo viên phụ trách
+    supabase.from('teacher_classes').select('*, subjects(*)').eq('class_id', studentDetail.class_id),
+    // Thông báo
+    supabase.from('announcements').select('*').or(`target_type.eq.all,and(target_type.eq.individual,target_user_id.eq.${studentId}),target_type.is.null`).order('created_at', { ascending: false }),
+    // Môn học thuộc ban
+    supabase.from('subjects').select('id, name').in('group_type', groupType === 'X' ? ['X', 'ENG'] : ['T', 'ENG']),
+    // Kết quả thi
+    supabase.from('exam_results').select('*').eq('student_id', studentId)
+  ]);
 
-  // 4. Lấy danh sách giáo viên phụ trách lớp học này
-  const { data: teacherAssignments } = await supabaseAdmin
-    .from('teacher_classes')
-    .select('*, subjects(*)')
-    .eq('class_id', studentDetail.class_id);
+  const classmates = classmatesRes.data || [];
+  const rawTeacherAssignments = rawTeacherAssignmentsRes.data || [];
+  const announcements = announcementsRes.data || [];
+  const subjects = subjectsRes.data || [];
+  const examResults = examResultsRes.data || [];
 
-  // Lấy email giáo viên tương ứng
-  const teacherIds = teacherAssignments?.map((t: any) => t.teacher_id) || [];
-  const { data: teacherProfiles } = await supabaseAdmin
-    .from('profiles')
-    .select('*')
-    .in('id', teacherIds.length > 0 ? teacherIds : [crypto.randomUUID()]);
+  // Lấy email giáo viên phụ trách
+  const teacherIds = rawTeacherAssignments.map((t: any) => t.teacher_id).filter(Boolean);
+  let teacherProfiles: any[] = [];
+  if (teacherIds.length > 0) {
+    const { data: tp } = await supabase.from('profiles').select('id, email').in('id', teacherIds);
+    teacherProfiles = tp || [];
+  }
+
+  const teacherAssignments = rawTeacherAssignments.map((ass: any) => ({
+    ...ass,
+    teacherProfile: teacherProfiles.find((tp: any) => tp.id === ass.teacher_id)
+  }));
+
+  // Lấy đề thi thuộc các môn của lớp & đề thi được giao cho lớp
+  const subjectIds = subjects.map((s: any) => s.id);
+  let exams: any[] = [];
+  let examAssignments: any[] = [];
+
+  const [examsRes, assignmentsRes] = await Promise.all([
+    subjectIds.length > 0 
+      ? supabase.from('exams').select('*, subjects(*)').in('subject_id', subjectIds)
+      : Promise.resolve({ data: [] }),
+    supabase.from('exam_assignments').select('*, exams(*, subjects(*))').eq('class_id', studentDetail.class_id)
+  ]);
+
+  exams = examsRes.data || [];
+  examAssignments = assignmentsRes.data || [];
 
   return (
-    <div className="space-y-8 w-full">
-      
-      {/* HEADER LỚP HỌC */}
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-gradient-to-r from-primary/5 via-transparent to-transparent">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary border border-primary/20">
-            <GraduationCap className="h-3.5 w-3.5" /> Lớp học chính khóa
-          </div>
-          <h1 className="text-3xl font-black text-foreground">Lớp học {classInfo.name}</h1>
-          <p className="text-xs text-muted-foreground font-semibold flex items-center gap-4">
-            <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Niên khóa: {classInfo.academic_year || '2026-2027'}</span>
-            <span>&bull;</span>
-            <span>Ban đào tạo: {classInfo.group_type === 'T' ? 'Khoa học Tự nhiên' : classInfo.group_type === 'X' ? 'Khoa học Xã hội' : 'Khai phóng'}</span>
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-12">
-        
-        {/* BẢNG BẠN CÙNG LỚP */}
-        <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-          <div className="p-4 border-b border-border bg-muted/10">
-            <h2 className="font-extrabold text-sm flex items-center gap-2">
-              <Users className="h-4.5 w-4.5 text-primary" />
-              Thành viên lớp học ({classmates?.length || 0} học sinh)
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                  <th className="p-4">STT</th>
-                  <th className="p-4">MSHS</th>
-                  <th className="p-4">Họ và tên</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classmates?.map((mate: any, index: number) => (
-                  <tr 
-                    key={mate.student_id} 
-                    className={`border-b border-border hover:bg-muted/5 transition-colors ${mate.student_id === studentId ? 'bg-primary/5 font-bold' : ''}`}
-                  >
-                    <td className="p-4 font-semibold text-muted-foreground">{index + 1}</td>
-                    <td className="p-4 font-bold text-foreground">{mate.mshs}</td>
-                    <td className="p-4 font-semibold text-foreground flex items-center gap-2">
-                      {mate.full_name}
-                      {mate.student_id === studentId && (
-                        <span className="text-[9px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded">Bạn</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* GIÁO VIÊN BỘ MÔN PHỤ TRÁCH */}
-        <div className="md:col-span-4 space-y-4">
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-            <h3 className="font-extrabold text-sm flex items-center gap-2 border-b border-border pb-3">
-              <BookOpen className="h-4.5 w-4.5 text-secondary" />
-              Giáo viên phụ trách
-            </h3>
-            
-            {teacherAssignments?.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">Chưa phân công giáo viên phụ trách lớp này.</p>
-            ) : (
-              <div className="space-y-4">
-                {teacherAssignments?.map((ass: any) => {
-                  const teacherProf = teacherProfiles?.find((tp: any) => tp.id === ass.teacher_id);
-                  return (
-                    <div key={ass.id} className="p-3 bg-muted/20 border border-border/50 rounded-xl space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-foreground">Giáo viên môn {ass.subjects?.name}</span>
-                      </div>
-                      <div className="text-[11px] text-muted-foreground space-y-1">
-                        <p className="flex items-center gap-1.5 font-semibold">
-                          <Mail className="h-3 w-3" /> {teacherProf?.email || 'Chưa cập nhật email'}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-      </div>
-    </div>
+    <ClassroomClient
+      classInfo={classInfo}
+      classmates={classmates}
+      teacherAssignments={teacherAssignments}
+      announcements={announcements}
+      exams={exams}
+      examAssignments={examAssignments}
+      examResults={examResults}
+      studentId={studentId}
+    />
   );
 }

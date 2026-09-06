@@ -41,34 +41,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
+      }).catch((fetchErr) => {
+        console.warn('Sync fetch network error:', fetchErr);
+        return null;
       });
       
-      if (res.ok) {
+      if (res && res.ok) {
         const data = await res.json();
         setUser(data.user);
       } else {
-        console.error('Auth Sync: Đồng bộ phiên làm việc thất bại.');
-        const errData = await res.json().catch(() => ({}));
-        if (errData.error) {
-          alert(errData.error);
-        } else {
-          alert('Đăng nhập thất bại. Vui lòng liên hệ quản trị viên.');
-        }
+        console.warn('Auth Sync: Không thể đồng bộ phiên làm việc.');
         setUser(null);
-        await firebaseSignOut(auth);
       }
     } catch (err) {
-      console.error('Auth Sync: Lỗi hệ thống trong quá trình đồng bộ:', err);
+      console.warn('Auth Sync exception:', err);
       setUser(null);
     }
   };
 
   useEffect(() => {
+    let isMounted = true;
+
+    // 1. Khởi tạo ngay từ Cookie qua API /api/auth/sync để chống trắng màn hình
+    const initSessionFromCookie = async () => {
+      try {
+        const res = await fetch('/api/auth/sync');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user && isMounted) {
+            setUser(data.user);
+            setLoading(false);
+          }
+        }
+      } catch (err) {
+        console.warn('Init session from cookie error:', err);
+      }
+    };
+
+    initSessionFromCookie();
+
     // ==========================================
     // CHẾ ĐỘ CHẠY DEMO
     // ==========================================
     if (isDemoMode) {
-      setLoading(true);
       const stored = localStorage.getItem('demo-user');
       if (stored) {
         try {
@@ -77,34 +92,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           localStorage.removeItem('demo-user');
           setUser(null);
         }
-      } else {
-        setUser(null);
       }
       setLoading(false);
       return;
     }
 
     // ==========================================
-    // CHẾ ĐỘ CHẠY THỰC TẾ (PRODUCTION)
+    // CHẾ ĐỘ CHẠY THỰC TẾ (PRODUCTION - FIREBASE)
     // ==========================================
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
-      if (firebaseUser) {
-        await syncSession(firebaseUser);
-      } else {
-        setUser(null);
-        // Xóa cookie token Supabase
-        await fetch('/api/auth/logout', { method: 'POST' });
+      try {
+        if (firebaseUser) {
+          await syncSession(firebaseUser);
+        }
+      } catch (err) {
+        console.warn('onAuthStateChanged error:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const loginWithGoogle = async () => {
     if (isDemoMode) {
-      // Nếu ở chế độ demo mà bấm nút đăng nhập chung, đăng nhập bằng học sinh mặc định
       return loginAsDemo('student');
     }
 
@@ -114,10 +131,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (result.user) {
         await syncSession(result.user);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi khi mở popup Google OAuth:', err);
+      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        alert('Không thể hoàn tất đăng nhập Google: ' + (err.message || 'Lỗi kết nối'));
+      }
+    } finally {
       setLoading(false);
-      throw err;
     }
   };
 
@@ -142,15 +162,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/auth/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isDemo: true, role, email, uid })
-      });
+        body: JSON.stringify({ isDemo: true, email, role, uid }),
+      }).catch(() => null);
 
-      if (res.ok) {
+      if (res && res.ok) {
         const data = await res.json();
-        setUser(data.user);
-        localStorage.setItem('demo-user', JSON.stringify(data.user));
+        const demoUser: AuthUser = data.user;
+        setUser(demoUser);
+        localStorage.setItem('demo-user', JSON.stringify(demoUser));
+        window.location.href = `/dashboard/${role === 'head_of_department' ? 'teacher' : role}`;
       } else {
-        console.error('Đăng nhập Demo thất bại');
+        const demoUser: AuthUser = { id: uid, email, role };
+        setUser(demoUser);
+        localStorage.setItem('demo-user', JSON.stringify(demoUser));
+        window.location.href = `/dashboard/${role === 'head_of_department' ? 'teacher' : role}`;
       }
     } catch (err) {
       console.error('Lỗi đăng nhập demo:', err);
@@ -162,15 +187,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     setLoading(true);
     try {
-      if (isDemoMode) {
-        localStorage.removeItem('demo-user');
-      } else {
-        await firebaseSignOut(auth);
+      if (!isDemoMode) {
+        await firebaseSignOut(auth).catch(() => {});
       }
-      await fetch('/api/auth/logout', { method: 'POST' });
+      localStorage.removeItem('demo-user');
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
       setUser(null);
+      window.location.href = '/';
     } catch (err) {
-      console.error('Lỗi khi đăng xuất:', err);
+      console.error('Lỗi đăng xuất:', err);
     } finally {
       setLoading(false);
     }

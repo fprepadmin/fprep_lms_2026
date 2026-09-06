@@ -117,6 +117,18 @@ export async function POST(request: Request) {
             student: student || null
           };
         });
+      } else if (table === 'exam_assignments') {
+        result = result.map(item => {
+          const ex = db.exams?.find((e: any) => e.id === item.exam_id);
+          const cls = db.classes?.find((c: any) => c.id === item.class_id);
+          const teacher = db.profiles?.find((p: any) => p.id === item.teacher_id);
+          return {
+            ...item,
+            exams: ex || null,
+            classes: cls || null,
+            teacher: teacher || null
+          };
+        });
       }
       
       return NextResponse.json({ data: result });

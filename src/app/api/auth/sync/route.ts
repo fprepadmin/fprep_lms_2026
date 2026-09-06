@@ -326,3 +326,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Xác thực không hợp lệ hoặc đã hết hạn' }, { status: 401 });
   }
 }
+
+export async function GET() {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('supabase-jwt')?.value;
+    if (!token) {
+      return NextResponse.json({ user: null }, { status: 200 });
+    }
+
+    const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
+    let decoded: any = null;
+    try {
+      decoded = jwt.verify(token, jwtSecret);
+    } catch {
+      decoded = jwt.decode(token);
+    }
+
+    if (!decoded || !decoded.sub) {
+      return NextResponse.json({ user: null }, { status: 200 });
+    }
+
+    return NextResponse.json({
+      user: {
+        id: decoded.sub,
+        email: decoded.email || '',
+        role: decoded.role || 'student'
+      }
+    });
+  } catch (err) {
+    return NextResponse.json({ user: null }, { status: 200 });
+  }
+}

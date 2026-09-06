@@ -126,6 +126,18 @@ async function queryMockDb(table: string, action: string, payloadData: any, filt
             student: student || null
           };
         });
+      } else if (table === 'exam_assignments') {
+        result = result.map(item => {
+          const ex = dbAny.exams?.find((e: any) => e.id === item.exam_id);
+          const cls = dbAny.classes?.find((c: any) => c.id === item.class_id);
+          const teacher = dbAny.profiles?.find((p: any) => p.id === item.teacher_id);
+          return {
+            ...item,
+            exams: ex || null,
+            classes: cls || null,
+            teacher: teacher || null
+          };
+        });
       }
 
       return { data: result, error: null };
@@ -238,6 +250,8 @@ async function queryMockDb(table: string, action: string, payloadData: any, filt
 
 class MockBuilder {
   private table: string;
+  private action: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
+  private payloadData: any = null;
   private filters: any[] = [];
   private onConflictFields?: string;
 
@@ -246,6 +260,30 @@ class MockBuilder {
   }
 
   select(query?: string) {
+    return this;
+  }
+
+  delete() {
+    this.action = 'delete';
+    return this;
+  }
+
+  insert(data: any) {
+    this.action = 'insert';
+    this.payloadData = data;
+    return this;
+  }
+
+  update(data: any) {
+    this.action = 'update';
+    this.payloadData = data;
+    return this;
+  }
+
+  upsert(data: any, options?: { onConflict?: string }) {
+    this.action = 'upsert';
+    this.payloadData = data;
+    this.onConflictFields = options?.onConflict;
     return this;
   }
 
@@ -276,34 +314,21 @@ class MockBuilder {
   }
 
   async single() {
-    const res = await queryMockDb(this.table, 'select', null, this.filters);
-    const dataList = res.data || [];
-    if (dataList.length === 0) {
-      return { data: null, error: { code: 'PGRST116', message: 'No rows found' } };
+    const res = await queryMockDb(this.table, this.action, this.payloadData, this.filters, this.onConflictFields);
+    const dataList = res.data;
+    if (Array.isArray(dataList)) {
+      if (dataList.length === 0) {
+        return { data: null, error: { code: 'PGRST116', message: 'No rows found' } };
+      }
+      return { data: dataList[0], error: null };
     }
-    return { data: dataList[0], error: null };
+    return { data: dataList || null, error: null };
   }
 
-  async insert(data: any) {
-    return queryMockDb(this.table, 'insert', data, this.filters);
-  }
-
-  async update(data: any) {
-    return queryMockDb(this.table, 'update', data, this.filters);
-  }
-
-  async delete() {
-    return queryMockDb(this.table, 'delete', null, this.filters);
-  }
-
-  async upsert(data: any, options?: { onConflict?: string }) {
-    return queryMockDb(this.table, 'upsert', data, this.filters, options?.onConflict);
-  }
-
-  // Thenable implementation to support direct await on builder (e.g. await supabase.from('...').select('*'))
-  then(onfulfilled?: (value: any) => any) {
-    const promise = queryMockDb(this.table, 'select', null, this.filters);
-    return promise.then(onfulfilled);
+  // Thenable implementation to support direct await on builder (e.g. await supabase.from('...').delete().eq('id', ...))
+  then(onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) {
+    const promise = queryMockDb(this.table, this.action, this.payloadData, this.filters, this.onConflictFields);
+    return promise.then(onfulfilled, onrejected);
   }
 }
 
@@ -357,6 +382,19 @@ function decodeTokenPayload(token: string) {
   }
 }
 
+function wrapClientWithMockFallbacks(client: any) {
+  if (!client) return client;
+  const originalFrom = client.from.bind(client);
+  client.from = (table: string) => {
+    // Tự động định tuyến các bảng chưa có trong schema Supabase sang persistent storage
+    if (table === 'exam_assignments') {
+      return new MockBuilder(table);
+    }
+    return originalFrom(table);
+  };
+  return client;
+}
+
 export const createSupabaseClient = (token?: string) => {
   if (isDemoMode) {
     return mockSupabase as any;
@@ -371,7 +409,7 @@ export const createSupabaseClient = (token?: string) => {
   }
   
   if (token && !isFallbackToken) {
-    return createClient(supabaseUrl, supabaseAnonKey, {
+    const client = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -382,24 +420,26 @@ export const createSupabaseClient = (token?: string) => {
         autoRefreshToken: false,
       }
     });
+    return wrapClientWithMockFallbacks(client);
   }
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
     }
   });
+  return wrapClientWithMockFallbacks(client);
 };
 
 export const supabase = isDemoMode ? (mockSupabase as any) : createSupabaseClient();
 
 export const supabaseAdmin = typeof window === 'undefined' 
-  ? (isDemoMode ? (mockSupabase as any) : createClient(supabaseUrl, supabaseServiceRoleKey, {
+  ? (isDemoMode ? (mockSupabase as any) : wrapClientWithMockFallbacks(createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
       }
-    }))
+    })))
   : null;
 
 export async function getSupabaseServerClient() {

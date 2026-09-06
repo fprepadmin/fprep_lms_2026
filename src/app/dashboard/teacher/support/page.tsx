@@ -4,7 +4,6 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import TeacherSupportManager from '../TeacherSupportManager';
 import { MessageSquare } from 'lucide-react';
-
 import jwt from 'jsonwebtoken';
 
 export const dynamic = 'force-dynamic';
@@ -27,37 +26,34 @@ export default async function TeacherSupportPage() {
 
   const supabase = await getSupabaseServerClient();
 
-  // Lấy các môn học
-  const { data: dbSubjects } = await supabase
-    .from('subjects')
-    .select('*');
-
-  // Lấy danh sách yêu cầu hỗ trợ chuyên môn của học sinh
-  const { data: dbSupportRequests } = await supabase
-    .from('support_requests')
-    .select('*')
-    .order('created_at', { ascending: false });
+  // TỐI ƯU TRUY VẤN SONG SONG PROMISE.ALL
+  const [subjectsRes, supportRequestsRes] = await Promise.all([
+    supabase.from('subjects').select('*'),
+    supabase.from('support_requests').select('*').order('created_at', { ascending: false })
+  ]);
 
   return (
-    <div className="space-y-8 w-full">
-      {/* HEADER HỎI ĐÁP */}
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-gradient-to-r from-primary/5 via-transparent to-transparent">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary border border-primary/20">
+    <div className="space-y-6 w-full animate-fade-in">
+      {/* HEADER HỎI ĐÁP (CHUẨN FMATH BANNER) */}
+      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
+        <div className="space-y-2 max-w-2xl">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
             <MessageSquare className="h-3.5 w-3.5" /> Giải đáp thắc mắc học thuật
           </div>
-          <h1 className="text-3xl font-black text-foreground">Hỏi Đáp Hỗ Trợ Học Sinh</h1>
-          <p className="text-xs text-muted-foreground font-semibold">
+          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
+            Hỏi Đáp Hỗ Trợ Học Sinh
+          </h1>
+          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
             Xem và trả lời các thắc mắc chuyên môn do học sinh gửi lên hệ thống LMS.
           </p>
         </div>
       </div>
 
       <TeacherSupportManager
-        initialRequests={dbSupportRequests || []}
+        initialRequests={supportRequestsRes.data || []}
         teacherId={teacherId || ''}
         token={token}
-        subjects={dbSubjects || []}
+        subjects={subjectsRes.data || []}
       />
     </div>
   );

@@ -5,8 +5,10 @@ import { createSupabaseClient } from '@/lib/supabase';
 import { 
   Shield, Users, Activity, Settings, Database, 
   CheckCircle, AlertCircle, RefreshCw, Terminal, Check,
-  ChevronRight, Calendar, Info
+  ChevronRight, Calendar, Info, Building2, GraduationCap, BookOpen, Plus, Trash2, Edit3,
+  FileSpreadsheet
 } from 'lucide-react';
+import ExcelImportModal from '@/components/student/ExcelImportModal';
 
 interface Profile {
   id: string;
@@ -63,6 +65,13 @@ export default function AdminDashboardClient({
   
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
   const [localStudentDetails, setLocalStudentDetails] = useState<any[]>(studentDetails);
+  const [showExcelModal, setShowExcelModal] = useState(false);
+
+  const handleExcelImportSuccess = (importedCount: number) => {
+    alert(`Đã thêm thành công ${importedCount} học sinh vào hệ thống!`);
+    setShowExcelModal(false);
+    window.location.reload();
+  };
 
   const safeTimeFormat = (dateStr: any) => {
     if (!dateStr) return 'N/A';
@@ -118,10 +127,9 @@ export default function AdminDashboardClient({
 
   const visits = getDailyVisits();
   const activeUsers = getActiveUsersNow();
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [seeding, setSeeding] = useState(false);
-  const [seedMessage, setSeedMessage] = useState<string | null>(null);
 
+
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [newClassName, setNewClassName] = useState('');
   const [newClassGroup, setNewClassGroup] = useState<'T' | 'X' | 'K'>('T');
   const [newClassYear, setNewClassYear] = useState('2026-2027');
@@ -199,6 +207,7 @@ export default function AdminDashboardClient({
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState<string>('all');
   const [userClassFilter, setUserClassFilter] = useState<string>('all');
+  const [adminSubTab, setAdminSubTab] = useState<'classes' | 'teachers' | 'students'>('classes');
 
   const [localTeacherClasses, setLocalTeacherClasses] = useState<any[]>(initialTeacherClasses);
   const [editingUserClassId, setEditingUserClassId] = useState<string>('');
@@ -541,25 +550,6 @@ export default function AdminDashboardClient({
     }
   };
 
-  // Kích hoạt nạp dữ liệu kiểm thử (Seeding)
-  const handleSeedData = async () => {
-    if (!confirm('Bạn có muốn khởi tạo dữ liệu mẫu cho hệ thống (bao gồm 11 lớp học, các môn tự học và bài học mẫu)?')) return;
-    setSeeding(true);
-    setSeedMessage(null);
-    try {
-      const res = await fetch('/api/system/seed', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        setSeedMessage(data.message || 'Seed dữ liệu thành công!');
-      } else {
-        setSeedMessage(`Lỗi: ${data.error}`);
-      }
-    } catch (err: any) {
-      setSeedMessage(`Lỗi kết nối máy chủ: ${err.message}`);
-    } finally {
-      setSeeding(false);
-    }
-  };
 
   const handleCreateClass = async () => {
     if (!newClassName.trim()) {
@@ -622,42 +612,56 @@ export default function AdminDashboardClient({
       {/* 1. CHẾ ĐỘ TRANG CHỦ ADMIN (HOME VIEW) */}
       {/* ==================================================== */}
       {activeTab === 'home' && (
-        <div className="space-y-8">
-          {/* Widget chỉ số */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-              <div className="bg-primary/10 text-primary p-2.5 rounded-lg border border-primary/20"><Users className="h-5 w-5" /></div>
-              <div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Tài khoản</span>
-                <h4 className="text-sm font-black">{profiles.length} tài khoản</h4>
+        <div className="space-y-6">
+          {/* Widget chỉ số phẳng đồng bộ FMATH */}
+          <div className="grid gap-3.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="flat-card flex items-center gap-3 p-3.5">
+              <div className="w-10 h-10 rounded-xl bg-[#e7f1ff] dark:bg-primary/20 text-primary flex items-center justify-center font-bold shrink-0 border border-[#b6d4fe]/40">
+                <Users className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Tài khoản</span>
+                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{profiles.length}</h4>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-              <div className="bg-red-500/10 text-red-500 p-2.5 rounded-lg border border-red-500/20"><Shield className="h-5 w-5" /></div>
-              <div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Số quản trị</span>
-                <h4 className="text-sm font-black">{profiles.filter(p => p.role === 'admin').length} tài khoản</h4>
+
+            <div className="flat-card flex items-center gap-3 p-3.5">
+              <div className="w-10 h-10 rounded-xl bg-[#f8d7da] dark:bg-red-500/20 text-[#dc3545] flex items-center justify-center font-bold shrink-0 border border-[#f1aeb5]/40">
+                <Shield className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Quản trị viên</span>
+                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{profiles.filter(p => p.role === 'admin').length}</h4>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-              <div className="bg-secondary/10 text-secondary p-2.5 rounded-lg border border-secondary/20"><Activity className="h-5 w-5" /></div>
-              <div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Nhật ký bảo mật</span>
-                <h4 className="text-sm font-black">{auditLogs.length} sự kiện</h4>
+
+            <div className="flat-card flex items-center gap-3 p-3.5">
+              <div className="w-10 h-10 rounded-xl bg-[#fff3cd] dark:bg-amber-500/20 text-[#ffc107] flex items-center justify-center font-bold shrink-0 border border-[#ffe69c]/40">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Nhật ký</span>
+                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{auditLogs.length}</h4>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-              <div className="bg-green-500/10 text-green-600 p-2.5 rounded-lg border border-green-500/20"><Activity className="h-5 w-5" /></div>
-              <div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Lượt học hôm nay</span>
-                <h4 className="text-sm font-black">{visits.totalAccessesToday} lượt ({visits.activeStudentsToday} HS)</h4>
+
+            <div className="flat-card flex items-center gap-3 p-3.5">
+              <div className="w-10 h-10 rounded-xl bg-[#d1e7dd] dark:bg-emerald-500/20 text-[#198754] flex items-center justify-center font-bold shrink-0 border border-[#a3cfbb]/40">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Lượt học hôm nay</span>
+                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{visits.totalAccessesToday}</h4>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-              <div className="bg-emerald-500/10 text-emerald-600 p-2.5 rounded-lg border border-emerald-500/20"><CheckCircle className="h-5 w-5" /></div>
-              <div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Học viên hoạt động</span>
-                <h4 className="text-sm font-black">{activeUsers.length} đang online</h4>
+
+            <div className="flat-card flex items-center gap-3 p-3.5 col-span-2 sm:col-span-1">
+              <div className="w-10 h-10 rounded-xl bg-[#cff4fc] dark:bg-cyan-500/20 text-[#0dcaf0] flex items-center justify-center font-bold shrink-0 border border-[#9eeaf9]/40">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Đang trực tuyến</span>
+                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{activeUsers.length}</h4>
               </div>
             </div>
           </div>
@@ -665,32 +669,6 @@ export default function AdminDashboardClient({
           <div className="grid gap-6 md:grid-cols-12 items-start">
             {/* Cột Trái: Bảo trì hệ thống & Khởi tạo lớp */}
             <div className="md:col-span-6 space-y-4">
-              {/* Tiện ích Seed dữ liệu */}
-              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                <h3 className="font-extrabold text-sm border-b border-border pb-2 flex items-center gap-1.5">
-                  <Database className="h-4.5 w-4.5 text-primary" /> Tiện ích Bảo trì & Seed dữ liệu mẫu
-                </h3>
-                
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Ở phiên bản Demo, bạn có thể khởi tạo nhanh 11 lớp học Khối 12 (12T1-T6, 12X1-X4, 12K), các chương trình học tự học mẫu và các đề kiểm tra mẫu để xem thử chức năng tức thì.
-                </p>
-
-                {seedMessage && (
-                  <div className="flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-xs font-bold text-green-600">
-                    <CheckCircle className="h-4 w-4" />
-                    <span>{seedMessage}</span>
-                  </div>
-                )}
-
-                <button
-                  onClick={handleSeedData}
-                  disabled={seeding}
-                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
-                >
-                  <Database className="h-4 w-4" />
-                  {seeding ? 'Đang nạp dữ liệu mẫu...' : 'Khởi tạo dữ liệu mẫu hệ thống'}
-                </button>
-              </div>
 
               {/* KHỞI TẠO LỚP HỌC MỚI (Admin) */}
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
@@ -920,373 +898,695 @@ export default function AdminDashboardClient({
       {/* 2. CHẾ ĐỘ QUẢN LÝ PHÂN QUYỀN (USERS VIEW) */}
       {/* ==================================================== */}
       {activeTab === 'users' && (
-        <div className="grid gap-6 md:grid-cols-12 items-start">
+        <div className="space-y-6 animate-fade-in">
           
-          {/* CỘT TRÁI (COL-SPAN-8): BẢNG TÀI KHOẢN VÀ PHÂN QUYỀN */}
-          <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm animate-fade-in">
-            <div className="p-4 border-b border-border bg-muted/10 space-y-3">
-              <h3 className="font-extrabold text-sm">Danh sách tài khoản & Phân quyền truy cập</h3>
+          {/* THANH ĐIỀU HƯỚNG 3 MỤC QUẢN LÝ DÀNH RIÊNG CHO ADMIN */}
+          <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+            <button
+              onClick={() => { setAdminSubTab('classes'); setEditingUserId(null); }}
+              className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
+                adminSubTab === 'classes' 
+                  ? 'bg-primary text-primary-foreground border-primary shadow-xs' 
+                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Building2 className="h-4 w-4" /> 1. Quản lý Lớp học & Phân công môn
+            </button>
+            <button
+              onClick={() => { setAdminSubTab('teachers'); setEditingUserId(null); }}
+              className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
+                adminSubTab === 'teachers' 
+                  ? 'bg-primary text-primary-foreground border-primary shadow-xs' 
+                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Users className="h-4 w-4" /> 2. Quản lý Giáo viên & HOD
+            </button>
+            <button
+              onClick={() => { setAdminSubTab('students'); setEditingUserId(null); }}
+              className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
+                adminSubTab === 'students' 
+                  ? 'bg-primary text-primary-foreground border-primary shadow-xs' 
+                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <GraduationCap className="h-4 w-4" /> 3. Quản lý Học sinh & Xếp lớp
+            </button>
+          </div>
+
+          {/* ==================================================== */}
+          {/* SUBTAB 1: QUẢN LÝ LỚP HỌC & PHÂN CÔNG MÔN */}
+          {/* ==================================================== */}
+          {adminSubTab === 'classes' && (
+            <div className="grid gap-6 md:grid-cols-12 items-start">
               
-              {/* Thanh bộ lọc và tìm kiếm dành cho Admin */}
-              <div className="grid gap-3 sm:grid-cols-12 items-center text-xs">
-                <div className="sm:col-span-6 relative">
-                  <input
-                    type="text"
-                    placeholder="Tìm kiếm họ tên, email, tên FPT..."
-                    value={userSearchTerm}
-                    onChange={(e) => setUserSearchTerm(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-1.5 focus:outline-none font-semibold"
-                  />
-                </div>
-                
-                <div className="sm:col-span-3">
-                  <select
-                    value={userRoleFilter}
-                    onChange={(e) => {
-                      setUserRoleFilter(e.target.value);
-                      if (e.target.value !== 'all' && e.target.value !== 'student') {
-                        setUserClassFilter('all');
-                      }
-                    }}
-                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none font-bold text-primary"
-                  >
-                    <option value="all">Tất cả vai trò</option>
-                    <option value="student">Học sinh (Student)</option>
-                    <option value="teacher">Giáo viên (Teacher)</option>
-                    <option value="head_of_department">Trưởng bộ môn (HOD)</option>
-                    <option value="admin">Quản trị viên (Admin)</option>
-                  </select>
+              {/* BẢNG DANH SÁCH LỚP HỌC */}
+              <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-border bg-muted/10 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-extrabold text-sm flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-primary" /> Danh sách Lớp học Khối 12 ({classes.length} lớp)
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Quản lý các lớp học và môn học được phân công</p>
+                  </div>
                 </div>
 
-                <div className="sm:col-span-3">
-                  <select
-                    value={userClassFilter}
-                    onChange={(e) => setUserClassFilter(e.target.value)}
-                    disabled={userRoleFilter !== 'all' && userRoleFilter !== 'student'}
-                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none font-semibold disabled:opacity-50"
-                  >
-                    <option value="all">Tất cả lớp</option>
-                    {classes.map(cls => (
-                      <option key={cls.id} value={cls.id}>{cls.name}</option>
-                    ))}
-                  </select>
+                {editingClassId && (
+                  <div className="p-4 border-b border-border bg-primary/5 space-y-3">
+                    <h4 className="font-bold text-xs text-primary">Chỉnh sửa Lớp học</h4>
+                    <div className="grid gap-3 sm:grid-cols-3 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase">Tên lớp</label>
+                        <input
+                          type="text"
+                          value={editingClassName}
+                          onChange={(e) => setEditingClassName(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-3 py-1.5 font-bold focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase">Ban</label>
+                        <select
+                          value={editingClassGroup}
+                          onChange={(e) => setEditingClassGroup(e.target.value as any)}
+                          className="w-full rounded border border-border bg-background px-2.5 py-1.5 font-bold text-primary focus:outline-none"
+                        >
+                          <option value="T">Tự nhiên (T)</option>
+                          <option value="X">Xã hội (X)</option>
+                          <option value="K">Khai phóng (K)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase">Niên khóa</label>
+                        <input
+                          type="text"
+                          value={editingClassYear}
+                          onChange={(e) => setEditingClassYear(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-3 py-1.5 font-semibold focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-1">
+                      <button
+                        onClick={() => setEditingClassId(null)}
+                        className="px-3 py-1.5 rounded-lg border border-border font-bold text-muted-foreground hover:bg-background text-xs"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        onClick={handleUpdateClass}
+                        className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-bold text-xs"
+                      >
+                        Lưu thay đổi
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        <th className="p-4">Tên Lớp học</th>
+                        <th className="p-4">Ban đào tạo</th>
+                        <th className="p-4">Niên khóa</th>
+                        <th className="p-4">Sĩ số</th>
+                        <th className="p-4">Phân công Giáo viên bộ môn</th>
+                        <th className="p-4 text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classes.map(cls => {
+                        const classStudentsCount = localStudentDetails.filter(s => s.class_id === cls.id).length;
+                        const classAssignments = localTeacherClasses.filter(tc => tc.class_id === cls.id);
+
+                        return (
+                          <tr key={cls.id} className="border-b border-border hover:bg-muted/5 transition-colors">
+                            <td className="p-4 font-black text-sm text-foreground">{cls.name}</td>
+                            <td className="p-4">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                cls.group_type === 'T' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
+                                cls.group_type === 'X' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
+                                'bg-purple-500/10 text-purple-500 border border-purple-500/20'
+                              }`}>
+                                {cls.group_type === 'T' ? 'Tự nhiên' : cls.group_type === 'X' ? 'Xã hội' : 'Khai phóng'}
+                              </span>
+                            </td>
+                            <td className="p-4 font-semibold text-muted-foreground">{cls.academic_year}</td>
+                            <td className="p-4 font-bold text-foreground">{classStudentsCount} học sinh</td>
+                            <td className="p-4 space-y-1">
+                              {classAssignments.length === 0 ? (
+                                <span className="text-[10px] text-muted-foreground italic">Chưa phân công giáo viên</span>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  {classAssignments.map((ca: any, caIdx: number) => {
+                                    const sub = subjects.find(s => s.id === ca.subject_id);
+                                    const prof = profiles.find(p => p.id === ca.teacher_id);
+                                    return (
+                                      <div key={caIdx} className="text-[11px] font-semibold">
+                                        <span className="text-primary font-bold">{sub?.name || 'Môn'}:</span> {prof?.email ? prof.email.split('@')[0].toUpperCase() : 'GV'}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => startEditClass(cls)}
+                                  className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
+                                >
+                                  Sửa
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteClass(cls.id)}
+                                  className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </div>
 
-            {editingUserId ? (
-              /* PANEL EDIT USER CHUYÊN NGHIỆP */
-              <div className="p-5 border-b border-border bg-primary/5 space-y-4">
-                <h4 className="font-extrabold text-sm text-primary">Chỉnh sửa thông tin tài khoản</h4>
-                <div className="grid gap-4 sm:grid-cols-2 text-xs">
+              {/* TẠO LỚP HỌC MỚI */}
+              <div className="md:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
+                <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
+                  <Plus className="h-4.5 w-4.5 text-primary" /> Khởi tạo Lớp học mới
+                </h4>
+                
+                <div className="space-y-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên lớp học</label>
+                    <input
+                      type="text"
+                      placeholder="VD: 12T7, 12X5, 12K2..."
+                      value={newClassName}
+                      onChange={(e) => setNewClassName(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-bold text-foreground"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Ban đào tạo</label>
+                    <select
+                      value={newClassGroup}
+                      onChange={(e) => setNewClassGroup(e.target.value as any)}
+                      className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
+                    >
+                      <option value="T">Ban Tự nhiên (T)</option>
+                      <option value="X">Ban Xã hội (X)</option>
+                      <option value="K">Ban Khai phóng (K)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Niên khóa</label>
+                    <input
+                      type="text"
+                      placeholder="2026-2027"
+                      value={newClassYear}
+                      onChange={(e) => setNewClassYear(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none text-foreground font-semibold"
+                    />
+                  </div>
+
+                  {createClassMessage && (
+                    <p className="text-[11px] font-bold text-green-600 bg-green-500/10 p-2 rounded border border-green-500/20">{createClassMessage}</p>
+                  )}
+
+                  <button
+                    onClick={handleCreateClass}
+                    disabled={creatingClass}
+                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> {creatingClass ? 'Đang tạo...' : 'Tạo lớp học mới'}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* SUBTAB 2: QUẢN LÝ GIÁO VIÊN & TRƯỞNG BỘ MÔN (HOD) */}
+          {/* ==================================================== */}
+          {adminSubTab === 'teachers' && (
+            <div className="grid gap-6 md:grid-cols-12 items-start">
+              
+              {/* BẢNG DANH SÁCH GIÁO VIÊN & HOD */}
+              <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-border bg-muted/10 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-extrabold text-sm flex items-center gap-2">
+                      <Users className="h-4 w-4 text-primary" /> Danh sách Giáo viên & Trưởng bộ môn ({profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department').length})
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Phân công môn học và các lớp giảng dạy phụ trách</p>
+                  </div>
+                </div>
+
+                {editingUserId && (
+                  <div className="p-5 border-b border-border bg-primary/5 space-y-4">
+                    <h4 className="font-extrabold text-sm text-primary">Chỉnh sửa thông tin Giáo viên / Trưởng bộ môn</h4>
+                    <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
+                        <input
+                          type="email"
+                          value={editingUserEmail}
+                          onChange={(e) => setEditingUserEmail(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Vai trò chuyên môn</label>
+                        <select
+                          value={editingUserRole}
+                          onChange={(e) => setEditingUserRole(e.target.value as any)}
+                          className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-primary"
+                        >
+                          <option value="teacher">Giáo viên bộ môn (Teacher)</option>
+                          <option value="head_of_department">Trưởng bộ môn (HOD)</option>
+                          <option value="admin">Quản trị viên (Admin)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Môn học giảng dạy</label>
+                        <select
+                          value={editingUserSubjectId}
+                          onChange={(e) => setEditingUserSubjectId(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none text-primary font-bold"
+                        >
+                          <option value="">-- Chưa phân công môn --</option>
+                          {subjects.map((sub: any) => (
+                            <option key={sub.id} value={sub.id}>{sub.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 border border-border rounded-xl p-3 bg-background max-h-[120px] overflow-y-auto">
+                          {classes.map((cls: any) => {
+                            const isChecked = editingUserClassIds.includes(cls.id);
+                            return (
+                              <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setEditingUserClassIds([...editingUserClassIds, cls.id]);
+                                    } else {
+                                      setEditingUserClassIds(editingUserClassIds.filter(id => id !== cls.id));
+                                    }
+                                  }}
+                                  className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
+                                />
+                                {cls.name}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 text-xs pt-1">
+                      <button
+                        onClick={() => setEditingUserId(null)}
+                        className="px-4 py-2 rounded-lg border border-border font-bold text-muted-foreground hover:bg-background transition-colors"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        onClick={handleUpdateUser}
+                        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-extrabold hover:opacity-90 transition-opacity"
+                      >
+                        Lưu thay đổi
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        <th className="p-4">Email Giáo viên</th>
+                        <th className="p-4">Vai trò chuyên môn</th>
+                        <th className="p-4">Môn học phụ trách</th>
+                        <th className="p-4">Lớp giảng dạy</th>
+                        <th className="p-4 text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {profiles
+                        .filter(p => p.role === 'teacher' || p.role === 'head_of_department')
+                        .map(p => {
+                          const assignments = localTeacherClasses.filter(tc => tc.teacher_id === p.id);
+                          const teacherSubject = assignments[0]?.subject_id ? subjects.find(s => s.id === assignments[0].subject_id)?.name : '';
+                          const teacherClassesNames = assignments.map(tc => classes.find(c => c.id === tc.class_id)?.name).filter(Boolean).join(', ');
+
+                          return (
+                            <tr key={p.id} className="border-b border-border hover:bg-muted/5 transition-colors">
+                              <td className="p-4 font-bold text-foreground">
+                                {p.email}
+                                <span className="block text-[10px] text-muted-foreground font-semibold">Tên FPT: {p.email.split('@')[0].toUpperCase()}</span>
+                              </td>
+                              <td className="p-4">{getRoleBadge(p.role)}</td>
+                              <td className="p-4 font-bold text-primary">{teacherSubject || <span className="text-muted-foreground italic font-normal">Chưa gán môn</span>}</td>
+                              <td className="p-4 font-semibold text-xs text-foreground">{teacherClassesNames || <span className="text-muted-foreground italic font-normal">Chưa phân lớp</span>}</td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => startEditUser(p)}
+                                    className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
+                                  >
+                                    Sửa
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteUser(p.id)}
+                                    disabled={p.id === currentUserId}
+                                    className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px] disabled:opacity-50"
+                                  >
+                                    Xóa
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* THÊM TÀI KHOẢN GIÁO VIÊN / HOD MỚI */}
+              <div className="md:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
+                <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
+                  <Users className="h-4.5 w-4.5 text-primary" /> Thêm Giáo viên / Trưởng bộ môn
+                </h4>
+
+                <div className="space-y-3 text-xs">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
                     <input
                       type="email"
-                      value={editingUserEmail}
-                      onChange={(e) => setEditingUserEmail(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
+                      placeholder="VD: giaovien.vatly@fpt.edu.vn..."
+                      value={newUserEmail}
+                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
                     />
                   </div>
+
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Vai trò</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block">Vai trò khởi tạo</label>
                     <select
-                      value={editingUserRole}
-                      onChange={(e) => setEditingUserRole(e.target.value as any)}
-                      className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-primary"
+                      value={newUserRole}
+                      onChange={(e) => setNewUserRole(e.target.value as any)}
+                      className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-semibold text-primary"
                     >
-                      {currentUserRole !== 'head_of_department' && (
-                        <option value="student">Học sinh (Student)</option>
-                      )}
-                      <option value="teacher">Giáo viên (Teacher)</option>
+                      <option value="teacher">Giáo viên bộ môn (Teacher)</option>
                       <option value="head_of_department">Trưởng bộ môn (HOD)</option>
-                      {currentUserRole !== 'head_of_department' && (
-                        <option value="admin">Quản trị viên (Admin)</option>
-                      )}
                     </select>
                   </div>
-                </div>
 
-                {editingUserRole === 'student' && (
-                  <div className="grid gap-4 sm:grid-cols-3 text-xs">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên</label>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Môn học giảng dạy</label>
+                    <select
+                      value={newUserSubjectId}
+                      onChange={(e) => setNewUserSubjectId(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none text-primary font-bold"
+                    >
+                      <option value="">-- Chọn môn học --</option>
+                      {subjects.map((sub: any) => (
+                        <option key={sub.id} value={sub.id}>{sub.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-border rounded-xl p-2.5 bg-background max-h-[110px] overflow-y-auto">
+                      {classes.map((cls: any) => {
+                        const isChecked = newUserClassIds.includes(cls.id);
+                        return (
+                          <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setNewUserClassIds([...newUserClassIds, cls.id]);
+                                } else {
+                                  setNewUserClassIds(newUserClassIds.filter(id => id !== cls.id));
+                                }
+                              }}
+                              className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
+                            />
+                            {cls.name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleCreateUser}
+                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity"
+                  >
+                    <Users className="h-3.5 w-3.5" /> Tạo tài khoản Giáo viên
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* SUBTAB 3: QUẢN LÝ HỌC SINH & XẾP LỚP */}
+          {/* ==================================================== */}
+          {adminSubTab === 'students' && (
+            <div className="grid gap-6 md:grid-cols-12 items-start">
+              
+              {/* BẢNG DANH SÁCH HỌC SINH */}
+              <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-border bg-muted/10 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <h3 className="font-extrabold text-sm flex items-center gap-2 m-0">
+                      <GraduationCap className="h-4 w-4 text-primary" /> Danh sách Học sinh ({profiles.filter(p => p.role === 'student').length})
+                    </h3>
+
+                    <button
+                      onClick={() => setShowExcelModal(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition-colors self-start sm:self-auto"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5" /> Nhập học sinh từ Excel (.xlsx)
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-12 items-center text-xs">
+                    <div className="sm:col-span-8 relative">
                       <input
                         type="text"
-                        value={editingUserFullName}
-                        onChange={(e) => setEditingUserFullName(e.target.value)}
-                        className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
+                        placeholder="Tìm kiếm họ tên, email, tên FPT/MSHS..."
+                        value={userSearchTerm}
+                        onChange={(e) => setUserSearchTerm(e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-1.5 focus:outline-none font-semibold"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / MSHS</label>
-                      <input
-                        type="text"
-                        value={editingUserFptName}
-                        onChange={(e) => setEditingUserFptName(e.target.value)}
-                        className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Xếp lớp học</label>
+                    <div className="sm:col-span-4">
                       <select
-                        value={editingUserClassId}
-                        onChange={(e) => setEditingUserClassId(e.target.value)}
-                        className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold"
+                        value={userClassFilter}
+                        onChange={(e) => setUserClassFilter(e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none font-semibold"
                       >
-                        <option value="">-- Chưa xếp lớp --</option>
-                        {classes.map((cls: any) => (
+                        <option value="all">Tất cả lớp</option>
+                        {classes.map(cls => (
                           <option key={cls.id} value={cls.id}>{cls.name}</option>
                         ))}
                       </select>
                     </div>
                   </div>
-                )}
+                </div>
 
-                {(editingUserRole === 'teacher' || editingUserRole === 'head_of_department') && (
-                  <div className="grid gap-4 sm:grid-cols-1 text-xs">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Môn học giảng dạy</label>
-                      <select
-                        value={editingUserSubjectId}
-                        onChange={(e) => setEditingUserSubjectId(e.target.value)}
-                        className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none text-primary font-bold"
-                      >
-                        <option value="">-- Chưa phân công môn --</option>
-                        {subjects.map((sub: any) => (
-                          <option key={sub.id} value={sub.id}>{sub.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
-                      <div className="grid grid-cols-4 gap-2 border border-border rounded-xl p-3 bg-background max-h-[120px] overflow-y-auto">
-                        {classes.map((cls: any) => {
-                          const isChecked = editingUserClassIds.includes(cls.id);
-                          return (
-                            <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setEditingUserClassIds([...editingUserClassIds, cls.id]);
-                                  } else {
-                                    setEditingUserClassIds(editingUserClassIds.filter(id => id !== cls.id));
-                                  }
-                                }}
-                                className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
-                              />
-                              {cls.name}
-                            </label>
-                          );
-                        })}
+                {editingUserId && (
+                  <div className="p-5 border-b border-border bg-primary/5 space-y-4">
+                    <h4 className="font-extrabold text-sm text-primary">Chỉnh sửa thông tin Học sinh</h4>
+                    <div className="grid gap-3 sm:grid-cols-3 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên</label>
+                        <input
+                          type="text"
+                          value={editingUserFullName}
+                          onChange={(e) => setEditingUserFullName(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                        />
                       </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / MSHS</label>
+                        <input
+                          type="text"
+                          value={editingUserFptName}
+                          onChange={(e) => setEditingUserFptName(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Xếp lớp học</label>
+                        <select
+                          value={editingUserClassId}
+                          onChange={(e) => setEditingUserClassId(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
+                        >
+                          <option value="">-- Chưa xếp lớp --</option>
+                          {classes.map((cls: any) => (
+                            <option key={cls.id} value={cls.id}>{cls.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 text-xs pt-1">
+                      <button
+                        onClick={() => setEditingUserId(null)}
+                        className="px-4 py-2 rounded-lg border border-border font-bold text-muted-foreground hover:bg-background transition-colors"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        onClick={handleUpdateUser}
+                        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-extrabold hover:opacity-90 transition-opacity"
+                      >
+                        Lưu thay đổi
+                      </button>
                     </div>
                   </div>
                 )}
 
-                <div className="flex justify-end gap-2 text-xs pt-1">
-                  <button
-                    onClick={() => setEditingUserId(null)}
-                    className="px-4 py-2 rounded-lg border border-border font-bold text-muted-foreground hover:bg-background transition-colors"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    onClick={handleUpdateUser}
-                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-extrabold hover:opacity-90 transition-opacity"
-                  >
-                    Lưu thay đổi
-                  </button>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        <th className="p-4">Họ và Tên</th>
+                        <th className="p-4">Tên FPT / MSHS</th>
+                        <th className="p-4">Tài khoản Email</th>
+                        <th className="p-4">Lớp học</th>
+                        <th className="p-4 text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {profiles
+                        .filter(p => p.role === 'student')
+                        .filter(p => {
+                          if (userClassFilter !== 'all') {
+                            const details = localStudentDetails.find(s => s.student_id === p.id);
+                            if (!details || details.class_id !== userClassFilter) return false;
+                          }
+                          if (userSearchTerm.trim() !== '') {
+                            const query = userSearchTerm.toLowerCase().trim();
+                            const details = localStudentDetails.find(s => s.student_id === p.id);
+                            const matchEmail = p.email?.toLowerCase().includes(query);
+                            const matchName = details?.full_name?.toLowerCase().includes(query);
+                            const matchMshs = details?.mshs?.toLowerCase().includes(query);
+                            if (!matchEmail && !matchName && !matchMshs) return false;
+                          }
+                          return true;
+                        })
+                        .map(p => {
+                          const details = localStudentDetails.find((s: any) => s.student_id === p.id);
+                          const cls = classes.find(c => c.id === details?.class_id);
+
+                          return (
+                            <tr key={p.id} className="border-b border-border hover:bg-muted/5 transition-colors">
+                              <td className="p-4 font-black text-foreground">{details?.full_name || 'Chưa cập nhật'}</td>
+                              <td className="p-4 font-bold text-primary">{details?.mshs || 'N/A'}</td>
+                              <td className="p-4 font-semibold text-muted-foreground">{p.email}</td>
+                              <td className="p-4">
+                                {cls ? (
+                                  <span className="font-bold text-foreground bg-muted/30 px-2 py-0.5 rounded border border-border/50">{cls.name}</span>
+                                ) : (
+                                  <span className="text-muted-foreground italic text-[11px]">Chưa xếp lớp</span>
+                                )}
+                              </td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => startEditUser(p)}
+                                    className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
+                                  >
+                                    Sửa
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteUser(p.id)}
+                                    className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
+                                  >
+                                    Xóa
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            ) : null}
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <th className="p-4">Họ tên & Tên FPT</th>
-                    <th className="p-4">Tài khoản Email</th>
-                    <th className="p-4">Phân lớp & Môn dạy</th>
-                    <th className="p-4">Vai trò hiện tại</th>
-                    <th className="p-4 text-center">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profiles
-                    .filter(profile => {
-                      // 1. Giới hạn vai trò cho HOD
-                      if (currentUserRole === 'head_of_department') {
-                        if (profile.role !== 'teacher' && profile.role !== 'head_of_department') {
-                          return false;
-                        }
-                      }
-                      
-                      // 2. Bộ lọc theo vai trò (Role Filter)
-                      if (userRoleFilter !== 'all') {
-                        if (profile.role !== userRoleFilter) return false;
-                      }
+              {/* THÊM HỌC SINH MỚI */}
+              <div className="md:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
+                <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
+                  <GraduationCap className="h-4.5 w-4.5 text-primary" /> Thêm tài khoản Học sinh
+                </h4>
 
-                      // 3. Bộ lọc theo lớp (Class Filter)
-                      if (userClassFilter !== 'all') {
-                        const details = localStudentDetails.find(s => s.student_id === profile.id);
-                        if (!details || details.class_id !== userClassFilter) return false;
-                      }
+                <div className="space-y-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên</label>
+                    <input
+                      type="text"
+                      placeholder="VD: Nguyễn Văn A..."
+                      value={newUserFullName}
+                      onChange={(e) => setNewUserFullName(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                    />
+                  </div>
 
-                      // 4. Tìm kiếm từ khóa (Search Term)
-                      if (userSearchTerm.trim() !== '') {
-                        const query = userSearchTerm.toLowerCase().trim();
-                        const details = localStudentDetails.find(s => s.student_id === profile.id);
-                        const matchEmail = profile.email?.toLowerCase().includes(query);
-                        const matchName = details?.full_name?.toLowerCase().includes(query);
-                        const matchMshs = details?.mshs?.toLowerCase().includes(query);
-                        
-                        if (!matchEmail && !matchName && !matchMshs) return false;
-                      }
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / MSHS</label>
+                    <input
+                      type="text"
+                      placeholder="VD: NamNP12..."
+                      value={newUserFptName}
+                      onChange={(e) => setNewUserFptName(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                    />
+                  </div>
 
-                      return true;
-                    })
-                    .map(profile => {
-                      const details = localStudentDetails.find((s: any) => s.student_id === profile.id);
-                    
-                    // Lấy phân lớp môn học của giáo viên
-                    const assignments = localTeacherClasses.filter(tc => tc.teacher_id === profile.id);
-                    const teacherSubject = assignments[0]?.subject_id ? subjects.find(s => s.id === assignments[0].subject_id)?.name : '';
-                    const teacherClassesNames = assignments.map(tc => classes.find(c => c.id === tc.class_id)?.name).filter(Boolean).join(', ');
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
+                    <input
+                      type="email"
+                      placeholder="VD: hocsinh@fpt.edu.vn..."
+                      value={newUserEmail}
+                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                    />
+                  </div>
 
-                    return (
-                      <tr key={profile.id} className="border-b border-border hover:bg-muted/5 transition-colors">
-                        <td className="p-4">
-                          {profile.role === 'student' ? (
-                            <div>
-                              <p className="font-extrabold text-foreground">{details?.full_name || 'N/A'}</p>
-                              <p className="text-[10px] text-muted-foreground font-semibold">Tên FPT: {details?.mshs || 'N/A'}</p>
-                            </div>
-                          ) : (
-                            <div>
-                              <p className="font-extrabold text-foreground">{profile.email.split('@')[0].toUpperCase()}</p>
-                              <p className="text-[10px] text-muted-foreground font-semibold">Tên FPT: {profile.email.split('@')[0].toUpperCase()}</p>
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-4 font-bold text-foreground">{profile.email}</td>
-                        <td className="p-4 font-semibold text-xs">
-                          {profile.role === 'student' ? (
-                            <span className="text-primary font-bold">
-                              {details?.class_id ? classes.find(c => c.id === details.class_id)?.name : 'Chưa xếp lớp'}
-                            </span>
-                          ) : (profile.role === 'teacher' || profile.role === 'head_of_department') ? (
-                            teacherSubject ? (
-                              <div>
-                                <p className="text-foreground font-bold">Dạy: {teacherSubject}</p>
-                                <p className="text-[10px] text-muted-foreground font-semibold">Lớp: {teacherClassesNames || 'Chưa phân lớp'}</p>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground italic text-[10px]">Chưa phân công</span>
-                            )
-                          ) : (
-                            <span className="text-muted-foreground italic text-[10px]">Toàn quyền hệ thống</span>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          {getRoleBadge(profile.role)}
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => startEditUser(profile)}
-                              className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
-                            >
-                              Sửa
-                            </button>
-                            <button
-                              onClick={() => handleDeleteUser(profile.id)}
-                              disabled={profile.id === currentUserId}
-                              className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px] disabled:opacity-50"
-                            >
-                              Xóa
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* CỘT PHẢI (COL-SPAN-4): THỐNG KÊ PHÂN BỔ VÀ CẢNH BÁO BẢO MẬT */}
-          <div className="md:col-span-4 space-y-4">
-            
-            {/* THÊM TÀI KHOẢN MỚI */}
-            <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-              <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
-                <Users className="h-4.5 w-4.5 text-primary" /> Thêm tài khoản & phân quyền sẵn
-              </h4>
-              
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên</label>
-                  <input
-                    type="text"
-                    placeholder="VD: Nguyễn Văn A..."
-                    value={newUserFullName}
-                    onChange={(e) => setNewUserFullName(e.target.value)}
-                    className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / Mã số (VD: TamTT48)</label>
-                  <input
-                    type="text"
-                    placeholder="VD: NamNP12, TamTT48..."
-                    value={newUserFptName}
-                    onChange={(e) => setNewUserFptName(e.target.value)}
-                    className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
-                  <input
-                    type="email"
-                    placeholder="VD: hocsinh@fpt.edu.vn..."
-                    value={newUserEmail}
-                    onChange={(e) => setNewUserEmail(e.target.value)}
-                    className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase block">Vai trò gán sẵn</label>
-                  <select
-                    value={newUserRole}
-                    onChange={(e) => setNewUserRole(e.target.value as any)}
-                    className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-primary"
-                  >
-                    {currentUserRole !== 'head_of_department' && (
-                      <option value="student">Học sinh (Student)</option>
-                    )}
-                    <option value="teacher">Giáo viên (Teacher)</option>
-                    <option value="head_of_department">Trưởng bộ môn (HOD)</option>
-                    {currentUserRole !== 'head_of_department' && (
-                      <option value="admin">Quản trị viên (Admin)</option>
-                    )}
-                  </select>
-                </div>
-
-                {newUserRole === 'student' && (
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Xếp lớp học</label>
                     <select
                       value={newUserClassId}
                       onChange={(e) => setNewUserClassId(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold"
+                      className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
                     >
                       <option value="">-- Chưa xếp lớp --</option>
                       {classes.map((cls: any) => (
@@ -1294,108 +1594,21 @@ export default function AdminDashboardClient({
                       ))}
                     </select>
                   </div>
-                )}
 
-                {(newUserRole === 'teacher' || newUserRole === 'head_of_department') && (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Môn học giảng dạy</label>
-                      <select
-                        value={newUserSubjectId}
-                        onChange={(e) => setNewUserSubjectId(e.target.value)}
-                        className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none text-primary font-bold"
-                      >
-                        <option value="">-- Chưa phân công môn --</option>
-                        {subjects.map((sub: any) => (
-                          <option key={sub.id} value={sub.id}>{sub.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
-                      <div className="grid grid-cols-3 gap-2 border border-border rounded-xl p-2.5 bg-background max-h-[100px] overflow-y-auto">
-                        {classes.map((cls: any) => {
-                          const isChecked = newUserClassIds.includes(cls.id);
-                          return (
-                            <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setNewUserClassIds([...newUserClassIds, cls.id]);
-                                  } else {
-                                    setNewUserClassIds(newUserClassIds.filter(id => id !== cls.id));
-                                  }
-                                }}
-                                className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
-                              />
-                              {cls.name}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Google Apps Script URL</label>
-                  <input
-                    type="text"
-                    placeholder="Dán link Web App để gửi email..."
-                    value={gasUrl}
-                    onChange={(e) => {
-                      setGasUrl(e.target.value);
-                      localStorage.setItem('fprep-gas-url', e.target.value);
+                  <button
+                    onClick={() => {
+                      setNewUserRole('student');
+                      handleCreateUser();
                     }}
-                    className="w-full rounded border border-border bg-background px-3 py-2 text-[10px] font-mono focus:outline-none"
-                  />
-                </div>
-
-                <button
-                  onClick={handleCreateUser}
-                  className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity"
-                >
-                  <Users className="h-3.5 w-3.5" /> Tạo tài khoản & Gán vai trò
-                </button>
-              </div>
-            </div>
-
-            {/* THỐNG KÊ VAI TRÒ */}
-            <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-              <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
-                <Users className="h-4.5 w-4.5 text-primary" /> Phân bổ tài khoản
-              </h4>
-              
-              <div className="space-y-3 font-semibold text-xs text-muted-foreground">
-                <div className="flex justify-between items-center p-2 rounded-xl bg-muted/20 border border-border/50">
-                  <span>Học sinh:</span>
-                  <strong className="text-foreground">{profiles.filter(p => p.role === 'student').length} tài khoản</strong>
-                </div>
-                <div className="flex justify-between items-center p-2 rounded-xl bg-muted/20 border border-border/50">
-                  <span>Giáo viên:</span>
-                  <strong className="text-foreground">{profiles.filter(p => p.role === 'teacher').length} tài khoản</strong>
-                </div>
-                <div className="flex justify-between items-center p-2 rounded-xl bg-muted/20 border border-border/50">
-                  <span>Quản trị viên:</span>
-                  <strong className="text-foreground">{profiles.filter(p => p.role === 'admin').length} tài khoản</strong>
+                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity"
+                  >
+                    <GraduationCap className="h-3.5 w-3.5" /> Tạo tài khoản Học sinh
+                  </button>
                 </div>
               </div>
-            </div>
 
-            {/* CHÍNH SÁCH BẢO MẬT */}
-            <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-3">
-              <h4 className="font-extrabold text-xs text-red-500 uppercase tracking-wider flex items-center gap-1">
-                <Shield className="h-4 w-4" /> Lưu ý quản trị
-              </h4>
-              <p className="text-xs text-muted-foreground leading-relaxed font-semibold">
-                Việc thay đổi vai trò sẽ lập tức ảnh hưởng đến quyền hạn truy cập của tài khoản tương ứng trên hệ thống thông qua chính sách bảo mật Row Level Security (RLS) của Database.
-              </p>
             </div>
-
-          </div>
+          )}
 
         </div>
       )}
@@ -1452,6 +1665,15 @@ export default function AdminDashboardClient({
           </div>
         </div>
       )}
+
+      {/* MODAL NHẬP HỌC SINH TỪ EXCEL */}
+      <ExcelImportModal
+        isOpen={showExcelModal}
+        onClose={() => setShowExcelModal(false)}
+        classes={classes}
+        token={token}
+        onSuccess={handleExcelImportSuccess}
+      />
 
     </div>
   );

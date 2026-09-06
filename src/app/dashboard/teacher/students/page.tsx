@@ -3,8 +3,8 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import TeacherStudentsClient from './TeacherStudentsClient';
-
 import jwt from 'jsonwebtoken';
+import { Users } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,106 +36,102 @@ export default async function TeacherStudentsPage() {
   const userRole = teacherProfile?.role || 'teacher';
   const isHOD = userRole === 'head_of_department';
 
-  // 1. Lấy danh sách phân công lớp học
-  // Trưởng bộ môn lấy tất cả phân công, giáo viên thường chỉ lấy của mình
+  // 1. Xác định môn học phụ trách của Giáo viên / Trưởng bộ môn
+  const { data: myTeaching } = await supabase
+    .from('teacher_classes')
+    .select('subject_id, subjects(*)')
+    .eq('teacher_id', teacherId);
+
+  const mySubjectId = myTeaching?.[0]?.subject_id || '';
+
+  // 2. Phân công & Lớp học: HOD thấy toàn bộ lớp của môn mình, GVBM chỉ thấy lớp của mình
   let assignmentQuery = supabase.from('teacher_classes').select('*, classes(*), subjects(*)');
-  if (!isHOD) {
+  if (isHOD && mySubjectId) {
+    assignmentQuery = assignmentQuery.eq('subject_id', mySubjectId);
+  } else {
     assignmentQuery = assignmentQuery.eq('teacher_id', teacherId);
   }
-  const { data: assignments } = await assignmentQuery;
 
-  const classIds = assignments?.map((a: any) => a.class_id).filter(Boolean) || [];
-  const subjectIds = assignments?.map((a: any) => a.subject_id).filter(Boolean) || [];
-
-  // 2. Lấy danh sách học sinh
-  // Trưởng bộ môn lấy tất cả học sinh, giáo viên thường chỉ lấy học sinh các lớp phụ trách
   let studentQuery = supabase.from('student_details').select('*, classes(*)');
-  if (!isHOD) {
-    studentQuery = studentQuery.in('class_id', classIds.length > 0 ? classIds : [crypto.randomUUID()]);
-  }
+  
+  const [
+    assignmentsRes,
+    allClassesRes,
+    allTeachersRes,
+    chaptersRes
+  ] = await Promise.all([
+    assignmentQuery,
+    supabase.from('classes').select('*').order('name'),
+    supabase.from('profiles').select('*').in('role', ['teacher', 'head_of_department']),
+    supabase.from('chapters').select('*, lessons(*)')
+  ]);
+
+  const assignments = assignmentsRes.data || [];
+  const allClasses = allClassesRes.data || [];
+  const allTeachers = allTeachersRes.data || [];
+  const chapters = chaptersRes.data || [];
+
+  const classIds = assignments.map((a: any) => a.class_id).filter(Boolean);
+  studentQuery = studentQuery.in('class_id', classIds.length > 0 ? classIds : [crypto.randomUUID()]);
+
   const { data: students } = await studentQuery;
+  const studentList = students || [];
+  const studentUserIds = studentList.map((s: any) => s.student_id);
 
-  // 3. Lấy tất cả tài khoản học sinh để lấy Email tương ứng
-  const studentUserIds = students?.map((s: any) => s.student_id) || [];
-  const { data: studentProfiles } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('id', studentUserIds.length > 0 ? studentUserIds : [crypto.randomUUID()]);
-
-  // 3.5. Lấy danh sách tất cả các giáo viên để phân bộ môn (Dành cho Trưởng bộ môn)
-  const { data: allTeachers } = await supabase
-    .from('profiles')
-    .select('*')
-    .in('role', ['teacher', 'head_of_department']);
-
-  // 4. Lấy danh sách tất cả các lớp có trong hệ thống
-  const { data: allClasses } = await supabase
-    .from('classes')
-    .select('*')
-    .order('name');
-
-  // 5. Lấy tiến độ học tập
+  // 2. TỐI ƯU TRUY VẤN SONG SONG CHO CÁC DỮ LIỆU CÒN LẠI
   let progressQuery = supabase.from('study_progress').select('*, lessons(*)');
+  let logsQuery = supabase.from('study_logs').select('*, lessons(*)');
+  let examResultsQuery = supabase.from('exam_results').select('*, exams(*)');
+  let profilesQuery = supabase.from('profiles').select('*').in('id', studentUserIds.length > 0 ? studentUserIds : [crypto.randomUUID()]);
+
   if (!isHOD) {
     progressQuery = progressQuery.in('student_id', studentUserIds.length > 0 ? studentUserIds : [crypto.randomUUID()]);
-  }
-  const { data: progress } = await progressQuery;
-
-  // 6. Lấy logs học tập
-  let logsQuery = supabase.from('study_logs').select('*, lessons(*)');
-  if (!isHOD) {
     logsQuery = logsQuery.in('student_id', studentUserIds.length > 0 ? studentUserIds : [crypto.randomUUID()]);
-  }
-  const { data: logs } = await logsQuery;
-
-  // 7. Lấy kết quả thi
-  let examResultsQuery = supabase.from('exam_results').select('*, exams(*)');
-  if (!isHOD) {
     examResultsQuery = examResultsQuery.in('student_id', studentUserIds.length > 0 ? studentUserIds : [crypto.randomUUID()]);
   }
-  const { data: examResults } = await examResultsQuery;
 
-  // 8. Lấy chương học và bài giảng
-  let chaptersQuery = supabase.from('chapters').select('*, lessons(*)');
-  if (!isHOD) {
-    chaptersQuery = chaptersQuery.in('subject_id', subjectIds.length > 0 ? subjectIds : [crypto.randomUUID()]);
-  }
-  const { data: chapters } = await chaptersQuery;
-
-
+  const [
+    studentProfilesRes,
+    progressRes,
+    logsRes,
+    examResultsRes
+  ] = await Promise.all([
+    profilesQuery,
+    progressQuery,
+    logsQuery,
+    examResultsQuery
+  ]);
 
   return (
-    <div className="space-y-8 w-full">
-      {/* HEADER QUẢN LÝ HỌC SINH */}
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-gradient-to-r from-primary/5 via-transparent to-transparent">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary border border-primary/20">
-            Học vụ chính khóa THPT FPT
+    <div className="space-y-6 w-full animate-fade-in">
+      {/* HEADER QUẢN LÝ HỌC SINH (CHUẨN FMATH BANNER) */}
+      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
+        <div className="space-y-2 max-w-2xl">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
+            <Users className="h-3.5 w-3.5" /> Theo dõi & Giám sát Tự học Khối 12
           </div>
-          <h1 className="text-3xl font-black text-foreground">
-            {isHOD ? 'Quản Lý Lớp & Phân Công Giáo Viên' : 'Quản Lý Lớp & Phân Tích Học Tập'}
+          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
+            Theo Dõi Tiến Trình Học Sinh
           </h1>
-          <p className="text-xs text-muted-foreground font-semibold">
-            {isHOD 
-              ? 'Giao diện Trưởng bộ môn: Quản lý phân công giáo viên bộ môn và theo dõi tổng thể tiến độ các lớp học.' 
-              : 'Báo cáo chi tiết biểu đồ học tập, quản lý danh sách học sinh và phân bổ lớp học phụ trách bộ môn.'}
+          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
+            Quản lý danh sách lớp học, phân công giảng dạy và theo dõi chi tiết điểm số, thời lượng học của từng học sinh.
           </p>
         </div>
       </div>
 
       <TeacherStudentsClient
-        assignments={assignments || []}
-        students={students || []}
-        studentProfiles={studentProfiles || []}
-        allClasses={allClasses || []}
-        progress={progress || []}
-        logs={logs || []}
-        examResults={examResults || []}
-        chapters={chapters || []}
+        assignments={assignments}
+        students={studentList}
+        studentProfiles={studentProfilesRes.data || []}
+        allClasses={allClasses}
+        progress={progressRes.data || []}
+        logs={logsRes.data || []}
+        examResults={examResultsRes.data || []}
+        chapters={chapters}
         token={token}
         teacherId={teacherId}
         userRole={userRole}
-        allTeachers={allTeachers || []}
+        allTeachers={allTeachers}
       />
     </div>
   );

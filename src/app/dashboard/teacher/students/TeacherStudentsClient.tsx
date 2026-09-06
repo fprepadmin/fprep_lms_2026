@@ -6,8 +6,9 @@ import {
   Users, Plus, Trash2, Edit3, Check, X, 
   ArrowLeft, GraduationCap, Calendar, BarChart2,
   ChevronRight, BookOpen, Clock, Award, CheckSquare,
-  AlertTriangle, Mail, HelpCircle
+  AlertTriangle, Mail, HelpCircle, FileSpreadsheet
 } from 'lucide-react';
+import ExcelImportModal from '@/components/student/ExcelImportModal';
 
 interface Assignment {
   id: string;
@@ -113,6 +114,16 @@ export default function TeacherStudentsClient({
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
   const [newTeacherRole, setNewTeacherRole] = useState<'teacher' | 'head_of_department'>('teacher');
 
+  // State Quản lý Modal Import Excel học sinh
+  const [showExcelModal, setShowExcelModal] = useState(false);
+  const [excelTargetClassId, setExcelTargetClassId] = useState<string | null>(null);
+
+  const handleExcelImportSuccess = (importedCount: number, classId: string) => {
+    alert(`Đã thêm thành công ${importedCount} học sinh vào lớp học!`);
+    setShowExcelModal(false);
+    window.location.reload();
+  };
+
   // State Chỉnh sửa học sinh (Inline editing)
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editFullName, setEditFullName] = useState('');
@@ -128,12 +139,12 @@ export default function TeacherStudentsClient({
       return;
     }
     try {
-      const mockClassId = 'class-' + Math.floor(100000 + Math.random() * 900000);
+      const newClassId = crypto.randomUUID();
 
       const { data: newClass, error: classErr } = await supabase
         .from('classes')
         .insert({
-          id: mockClassId,
+          id: newClassId,
           name: newClassName.trim().toUpperCase(),
           group_type: newClassGroup,
           academic_year: newClassYear.trim()
@@ -143,13 +154,13 @@ export default function TeacherStudentsClient({
 
       if (classErr) throw classErr;
 
-      const defaultSubjectId = assignments.length > 0 ? assignments[0].subject_id : 'sub-toan';
+      const defaultSubjectId = assignments.length > 0 ? assignments[0].subject_id : '';
 
       const { data: newAss, error: assErr } = await supabase
         .from('teacher_classes')
         .insert({
           teacher_id: teacherId,
-          class_id: mockClassId,
+          class_id: newClassId,
           subject_id: defaultSubjectId
         })
         .select('*, classes(*), subjects(*)')
@@ -233,12 +244,12 @@ export default function TeacherStudentsClient({
       return;
     }
     try {
-      const mockId = 'student-' + Math.floor(100000 + Math.random() * 900000);
+      const newStudentId = crypto.randomUUID();
 
       const { data: newProfile, error: profileErr } = await supabase
         .from('profiles')
         .insert({
-          id: mockId,
+          id: newStudentId,
           email: newEmail.trim().toLowerCase(),
           role: 'student'
         })
@@ -250,7 +261,7 @@ export default function TeacherStudentsClient({
       const { data: newStudent, error: studentErr } = await supabase
         .from('student_details')
         .insert({
-          student_id: mockId,
+          student_id: newStudentId,
           mshs: newMshs.trim().toUpperCase(),
           full_name: newFullName.trim(),
           class_id: selectedClassId
@@ -334,11 +345,11 @@ export default function TeacherStudentsClient({
         setLocalAssignments(localAssignments.map(ass => ass.id === existing.id ? data : ass));
         alert('Cập nhật phân công giáo viên thành công!');
       } else {
-        const mockAssId = 'ass-' + Math.floor(100000 + Math.random() * 900000);
+        const newAssignmentId = crypto.randomUUID();
         const { data, error } = await supabase
           .from('teacher_classes')
           .insert({
-            id: mockAssId,
+            id: newAssignmentId,
             class_id: classId,
             subject_id: subjectId,
             teacher_id: teacherIdToAssign
@@ -410,13 +421,13 @@ export default function TeacherStudentsClient({
       let successCount = 0;
       for (const item of importedStudents) {
         try {
-          const mockUserId = 'std-' + Math.floor(100000 + Math.random() * 900000);
+          const newUserId = crypto.randomUUID();
           
           // 1. Tạo profile tài khoản học sinh
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .insert({
-              id: mockUserId,
+              id: newUserId,
               email: item.email,
               role: 'student'
             })
@@ -429,7 +440,7 @@ export default function TeacherStudentsClient({
           const { error: detailError } = await supabase
             .from('student_details')
             .insert({
-              student_id: mockUserId,
+              student_id: newUserId,
               mshs: item.mshs,
               full_name: item.fullName,
               class_id: selectedClassId
@@ -466,11 +477,11 @@ export default function TeacherStudentsClient({
       return;
     }
     try {
-      const mockUserId = 'usr-' + Math.floor(100000 + Math.random() * 900000);
+      const newTeacherId = crypto.randomUUID();
       const { data, error } = await supabase
         .from('profiles')
         .insert({
-          id: mockUserId,
+          id: newTeacherId,
           email: newTeacherEmail.trim().toLowerCase(),
           role: newTeacherRole
         })
@@ -680,26 +691,34 @@ export default function TeacherStudentsClient({
         {/* 1. DASHBOARD PHÂN TÍCH TRỰC QUAN (CLASS CHARTS & METRICS) */}
         <div className="grid gap-6 md:grid-cols-12">
           {/* Hộp Chỉ số nhanh */}
-          <div className="md:col-span-4 grid gap-4">
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-              <div className="bg-blue-500/10 text-blue-500 p-2.5 rounded-lg border border-blue-500/20"><Users className="h-5 w-5" /></div>
-              <div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Học sinh lớp</span>
-                <h4 className="text-lg font-black">{analytics.studentsCount} học sinh</h4>
+          <div className="md:col-span-4 grid gap-3.5">
+            <div className="flat-card flex items-center gap-3 p-3.5">
+              <div className="w-10 h-10 rounded-xl bg-[#e7f1ff] dark:bg-primary/20 text-primary flex items-center justify-center font-bold shrink-0 border border-[#b6d4fe]/40">
+                <Users className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Sĩ số lớp</span>
+                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{analytics.studentsCount} học sinh</h4>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-              <div className="bg-emerald-500/10 text-emerald-500 p-2.5 rounded-lg border border-emerald-500/20"><BarChart2 className="h-5 w-5" /></div>
-              <div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Tiến độ trung bình</span>
-                <h4 className="text-lg font-black">{analytics.avgPercent}% hoàn thành</h4>
+
+            <div className="flat-card flex items-center gap-3 p-3.5">
+              <div className="w-10 h-10 rounded-xl bg-[#d1e7dd] dark:bg-emerald-500/20 text-[#198754] flex items-center justify-center font-bold shrink-0 border border-[#a3cfbb]/40">
+                <BarChart2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Tiến độ trung bình</span>
+                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{analytics.avgPercent}% hoàn thành</h4>
               </div>
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-              <div className="bg-primary/10 text-primary p-2.5 rounded-lg border border-primary/20"><Clock className="h-5 w-5" /></div>
-              <div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">Tổng thời gian học</span>
-                <h4 className="text-lg font-black">{analytics.avgMinutes} phút tự học</h4>
+
+            <div className="flat-card flex items-center gap-3 p-3.5">
+              <div className="w-10 h-10 rounded-xl bg-[#cff4fc] dark:bg-cyan-500/20 text-[#0dcaf0] flex items-center justify-center font-bold shrink-0 border border-[#9eeaf9]/40">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Tổng thời gian học</span>
+                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{analytics.avgMinutes} phút tự học</h4>
               </div>
             </div>
           </div>
@@ -762,14 +781,26 @@ export default function TeacherStudentsClient({
                 Danh sách chi tiết học sinh ({analytics.studentsCount} thành viên)
               </h4>
               
-              {!addingStudent && (
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setAddingStudent(true)}
-                  className="flex items-center gap-1 text-xs font-bold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
+                  onClick={() => {
+                    setExcelTargetClassId(selectedClassId);
+                    setShowExcelModal(true);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg shadow-xs transition-colors"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Thêm học sinh
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Nhập từ Excel (.xlsx)
                 </button>
-              )}
+
+                {!addingStudent && (
+                  <button
+                    onClick={() => setAddingStudent(true)}
+                    className="flex items-center gap-1 text-xs font-bold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Thêm thủ công
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -992,10 +1023,13 @@ export default function TeacherStudentsClient({
                     <Plus className="h-4 w-4" /> Thêm học sinh thủ công
                   </button>
                   <button
-                    onClick={() => { setImportingExcel(true); setAddingStudent(false); }}
-                    className="w-full py-2.5 text-center flex items-center justify-center gap-1.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900 text-xs font-bold text-indigo-600 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/40 transition-all"
+                    onClick={() => {
+                      setExcelTargetClassId(selectedClassId);
+                      setShowExcelModal(true);
+                    }}
+                    className="w-full py-2.5 text-center flex items-center justify-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-300 dark:border-emerald-800 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-all"
                   >
-                     Nhập từ Excel (Hàng loạt)
+                    <FileSpreadsheet className="h-4 w-4" /> Nhập danh sách từ Excel (.xlsx)
                   </button>
                 </div>
               </div>
@@ -1045,11 +1079,11 @@ export default function TeacherStudentsClient({
         {/* POPUP MODAL XEM CHI TIẾT HỌC SINH */}
         {selectedStudentDetail && (
           <div 
-            className="fixed inset-0 z-50 bg-slate-500/10 backdrop-blur-md flex items-center justify-center p-4"
+            className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in"
             onClick={() => setSelectedStudentDetail(null)}
           >
             <div 
-              className="bg-card border border-border max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 animate-fade-in relative overflow-hidden bg-gradient-to-br from-primary/5 via-card to-card flex flex-col max-h-[85vh]"
+              className="bg-card border border-border max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 relative overflow-hidden bg-gradient-to-br from-primary/5 via-card to-card flex flex-col max-h-[85vh] my-auto"
               onClick={(e) => e.stopPropagation()}
             >
               
@@ -1309,153 +1343,53 @@ export default function TeacherStudentsClient({
         };
 
         const primaryClasses = localAllClasses.filter(c => {
-          return localAssignments.some(ass => ass.class_id === c.id && ass.teacher_id === teacherId);
-        });
-
-        const secondaryClasses = localAllClasses.filter(c => {
-          return !localAssignments.some(ass => ass.class_id === c.id && ass.teacher_id === teacherId);
+          return localAssignments.some(ass => ass.class_id === c.id);
         });
 
         return (
           <div className="space-y-6">
-            {isHOD && (
-              <div className="flex gap-2 border-b border-border pb-3">
+            {/* DANH SÁCH LỚP HỌC PHỤ TRÁCH */}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-2">
+                <h4 className="font-extrabold text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5 m-0 text-foreground/80">
+                  <Users className="h-4 w-4 text-primary" /> Danh sách Lớp học phụ trách môn ({assignments[0]?.subjects?.name || 'Bộ môn'})
+                </h4>
+
                 <button
-                  onClick={() => setHodActiveSubTab('classes')}
-                  className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all ${hodActiveSubTab === 'classes' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border text-muted-foreground hover:bg-muted'}`}
+                  onClick={() => {
+                    setExcelTargetClassId(null);
+                    setShowExcelModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition-colors self-start sm:self-auto"
                 >
-                   Danh sách Lớp học
-                </button>
-                <button
-                  onClick={() => setHodActiveSubTab('teachers')}
-                  className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all ${hodActiveSubTab === 'teachers' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border text-muted-foreground hover:bg-muted'}`}
-                >
-                   Quản lý & Phân quyền Giáo viên
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Nhập học sinh bằng Excel (.xlsx)
                 </button>
               </div>
-            )}
-
-            {hodActiveSubTab === 'teachers' && isHOD ? (
-              <div className="grid gap-6 md:grid-cols-12 items-start animate-fade-in">
-                {/* BẢNG GIÁO VIÊN */}
-                <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                  <div className="p-4 border-b border-border bg-muted/10">
-                    <h3 className="font-extrabold text-sm">Danh sách tài khoản & Vai trò chuyên môn</h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                          <th className="p-4">Email Giáo viên</th>
-                          <th className="p-4">Vai trò hiện tại</th>
-                          <th className="p-4 text-center">Phân quyền</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allTeachers?.map(t => (
-                          <tr key={t.id} className="border-b border-border hover:bg-muted/5 transition-colors">
-                            <td className="p-4 font-bold text-foreground">{t.email}</td>
-                            <td className="p-4">
-                              {t.role === 'head_of_department' ? (
-                                <span className="bg-purple-500/10 text-purple-500 border border-purple-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">Trưởng bộ môn</span>
-                              ) : (
-                                <span className="bg-blue-500/10 text-blue-500 border border-blue-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">Giáo viên</span>
-                              )}
-                            </td>
-                            <td className="p-4 flex items-center justify-center">
-                              <select
-                                value={t.role}
-                                onChange={(e) => handleHODChangeTeacherRole(t.id, e.target.value as any)}
-                                className="rounded border border-border bg-background px-3 py-1.5 text-xs font-semibold focus:outline-none text-foreground"
-                              >
-                                <option value="teacher">Giáo viên bộ môn (Teacher)</option>
-                                <option value="head_of_department">Trưởng bộ môn (HOD)</option>
-                              </select>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+              
+              {primaryClasses.length === 0 ? (
+                <div className="text-center py-12 border border-dashed border-border rounded-2xl bg-card">
+                  <Users className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                  <p className="font-bold text-muted-foreground text-xs">Chưa có lớp học nào được phân công cho bộ môn này.</p>
                 </div>
-
-                {/* THÊM TÀI KHOẢN GIÁO VIÊN MỚI */}
-                <div className="md:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                  <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
-                    <Users className="h-4.5 w-4.5 text-primary" /> Thêm tài khoản Giáo viên
-                  </h4>
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản mới</label>
-                      <input
-                        type="email"
-                        placeholder="VD: giaovien.vatly@fpt.edu.vn..."
-                        value={newTeacherEmail}
-                        onChange={(e) => setNewTeacherEmail(e.target.value)}
-                        className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block">Vai trò khởi tạo</label>
-                      <select
-                        value={newTeacherRole}
-                        onChange={(e) => setNewTeacherRole(e.target.value as any)}
-                        className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-primary"
-                      >
-                        <option value="teacher">Giáo viên bộ môn (Teacher)</option>
-                        <option value="head_of_department">Trưởng bộ môn (HOD)</option>
-                      </select>
-                    </div>
-                    <button
-                      onClick={handleHODCreateTeacher}
-                      className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity"
-                    >
-                      <Users className="h-3.5 w-3.5" /> Tạo tài khoản giáo viên
-                    </button>
-                  </div>
+              ) : (
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {primaryClasses.map(c => renderClassCard(c, false))}
                 </div>
-              </div>
-            ) : (
-              <>
-                {/* PHẦN 1: LỚP HỌC PHỤ TRÁCH CHÍNH */}
-                <div className="space-y-4">
-                  <h4 className="font-extrabold text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5 border-b border-border pb-2 text-foreground/80">
-                    <Users className="h-4 w-4 text-primary" /> Lớp học phụ trách chính
-                  </h4>
-                  
-                  {primaryClasses.length === 0 ? (
-                    <div className="text-center py-12 border border-dashed border-border rounded-2xl bg-card">
-                      <Users className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                      <p className="font-bold text-muted-foreground text-xs">Chưa có lớp học nào do bạn phụ trách giảng dạy chính.</p>
-                    </div>
-                  ) : (
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                      {primaryClasses.map(c => renderClassCard(c, false))}
-                    </div>
-                  )}
-                </div>
-
-                {/* PHẦN 2: LỚP HỌC BỘ MÔN KHÁC (PHỤ) - CHỈ DÀNH CHO TRƯỞNG BỘ MÔN */}
-                {isHOD && (
-                  <div className="space-y-4 pt-6 border-t border-border">
-                    <h4 className="font-extrabold text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 border-b border-border pb-2">
-                      <Users className="h-4 w-4 text-muted-foreground" /> Lớp học bộ môn khác (Phụ)
-                    </h4>
-                    
-                    {secondaryClasses.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic pl-2">Không có lớp học phụ nào khác.</p>
-                    ) : (
-                      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                        {secondaryClasses.map(c => renderClassCard(c, true))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+              )}
+            </div>
           </div>
         );
       })()}
+
+      {/* MODAL NHẬP HỌC SINH TỪ EXCEL */}
+      <ExcelImportModal
+        isOpen={showExcelModal}
+        onClose={() => setShowExcelModal(false)}
+        classes={localAllClasses}
+        defaultClassId={excelTargetClassId || selectedClassId || localAllClasses[0]?.id}
+        token={token}
+        onSuccess={handleExcelImportSuccess}
+      />
 
     </div>
   );

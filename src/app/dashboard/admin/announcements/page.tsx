@@ -5,6 +5,8 @@ import { getSupabaseServerClient } from '@/lib/supabase';
 import AnnouncementManager from '../../teacher/AnnouncementManager';
 import { Bell } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminAnnouncementsPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get('supabase-jwt')?.value;
@@ -33,50 +35,44 @@ export default async function AdminAnnouncementsPage() {
 
   const supabase = await getSupabaseServerClient();
 
-  // 1. Lấy danh sách tất cả thông báo hệ thống
-  const { data: dbAnnouncements } = await supabase
-    .from('announcements')
-    .select('*')
-    .order('created_at', { ascending: false });
+  // TỐI ƯU TRUY VẤN SONG SONG PROMISE.ALL
+  const [announcementsRes, profilesRes] = await Promise.all([
+    supabase.from('announcements').select('*').order('created_at', { ascending: false }),
+    supabase.from('profiles').select('id, email, role').order('email', { ascending: true })
+  ]);
 
-  const announcements = dbAnnouncements && dbAnnouncements.length > 0 
-    ? dbAnnouncements.map((a: any) => ({
-        id: a.id,
-        title: a.title,
-        content: a.content,
-        image_url: a.image_url || undefined,
-        date: a.date,
-        sender: a.sender,
-        target_type: a.target_type || 'all',
-        target_user_id: a.target_user_id || undefined,
-      }))
-    : [];
+  const dbAnnouncements = announcementsRes.data || [];
+  const announcements = dbAnnouncements.map((a: any) => ({
+    id: a.id,
+    title: a.title,
+    content: a.content,
+    image_url: a.image_url || undefined,
+    date: a.date,
+    sender: a.sender,
+    target_type: a.target_type || 'all',
+    target_user_id: a.target_user_id || undefined,
+  }));
 
-  // 2. Lấy danh sách tài khoản để hỗ trợ tính năng chọn người nhận cụ thể
-  const { data: dbProfiles } = await supabase
-    .from('profiles')
-    .select('id, email, role')
-    .order('email', { ascending: true });
-
-  const allProfiles = dbProfiles || [];
+  const allProfiles = profilesRes.data || [];
 
   return (
-    <div className="space-y-8 w-full">
-      {/* HEADER */}
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-gradient-to-r from-primary/5 via-transparent to-transparent">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary border border-primary/20">
-            Truyền thông & Báo cáo
+    <div className="space-y-6 w-full animate-fade-in">
+      {/* HEADER QUẢN LÝ THÔNG BÁO (CHUẨN FMATH BANNER) */}
+      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
+        <div className="space-y-2 max-w-2xl">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
+            <Bell className="h-3.5 w-3.5" /> Truyền thông & Báo cáo Nội bộ
           </div>
-          <h1 className="text-3xl font-black text-foreground">Quản Lý Thông Báo</h1>
-          <p className="text-xs text-muted-foreground font-semibold">
+          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
+            Quản Lý Thông Báo
+          </h1>
+          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
             Đăng thông tin, thông báo và tin tức quan trọng đến toàn bộ website, chỉ giáo viên hoặc gửi riêng cho từng cá nhân.
           </p>
         </div>
       </div>
 
-      {/* ANNOUNCEMENT MANAGER */}
-      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+      <div className="flat-card">
         <AnnouncementManager
           initialAnnouncements={announcements}
           userRole={userRole}

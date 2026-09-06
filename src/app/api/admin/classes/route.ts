@@ -40,13 +40,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Database Admin Client chưa được cấu hình' }, { status: 500 });
     }
 
-    const mockClassId = crypto.randomUUID();
+    const newClassId = crypto.randomUUID();
 
     // Thêm vào bảng classes
     const { data: newClass, error: classError } = await supabaseAdmin
       .from('classes')
       .insert({
-        id: mockClassId,
+        id: newClassId,
         name: name.trim().toUpperCase(),
         group_type: groupType,
         academic_year: academicYear.trim()
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         actor_id: adminId,
         action: 'CREATE_CLASS',
         target_table: 'classes',
-        target_id: mockClassId,
+        target_id: newClassId,
         new_values: { name, groupType, academicYear }
       });
     } catch (auditErr) {

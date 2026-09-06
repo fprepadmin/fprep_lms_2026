@@ -4,10 +4,13 @@ import React, { useState } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
 import { 
   Users, Plus, Trash2, Edit3, Check, X, 
-  Video, FileText, ChevronRight, Play,
+  Video, FileText, ChevronRight, Play, BookOpen,
   ChevronDown, BarChart2, Clock, Award, HelpCircle,
-  ClipboardList, CheckSquare, Library, ArrowLeft, ExternalLink
+  ClipboardList, CheckSquare, Library, ArrowLeft, ExternalLink, Sparkles
 } from 'lucide-react';
+import ExamEditorModal, { QuestionData } from '@/components/exam/ExamEditorModal';
+import MathRenderer from '@/components/MathRenderer';
+import TheoryEditor from '@/components/theory/TheoryEditor';
 
 interface Assignment {
   id: string;
@@ -47,6 +50,8 @@ interface Lesson {
   chapter_id: string;
   title: string;
   order_index: number;
+  theory_markdown?: string;
+  theory_content?: string;
   lesson_materials?: Material[];
 }
 
@@ -59,17 +64,27 @@ interface Chapter {
 }
 
 interface Progress {
+  id?: string;
   student_id: string;
   lesson_id: string;
-  completed: boolean;
-  completed_at: string;
-  last_accessed_at: string;
+  completed?: boolean;
+  is_completed?: boolean;
+  completed_at?: string;
+  last_accessed_at?: string;
+  score?: number | null;
+  updated_at?: string;
+  lessons?: Lesson;
 }
 
 interface StudyLog {
+  id?: string;
   student_id: string;
   lesson_id: string;
-  duration_seconds: number;
+  action?: string;
+  duration_seconds?: number;
+  time_spent_seconds?: number;
+  created_at?: string;
+  lessons?: Lesson;
 }
 
 interface TeacherDashboardClientProps {
@@ -81,6 +96,7 @@ interface TeacherDashboardClientProps {
   examResults: any[];
   exams: any[];
   questions: any[];
+  allSubjects?: any[];
   token: string;
   teacherId: string;
   viewMode: 'stats' | 'materials';
@@ -95,6 +111,7 @@ export default function TeacherDashboardClient({
   examResults,
   exams,
   questions,
+  allSubjects,
   token,
   teacherId,
   viewMode
@@ -111,9 +128,8 @@ export default function TeacherDashboardClient({
   const [selectedStudentDetail, setSelectedStudentDetail] = useState<Student | null>(null);
 
   // Môn học đang soạn thảo
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
-    assignments.length > 0 ? assignments[0].subject_id : ''
-  );
+  const fallbackSubjectId = assignments[0]?.subject_id || allSubjects?.[0]?.id || chapters[0]?.subject_id || '';
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(fallbackSubjectId);
 
   // Cấu trúc cây bài học
   const [localChapters, setLocalChapters] = useState<Chapter[]>(chapters);
@@ -125,8 +141,11 @@ export default function TeacherDashboardClient({
   const [selectedLessonId, setSelectedLessonId] = useState<string | 'general' | null>(null);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
 
-  // Right Panel: Sub tabs ('materials' vs 'exams')
-  const [rightPanelTab, setRightPanelTab] = useState<'materials' | 'exams'>('materials');
+  // Modal Soạn đề thi chuẩn FMATH 2025
+  const [editingExamModal, setEditingExamModal] = useState<any | null>(null);
+
+  // Right Panel: Sub tabs ('materials' vs 'theory' vs 'exams')
+  const [rightPanelTab, setRightPanelTab] = useState<'materials' | 'theory' | 'exams'>('theory');
 
   // Trạng thái các Form thêm mới
   const [addingChapter, setAddingChapter] = useState(false);
@@ -143,6 +162,7 @@ export default function TeacherDashboardClient({
   const [addingExam, setAddingExam] = useState(false);
   const [newExamTitle, setNewExamTitle] = useState('');
   const [newExamDuration, setNewExamDuration] = useState(15);
+  const [newExamType, setNewExamType] = useState<'lesson' | 'test' | 'thptqg' | 'dgnl'>('lesson');
 
   const [activeEditingExamId, setActiveEditingExamId] = useState<string | null>(null);
   const [newQuestionContent, setNewQuestionContent] = useState('');
@@ -329,26 +349,246 @@ export default function TeacherDashboardClient({
     }
   };
 
-  // 7. Thêm Đề thi
-  const handleAddExam = async () => {
-    if (!newExamTitle.trim()) return;
+  // 6.5. Lưu Lý thuyết Markdown của Bài học (Chuẩn FMATH - Dual Persistence)
+  const handleSaveTheory = async (chapterId: string, lessonId: string, theoryContent: string) => {
     try {
-      const isGeneral = selectedLessonId === 'general';
-      const { data, error } = await supabase.from('exams').insert({
-        subject_id: selectedSubjectId,
-        lesson_id: isGeneral ? null : selectedLessonId,
-        title: newExamTitle.trim(),
-        duration_minutes: Number(newExamDuration)
-      }).select().single();
+      // 1. Thử cập nhật trực tiếp vào bảng lessons
+      let savedDirectly = false;
+      try {
+        const { error: lessonErr } = await supabase
+          .from('lessons')
+          .update({
+            theory_content: theoryContent,
+            theory_markdown: theoryContent
+          })
+          .eq('id', lessonId);
+        
+        if (!lessonErr) {
+          savedDirectly = true;
+        }
+      } catch (e) {
+        savedDirectly = false;
+      }
 
-      if (error) throw error;
-      setLocalExams([...localExams, data]);
-      setNewExamTitle('');
-      setNewExamDuration(15);
-      setAddingExam(false);
-    } catch (err) {
+      // 2. Đồng thời lưu an toàn vào lesson_materials để đảm bảo không bị mất dữ liệu ngay cả khi CSDL chưa có cột theory_content
+      const activeChap = localChapters.find(c => c.id === chapterId);
+      const activeLes = activeChap?.lessons?.find(l => l.id === lessonId);
+      const existingMat = activeLes?.lesson_materials?.find(m => m.title === '__theory_markdown__');
+
+      let savedMaterialRecord: any = null;
+
+      if (existingMat) {
+        const { data, error: matErr } = await supabase
+          .from('lesson_materials')
+          .update({ source_url: theoryContent })
+          .eq('id', existingMat.id)
+          .select()
+          .single();
+        if (!matErr && data) savedMaterialRecord = data;
+      } else {
+        const { data, error: matErr } = await supabase
+          .from('lesson_materials')
+          .insert({
+            lesson_id: lessonId,
+            title: '__theory_markdown__',
+            material_type: 'attachment',
+            source_url: theoryContent,
+            order_index: 0
+          })
+          .select()
+          .single();
+        if (!matErr && data) savedMaterialRecord = data;
+      }
+
+      // Cập nhật State cục bộ
+      setLocalChapters(prev => prev.map(c => {
+        if (c.id === chapterId) {
+          return {
+            ...c,
+            lessons: (c.lessons || []).map(l => {
+              if (l.id === lessonId) {
+                let mats = l.lesson_materials || [];
+                if (savedMaterialRecord) {
+                  if (mats.some(m => m.id === savedMaterialRecord.id || m.title === '__theory_markdown__')) {
+                    mats = mats.map(m => (m.id === savedMaterialRecord.id || m.title === '__theory_markdown__') ? savedMaterialRecord : m);
+                  } else {
+                    mats = [...mats, savedMaterialRecord];
+                  }
+                }
+                return {
+                  ...l,
+                  theory_markdown: theoryContent,
+                  theory_content: theoryContent,
+                  lesson_materials: mats
+                };
+              }
+              return l;
+            })
+          };
+        }
+        return c;
+      }));
+    } catch (err: any) {
       console.error(err);
-      alert('Không thể tạo đề thi.');
+      throw err;
+    }
+  };
+
+  // 7. Lưu Đề thi và Bộ câu hỏi từ ExamEditorModal (Chuẩn FMATH 2025)
+  const handleSaveExamModal = async (examMeta: any, questionsData: QuestionData[]) => {
+    try {
+      const activeChapter = localChapters.find(c => c.id === selectedChapterId);
+      const isGeneral = selectedLessonId === 'general';
+      const finalSubjectId = activeChapter?.subject_id || selectedSubjectId || fallbackSubjectId;
+      const finalLessonId = isGeneral ? null : selectedLessonId;
+
+      let savedExamId = editingExamModal?.id;
+
+      if (savedExamId && !savedExamId.startsWith('new-')) {
+        // Cập nhật đề thi đã có
+        let updatedExam: any = null;
+        const examUpdatePayload = {
+          title: examMeta.title,
+          duration_minutes: Number(examMeta.duration_minutes),
+          exam_type: examMeta.exam_type
+        };
+
+        const res1 = await supabase
+          .from('exams')
+          .update(examUpdatePayload)
+          .eq('id', savedExamId)
+          .select()
+          .single();
+
+        if (res1.error && (res1.error.message?.includes('exam_type') || res1.error.message?.includes('schema cache'))) {
+          const { exam_type, ...fallbackPayload } = examUpdatePayload;
+          const fallbackRes = await supabase
+            .from('exams')
+            .update(fallbackPayload)
+            .eq('id', savedExamId)
+            .select()
+            .single();
+          if (fallbackRes.error) throw fallbackRes.error;
+          updatedExam = fallbackRes.data;
+        } else if (res1.error) {
+          throw res1.error;
+        } else {
+          updatedExam = res1.data;
+        }
+
+        // Xóa câu hỏi cũ và ghi lại câu hỏi mới
+        await supabase.from('questions').delete().eq('exam_id', savedExamId);
+
+        const newQuestions = questionsData.map((q, idx) => ({
+          exam_id: savedExamId,
+          content: q.content,
+          question_type: q.type,
+          options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options,
+          correct_option_index: q.type === 'mcq' ? (['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0) : 0,
+          correct_answer: q.correct_answer,
+          explanation: q.explanation,
+          level: q.level,
+          order_index: idx + 1
+        }));
+
+        let qRes = await supabase
+          .from('questions')
+          .insert(newQuestions)
+          .select();
+
+        if (qRes.error && (qRes.error.message?.includes('column') || qRes.error.message?.includes('schema cache'))) {
+          const fallbackQs = questionsData.map((q, idx) => ({
+            exam_id: savedExamId,
+            content: q.content,
+            options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options.map((o: any) => o.text || o),
+            correct_option_index: ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0,
+            order_index: idx + 1
+          }));
+          qRes = await supabase
+            .from('questions')
+            .insert(fallbackQs)
+            .select();
+        }
+
+        if (qRes.error) throw qRes.error;
+
+        setLocalExams(prev => prev.map(e => e.id === savedExamId ? updatedExam : e));
+        setLocalQuestions(prev => [...prev.filter(q => q.exam_id !== savedExamId), ...(qRes.data || [])]);
+      } else {
+        // Tạo mới đề thi
+        let newExam: any = null;
+        const examInsertPayload = {
+          subject_id: finalSubjectId,
+          lesson_id: finalLessonId,
+          title: examMeta.title,
+          exam_type: examMeta.exam_type || (finalLessonId ? 'lesson' : 'test'),
+          duration_minutes: Number(examMeta.duration_minutes) || 15
+        };
+
+        const res1 = await supabase
+          .from('exams')
+          .insert(examInsertPayload)
+          .select()
+          .single();
+
+        if (res1.error && (res1.error.message?.includes('exam_type') || res1.error.message?.includes('schema cache'))) {
+          const { exam_type, ...fallbackPayload } = examInsertPayload;
+          const fallbackRes = await supabase
+            .from('exams')
+            .insert(fallbackPayload)
+            .select()
+            .single();
+          if (fallbackRes.error) throw fallbackRes.error;
+          newExam = fallbackRes.data;
+        } else if (res1.error) {
+          throw res1.error;
+        } else {
+          newExam = res1.data;
+        }
+
+        savedExamId = newExam.id;
+
+        const newQuestions = questionsData.map((q, idx) => ({
+          exam_id: savedExamId,
+          content: q.content,
+          question_type: q.type,
+          options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options,
+          correct_option_index: q.type === 'mcq' ? (['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0) : 0,
+          correct_answer: q.correct_answer,
+          explanation: q.explanation,
+          level: q.level,
+          order_index: idx + 1
+        }));
+
+        let qRes = await supabase
+          .from('questions')
+          .insert(newQuestions)
+          .select();
+
+        if (qRes.error && (qRes.error.message?.includes('column') || qRes.error.message?.includes('schema cache'))) {
+          const fallbackQs = questionsData.map((q, idx) => ({
+            exam_id: savedExamId,
+            content: q.content,
+            options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options.map((o: any) => o.text || o),
+            correct_option_index: ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0,
+            order_index: idx + 1
+          }));
+          qRes = await supabase
+            .from('questions')
+            .insert(fallbackQs)
+            .select();
+        }
+
+        if (qRes.error) throw qRes.error;
+
+        setLocalExams(prev => [...prev, newExam]);
+        setLocalQuestions(prev => [...prev, ...(qRes.data || [])]);
+      }
+
+      alert('Lưu Đề thi & Bộ câu hỏi thành công!');
+    } catch (err: any) {
+      console.error(err);
+      throw err;
     }
   };
 
@@ -359,7 +599,6 @@ export default function TeacherDashboardClient({
       const { error } = await supabase.from('exams').delete().eq('id', examId);
       if (error) throw error;
       setLocalExams(localExams.filter(e => e.id !== examId));
-      if (activeEditingExamId === examId) setActiveEditingExamId(null);
     } catch (err) {
       console.error(err);
       alert('Không thể xóa đề thi.');
@@ -545,7 +784,7 @@ export default function TeacherDashboardClient({
     const studentProgress = progress.filter(p => 
       p.student_id === studentId && 
       activeSubjectLessonIds.includes(p.lesson_id) && 
-      p.completed
+      (p.completed || p.is_completed)
     );
     const studentLogs = logs.filter(l => 
       l.student_id === studentId && 
@@ -554,11 +793,16 @@ export default function TeacherDashboardClient({
     const completedCount = studentProgress.length;
     const totalCount = activeSubjectLessonIds.length;
     const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-    const totalMinutes = Math.round(studentLogs.reduce((acc, log) => acc + log.duration_seconds, 0) / 60);
+    const totalMinutes = Math.round(studentLogs.reduce((acc, log) => acc + (log.duration_seconds || log.time_spent_seconds || 0), 0) / 60);
 
     const studentAllProgress = progress.filter(p => p.student_id === studentId && activeSubjectLessonIds.includes(p.lesson_id));
-    const lastAccess = studentAllProgress.length > 0 
-      ? new Date(Math.max(...studentAllProgress.map(p => new Date(p.last_accessed_at).getTime()))).toLocaleDateString('vi-VN')
+    const lastAccessTimes = studentAllProgress
+      .map(p => p.last_accessed_at || p.updated_at || p.completed_at)
+      .filter(Boolean)
+      .map(t => new Date(t!).getTime());
+
+    const lastAccess = lastAccessTimes.length > 0 
+      ? new Date(Math.max(...lastAccessTimes)).toLocaleDateString('vi-VN')
       : 'Chưa học';
 
     return { percent, totalMinutes, lastAccess, completedCount, totalCount };
@@ -620,26 +864,34 @@ export default function TeacherDashboardClient({
             <div className="grid gap-6 lg:grid-cols-12">
               {/* Thống kê học sinh */}
               <div className="lg:col-span-12 space-y-4">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-                    <div className="bg-blue-500/10 text-blue-500 p-2.5 rounded-lg border border-blue-500/20"><Users className="h-5 w-5" /></div>
-                    <div>
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Học sinh lớp</span>
-                      <h4 className="text-xl font-black">{filteredStudents.length} học sinh</h4>
+                <div className="grid gap-3.5 sm:grid-cols-3">
+                  <div className="flat-card flex items-center gap-3 p-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-[#e7f1ff] dark:bg-primary/20 text-primary flex items-center justify-center font-bold shrink-0 border border-[#b6d4fe]/40">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Học sinh lớp</span>
+                      <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{filteredStudents.length} học sinh</h4>
                     </div>
                   </div>
-                  <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-                    <div className="bg-emerald-500/10 text-emerald-500 p-2.5 rounded-lg border border-emerald-500/20"><BarChart2 className="h-5 w-5" /></div>
-                    <div>
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Tiến độ trung bình</span>
-                      <h4 className="text-xl font-black">{getClassAverage()}% hoàn thành</h4>
+
+                  <div className="flat-card flex items-center gap-3 p-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-[#d1e7dd] dark:bg-emerald-500/20 text-[#198754] flex items-center justify-center font-bold shrink-0 border border-[#a3cfbb]/40">
+                      <BarChart2 className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Tiến độ trung bình</span>
+                      <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{getClassAverage()}% hoàn thành</h4>
                     </div>
                   </div>
-                  <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 shadow-sm">
-                    <div className="bg-primary/10 text-primary p-2.5 rounded-lg border border-primary/20"><Clock className="h-5 w-5" /></div>
-                    <div>
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Tổng số bài học</span>
-                      <h4 className="text-xl font-black">{activeSubjectLessonIds.length} bài giảng</h4>
+
+                  <div className="flat-card flex items-center gap-3 p-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-[#cff4fc] dark:bg-cyan-500/20 text-[#0dcaf0] flex items-center justify-center font-bold shrink-0 border border-[#9eeaf9]/40">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Tổng số bài học</span>
+                      <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{activeSubjectLessonIds.length} bài giảng</h4>
                     </div>
                   </div>
                 </div>
@@ -697,11 +949,11 @@ export default function TeacherDashboardClient({
               {/* POPUP MODAL XEM CHI TIẾT HỌC SINH */}
               {selectedStudentDetail && (
                 <div 
-                  className="fixed inset-0 z-50 bg-slate-500/10 backdrop-blur-md flex items-center justify-center p-4"
+                  className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in"
                   onClick={() => setSelectedStudentDetail(null)}
                 >
                   <div 
-                    className="bg-card border border-border max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 animate-fade-in relative overflow-hidden bg-gradient-to-br from-primary/5 via-card to-card flex flex-col max-h-[85vh]"
+                    className="bg-card border border-border max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 relative overflow-hidden bg-gradient-to-br from-primary/5 via-card to-card flex flex-col max-h-[85vh]"
                     onClick={(e) => e.stopPropagation()}
                   >
                     
@@ -968,14 +1220,20 @@ export default function TeacherDashboardClient({
                     {selectedLessonId !== 'general' && (
                       <div className="flex bg-muted/30 border border-border/80 rounded-lg p-1 shrink-0 self-start sm:self-center">
                         <button
-                          onClick={() => setRightPanelTab('materials')}
-                          className={`px-3 py-1 rounded text-xs font-bold transition-all ${rightPanelTab === 'materials' ? 'bg-background border border-border shadow-sm text-primary' : 'text-muted-foreground'}`}
+                          onClick={() => setRightPanelTab('theory')}
+                          className={`px-3 py-1 rounded text-xs font-bold transition-all ${rightPanelTab === 'theory' ? 'bg-background border border-border shadow-xs text-primary font-black' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                          Tài liệu & Học liệu
+                          Lý thuyết (Markdown)
+                        </button>
+                        <button
+                          onClick={() => setRightPanelTab('materials')}
+                          className={`px-3 py-1 rounded text-xs font-bold transition-all ${rightPanelTab === 'materials' ? 'bg-background border border-border shadow-xs text-primary font-black' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          Học liệu & Video
                         </button>
                         <button
                           onClick={() => setRightPanelTab('exams')}
-                          className={`px-3 py-1 rounded text-xs font-bold transition-all ${rightPanelTab === 'exams' ? 'bg-background border border-border shadow-sm text-primary' : 'text-muted-foreground'}`}
+                          className={`px-3 py-1 rounded text-xs font-bold transition-all ${rightPanelTab === 'exams' ? 'bg-background border border-border shadow-xs text-primary font-black' : 'text-muted-foreground hover:text-foreground'}`}
                         >
                           Đề thi & Luyện tập
                         </button>
@@ -984,143 +1242,178 @@ export default function TeacherDashboardClient({
                   </div>
 
                   {/* ---------------------------------------------------- */}
-                  {/* SUB TAB: HỌC LIỆU / TÀI LIỆU (MATERIALS) */}
+                  {/* SUB TAB: LÝ THUYẾT MARKDOWN (THEORY) */}
                   {/* ---------------------------------------------------- */}
-                  {selectedLessonId !== 'general' && rightPanelTab === 'materials' && (
+                  {selectedLessonId !== 'general' && rightPanelTab === 'theory' && (
                     <div className="space-y-4">
-                      {/* Header phần Học liệu */}
-                      <div className="flex justify-between items-center">
-                        <h5 className="font-extrabold text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                          <FileText className="h-4 w-4 text-primary" /> Học liệu được liên kết ({activeLesson?.lesson_materials?.length || 0})
-                        </h5>
-
-                        {!addingMaterial && (
-                          <button
-                            onClick={() => setAddingMaterial(true)}
-                            className="flex items-center gap-1 text-[11px] font-bold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90"
-                          >
-                            <Plus className="h-3.5 w-3.5" /> Thêm học liệu mới
-                          </button>
-                        )}
+                      <div className="flex justify-between items-center border-b border-border pb-3">
+                        <div>
+                          <h5 className="font-black text-sm text-foreground flex items-center gap-2">
+                            <BookOpen className="h-4.5 w-4.5 text-primary" /> Soạn thảo Lý thuyết Bài học (Markdown & KaTeX)
+                          </h5>
+                          <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">
+                            Soạn thảo nội dung lý thuyết, công thức Toán học, định lý và bảng biến thiên cho học sinh
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Form Thêm học liệu mới */}
-                      {addingMaterial && (
-                        <div className="bg-muted/10 border border-border p-4 rounded-xl space-y-4 animate-fade-in">
-                          <div className="flex justify-between items-center border-b border-border pb-2">
-                            <h6 className="font-bold text-xs">Liên kết học liệu tự học mới</h6>
-                            <button onClick={() => setAddingMaterial(false)} className="text-muted-foreground hover:bg-muted p-1 rounded">
-                              <X className="h-3.5 w-3.5" />
+                      <TheoryEditor
+                        key={selectedLessonId}
+                        lessonTitle={activeLesson?.title || ''}
+                        initialContent={
+                          activeLesson?.theory_markdown || 
+                          activeLesson?.theory_content || 
+                          activeLesson?.lesson_materials?.find(m => m.title === '__theory_markdown__')?.source_url || 
+                          ''
+                        }
+                        onSave={(content) => handleSaveTheory(selectedChapterId!, selectedLessonId!, content)}
+                      />
+                    </div>
+                  )}
+
+                  {/* ---------------------------------------------------- */}
+                  {/* SUB TAB: HỌC LIỆU / TÀI LIỆU (MATERIALS) */}
+                  {/* ---------------------------------------------------- */}
+                  {selectedLessonId !== 'general' && rightPanelTab === 'materials' && (() => {
+                    const visibleMaterials = (activeLesson?.lesson_materials || []).filter(m => m.title !== '__theory_markdown__');
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Header phần Học liệu */}
+                        <div className="flex justify-between items-center">
+                          <h5 className="font-extrabold text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="h-4 w-4 text-primary" /> Học liệu được liên kết ({visibleMaterials.length})
+                          </h5>
+
+                          {!addingMaterial && (
+                            <button
+                              onClick={() => setAddingMaterial(true)}
+                              className="flex items-center gap-1 text-[11px] font-bold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Thêm học liệu mới
                             </button>
-                          </div>
-                          
-                          <div className="grid gap-3 sm:grid-cols-2">
+                          )}
+                        </div>
+
+                        {/* Form Thêm học liệu mới */}
+                        {addingMaterial && (
+                          <div className="bg-muted/10 border border-border p-4 rounded-xl space-y-4 animate-fade-in">
+                            <div className="flex justify-between items-center border-b border-border pb-2">
+                              <h6 className="font-bold text-xs">Liên kết học liệu tự học mới</h6>
+                              <button onClick={() => setAddingMaterial(false)} className="text-muted-foreground hover:bg-muted p-1 rounded">
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên tài liệu / Video</label>
+                                <input
+                                  type="text"
+                                  placeholder="Ví dụ: Video bài giảng phần 1..."
+                                  value={newMaterialTitle}
+                                  onChange={(e) => setNewMaterialTitle(e.target.value)}
+                                  className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase">Loại học liệu</label>
+                                <select
+                                  value={newMaterialType}
+                                  onChange={(e) => setNewMaterialType(e.target.value as any)}
+                                  className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-primary"
+                                >
+                                  <option value="video">Video bài giảng (YouTube)</option>
+                                  <option value="slide">Slide trình chiếu (Google Slides)</option>
+                                  <option value="pdf">Tài liệu đọc (PDF Drive)</option>
+                                  <option value="attachment">Tài liệu đính kèm khác</option>
+                                </select>
+                              </div>
+                            </div>
+
                             <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên tài liệu / Video</label>
+                              <label className="text-[10px] font-bold text-muted-foreground uppercase">Đường dẫn tài liệu (Source URL)</label>
                               <input
                                 type="text"
-                                placeholder="Ví dụ: Slide bài giảng, Video hướng dẫn..."
-                                value={newMaterialTitle}
-                                onChange={(e) => setNewMaterialTitle(e.target.value)}
+                                placeholder="Dán link Youtube/Drive/Slide của bạn tại đây..."
+                                value={newMaterialUrl}
+                                onChange={(e) => setNewMaterialUrl(e.target.value)}
                                 className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase">Loại học liệu</label>
-                              <select
-                                value={newMaterialType}
-                                onChange={(e) => setNewMaterialType(e.target.value as any)}
-                                className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-primary"
+
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => handleAddMaterial(selectedChapterId!, selectedLessonId!)}
+                                className="flex items-center gap-1 rounded-lg bg-green-500 px-4 py-2 text-xs font-bold text-white hover:opacity-90"
                               >
-                                <option value="video">Video giảng dạy (Youtube)</option>
-                                <option value="pdf">Tài liệu PDF (Google Drive)</option>
-                                <option value="slide">Slide (Google Slide)</option>
-                                <option value="attachment">Học liệu khác</option>
-                              </select>
+                                Đăng tải
+                              </button>
                             </div>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-muted-foreground uppercase">Đường dẫn tài liệu (Source URL)</label>
-                            <input
-                              type="text"
-                              placeholder="Dán link Youtube/Drive/Slide của bạn tại đây..."
-                              value={newMaterialUrl}
-                              onChange={(e) => setNewMaterialUrl(e.target.value)}
-                              className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                            />
-                          </div>
+                        )}
 
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => handleAddMaterial(selectedChapterId!, selectedLessonId!)}
-                              className="flex items-center gap-1 rounded-lg bg-green-500 px-4 py-2 text-xs font-bold text-white hover:opacity-90"
-                            >
-                              Đăng tải
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                        {/* Danh sách các tài liệu hiện tại */}
+                        <div className="space-y-3">
+                          {visibleMaterials.length === 0 ? (
+                            <div className="text-center py-10 border border-dashed border-border rounded-xl bg-card text-muted-foreground">
+                              <p className="text-xs italic">Bài giảng này hiện tại chưa được liên kết bất cứ học liệu nào.</p>
+                            </div>
+                          ) : (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {visibleMaterials.map(mat => (
+                                <div key={mat.id} className="bg-muted/10 border border-border rounded-xl p-4 flex flex-col justify-between space-y-4 hover:shadow-sm transition-shadow">
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full inline-block mb-1">
+                                      {mat.material_type}
+                                    </span>
+                                    <h6 className="font-extrabold text-xs text-foreground line-clamp-1">{mat.title}</h6>
+                                    <p className="text-[10px] text-muted-foreground truncate">{mat.source_url}</p>
+                                  </div>
 
-                      {/* Danh sách các tài liệu hiện tại */}
-                      <div className="space-y-3">
-                        {(!activeLesson?.lesson_materials || activeLesson.lesson_materials.length === 0) ? (
-                          <div className="text-center py-10 border border-dashed border-border rounded-xl bg-card text-muted-foreground">
-                            <p className="text-xs italic">Bài giảng này hiện tại chưa được liên kết bất cứ học liệu nào.</p>
-                          </div>
-                        ) : (
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            {activeLesson.lesson_materials.map(mat => (
-                              <div key={mat.id} className="bg-muted/10 border border-border rounded-xl p-4 flex flex-col justify-between space-y-4 hover:shadow-sm transition-shadow">
-                                <div className="space-y-1">
-                                  <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full inline-block mb-1">
-                                    {mat.material_type}
-                                  </span>
-                                  <h6 className="font-extrabold text-xs text-foreground line-clamp-1">{mat.title}</h6>
-                                  <p className="text-[10px] text-muted-foreground truncate">{mat.source_url}</p>
-                                </div>
-
-                                <div className="flex justify-between items-center pt-2 border-t border-border/50">
-                                  <a
-                                    href={mat.source_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-[10px] font-bold text-secondary flex items-center gap-1 hover:underline"
-                                  >
-                                    Xem link <ExternalLink className="h-3 w-3" />
-                                  </a>
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      onClick={() => {
-                                        const newTitle = prompt('Nhập tên tài liệu mới:', mat.title);
-                                        if (newTitle) {
-                                          const newUrl = prompt('Nhập đường dẫn tài liệu mới:', mat.source_url);
-                                          if (newUrl) {
-                                            handleUpdateMaterial(selectedChapterId!, selectedLessonId!, mat.id, { title: newTitle, source_url: newUrl });
+                                  <div className="flex justify-between items-center pt-2 border-t border-border/50">
+                                    <a
+                                      href={mat.source_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[10px] font-bold text-secondary flex items-center gap-1 hover:underline"
+                                    >
+                                      Xem link <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        onClick={() => {
+                                          const newTitle = prompt('Nhập tên tài liệu mới:', mat.title);
+                                          if (newTitle) {
+                                            const newUrl = prompt('Nhập đường dẫn tài liệu mới:', mat.source_url);
+                                            if (newUrl) {
+                                              handleUpdateMaterial(selectedChapterId!, selectedLessonId!, mat.id, { title: newTitle, source_url: newUrl });
+                                            }
                                           }
-                                        }
-                                      }}
-                                      className="text-primary hover:bg-primary/10 p-1.5 rounded"
-                                      title="Sửa tài liệu"
-                                    >
-                                      <Edit3 className="h-3.5 w-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteMaterial(selectedChapterId!, selectedLessonId!, mat.id)}
-                                      className="text-red-500 hover:bg-red-500/10 p-1.5 rounded"
-                                      title="Xóa tài liệu"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
+                                        }}
+                                        className="text-primary hover:bg-primary/10 p-1.5 rounded"
+                                        title="Sửa tài liệu"
+                                      >
+                                        <Edit3 className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteMaterial(selectedChapterId!, selectedLessonId!, mat.id)}
+                                        className="text-red-500 hover:bg-red-500/10 p-1.5 rounded"
+                                        title="Xóa tài liệu"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })()}
 
                   {/* ---------------------------------------------------- */}
                   {/* SUB TAB: ĐỀ THI & CÂU HỎI (EXAMS) */}
@@ -1129,268 +1422,135 @@ export default function TeacherDashboardClient({
                     <div className="space-y-6">
                       
                       {/* Header Đề thi */}
-                      <div className="flex justify-between items-center">
-                        <h5 className="font-extrabold text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                          <CheckSquare className="h-4 w-4 text-primary" /> Đề luyện tập & Thi thử ({activeExams.length})
-                        </h5>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+                        <div>
+                          <h5 className="font-black text-sm text-foreground flex items-center gap-2">
+                            <CheckSquare className="h-4.5 w-4.5 text-primary" /> Bài tập tự luyện theo bài ({activeExams.length})
+                          </h5>
+                          <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">
+                            {selectedLessonId === 'general' 
+                              ? 'Danh sách đề luyện thi chung của môn học' 
+                              : `Bài tập trắc nghiệm gắn liền với bài học: ${activeLesson?.title || ''}`}
+                          </p>
+                        </div>
 
-                        {!addingExam && (
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
                           <button
-                            onClick={() => setAddingExam(true)}
-                            className="flex items-center gap-1 text-[11px] font-bold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90"
+                            onClick={() => {
+                              const isGeneral = selectedLessonId === 'general';
+                              setEditingExamModal({
+                                id: `new-${Date.now()}`,
+                                title: isGeneral ? 'Đề luyện thi thử' : `Bài tập tự luyện: ${activeLesson?.title || 'Bài học'}`,
+                                duration_minutes: 15,
+                                exam_type: 'lesson',
+                                lesson_id: isGeneral ? null : selectedLessonId
+                              });
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-extrabold bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:opacity-90 transition-opacity shadow-xs"
                           >
-                            <Plus className="h-3.5 w-3.5" /> Tạo đề thi mới
+                            <Plus className="h-4 w-4" /> Tạo bài tập theo bài
                           </button>
-                        )}
+                        </div>
                       </div>
 
-                      {/* Form tạo đề thi */}
-                      {addingExam && (
-                        <div className="bg-muted/10 border border-border p-4 rounded-xl space-y-4 animate-fade-in">
-                          <div className="flex justify-between items-center border-b border-border pb-2">
-                            <h6 className="font-bold text-xs">Khởi tạo đề thi mới</h6>
-                            <button onClick={() => setAddingExam(false)} className="text-muted-foreground hover:bg-muted p-1 rounded">
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                          
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase">Tiêu đề đề luyện tập</label>
-                              <input
-                                type="text"
-                                placeholder="Ví dụ: Bài tập trắc nghiệm bài 1..."
-                                value={newExamTitle}
-                                onChange={(e) => setNewExamTitle(e.target.value)}
-                                className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase">Thời lượng làm bài (Phút)</label>
-                              <input
-                                type="number"
-                                placeholder="15"
-                                value={newExamDuration}
-                                onChange={(e) => setNewExamDuration(Number(e.target.value))}
-                                className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex justify-end">
-                            <button
-                              onClick={handleAddExam}
-                              className="flex items-center gap-1 rounded-lg bg-green-500 px-4 py-2 text-xs font-bold text-white hover:opacity-90"
-                            >
-                              Tạo đề thi
-                            </button>
-                          </div>
+                      {/* Banner gợi ý chuyển sang trang soạn Đề thi định kỳ / THPTQG */}
+                      <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2">
+                          <ClipboardList className="h-4 w-4 text-primary shrink-0" />
+                          <span className="text-muted-foreground font-medium">
+                            Cần soạn <strong>Đề kiểm tra 15p, 45p, Thi THPTQG</strong> hoặc <strong>Đánh giá năng lực</strong>?
+                          </span>
                         </div>
-                      )}
+                        <a
+                          href="/dashboard/teacher/exams"
+                          className="inline-flex items-center gap-1 font-bold text-primary hover:underline shrink-0"
+                        >
+                          <span>Mở Ngân Hàng Đề Thi</span>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      </div>
 
                       {/* Danh sách đề thi */}
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         {activeExams.length === 0 ? (
-                          <div className="text-center py-10 border border-dashed border-border rounded-xl bg-card text-muted-foreground">
-                            <p className="text-xs italic">Không tìm thấy đề thi/bài tập trắc nghiệm nào cho khu vực này.</p>
+                          <div className="text-center py-12 border border-dashed border-border rounded-2xl bg-card text-muted-foreground space-y-3">
+                            <ClipboardList className="h-10 w-10 text-primary/30 mx-auto" />
+                            <p className="text-xs font-semibold">Chưa có bài tập trắc nghiệm hoặc đề luyện tập nào cho mục này.</p>
+                            <button
+                              onClick={() => {
+                                const isGeneral = selectedLessonId === 'general';
+                                setEditingExamModal({
+                                  id: `new-${Date.now()}`,
+                                  title: isGeneral ? 'Đề luyện thi thử' : `Bài tập tự luyện: ${activeLesson?.title || 'Bài học'}`,
+                                  duration_minutes: 15,
+                                  exam_type: isGeneral ? 'test' : 'lesson',
+                                  lesson_id: isGeneral ? null : selectedLessonId
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Bắt đầu tạo bài tập đầu tiên
+                            </button>
                           </div>
                         ) : (
                           activeExams.map(exam => {
                             const examQuestions = localQuestions.filter(q => q.exam_id === exam.id);
-                            const isEditing = activeEditingExamId === exam.id;
 
                             return (
-                              <div key={exam.id} className="border border-border bg-muted/10 rounded-xl p-4 space-y-4">
-                                <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                                  <div>
-                                    <h6 className="font-extrabold text-xs text-foreground flex items-center gap-1">
-                                      <ClipboardList className="h-4 w-4 text-secondary" /> {exam.title}
+                              <div key={exam.id} className="border border-border bg-card rounded-2xl p-4 sm:p-5 space-y-3 shadow-xs hover:border-primary/40 transition-colors">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                        exam.exam_type === 'lesson' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+                                        exam.exam_type === 'test' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' :
+                                        'bg-purple-500/10 text-purple-600 border border-purple-500/20'
+                                      }`}>
+                                        {exam.exam_type === 'lesson' ? 'Luyện tập theo bài' : exam.exam_type === 'test' ? 'Kiểm tra 15p/45p' : 'Luyện thi THPTQG'}
+                                      </span>
+                                      <span className="text-[11px] text-muted-foreground font-bold flex items-center gap-1">
+                                        <Clock className="h-3.5 w-3.5" /> {exam.duration_minutes} phút
+                                      </span>
+                                      <span className="text-[11px] text-muted-foreground font-bold flex items-center gap-1">
+                                        <HelpCircle className="h-3.5 w-3.5" /> {examQuestions.length} câu hỏi
+                                      </span>
+                                    </div>
+                                    <h6 className="font-extrabold text-sm sm:text-base text-foreground">
+                                      {exam.title}
                                     </h6>
-                                    <p className="text-[9px] text-muted-foreground mt-0.5">
-                                      Thời gian: {exam.duration_minutes} phút &bull; Số câu hỏi: {examQuestions.length} câu
-                                    </p>
                                   </div>
                                   
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 shrink-0">
                                     <button
-                                      onClick={() => setActiveEditingExamId(isEditing ? null : exam.id)}
-                                      className="text-[10px] font-bold bg-secondary px-3 py-1.5 rounded-lg text-secondary-foreground hover:opacity-90"
+                                      onClick={() => setEditingExamModal(exam)}
+                                      className="text-xs font-bold bg-primary text-primary-foreground px-3.5 py-1.5 rounded-lg hover:opacity-90 flex items-center gap-1.5 shadow-xs"
                                     >
-                                      {isEditing ? 'Đóng câu hỏi' : 'Soạn câu hỏi'}
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        const newTitle = prompt('Nhập tên đề thi mới:', exam.title);
-                                        if (newTitle) {
-                                          const newDur = prompt('Nhập thời lượng thi mới (phút):', String(exam.duration_minutes));
-                                          if (newDur) {
-                                            handleUpdateExam(exam.id, { title: newTitle, duration_minutes: Number(newDur) });
-                                          }
-                                        }
-                                      }}
-                                      className="text-primary hover:bg-primary/10 p-1.5 rounded-lg border border-border bg-background"
-                                      title="Sửa đề thi"
-                                    >
-                                      <Edit3 className="h-3.5 w-3.5" />
+                                      <Edit3 className="h-3.5 w-3.5" /> Soạn câu hỏi & Sửa đề
                                     </button>
                                     <button
                                       onClick={() => handleDeleteExam(exam.id)}
-                                      className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg"
+                                      className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg border border-border"
                                       title="Xóa đề thi"
                                     >
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <Trash2 className="h-4 w-4" />
                                     </button>
                                   </div>
                                 </div>
 
-                                {/* BẢNG SOẠN THẢO CÂU HỎI TRỰC QUAN (QUIZ EDITOR) */}
-                                {isEditing && (
-                                  <div className="space-y-6 pl-4 border-l-2 border-primary/20 animate-fade-in">
-                                    
-                                    {/* 1. Danh sách câu hỏi */}
-                                    <div className="space-y-3">
-                                      <h6 className="font-extrabold text-[10px] text-muted-foreground uppercase">Danh sách câu hỏi ({examQuestions.length})</h6>
-                                      {examQuestions.length === 0 ? (
-                                        <p className="text-xs text-muted-foreground italic">Chưa biên soạn câu hỏi nào cho đề này.</p>
-                                      ) : (
-                                        examQuestions.map((q, qIdx) => (
-                                          <div key={q.id} className="bg-card border border-border rounded-lg p-3 space-y-2">
-                                            <div className="flex justify-between items-start gap-4">
-                                              <p className="font-bold text-xs text-foreground">
-                                                <span className="text-primary mr-1">Câu {qIdx + 1}:</span> {q.content}
-                                              </p>
-                                              <div className="flex items-center gap-1">
-                                                <button
-                                                  onClick={() => {
-                                                    const newContent = prompt('Nội dung câu hỏi:', q.content);
-                                                    if (!newContent) return;
-                                                    const newA = prompt('Đáp án A:', q.options[0]);
-                                                    const newB = prompt('Đáp án B:', q.options[1]);
-                                                    const newC = prompt('Đáp án C:', q.options[2] || '');
-                                                    const newD = prompt('Đáp án D:', q.options[3] || '');
-                                                    const correctIdxStr = prompt('Chỉ số đáp án đúng (0 cho A, 1 cho B, 2 cho C, 3 cho D):', String(q.correct_option_index));
-                                                    if (newA && newB && correctIdxStr) {
-                                                      handleUpdateQuestion(q.id, {
-                                                        content: newContent,
-                                                        options: [newA, newB, newC, newD].filter((o): o is string => !!o),
-                                                        correct_option_index: Number(correctIdxStr)
-                                                      });
-                                                    }
-                                                  }}
-                                                  className="text-primary hover:bg-primary/10 p-0.5 rounded"
-                                                  title="Sửa câu hỏi"
-                                                >
-                                                  <Edit3 className="h-3.5 w-3.5" />
-                                                </button>
-                                                <button onClick={() => handleDeleteQuestion(q.id)} className="text-red-500 hover:bg-red-500/10 p-0.5 rounded" title="Xóa câu hỏi">
-                                                  <X className="h-3.5 w-3.5" />
-                                                </button>
-                                              </div>
-                                            </div>
-
-                                            <div className="grid gap-1.5 sm:grid-cols-2 pl-3">
-                                              {(q.options || []).map((opt: string, optIdx: number) => (
-                                                <div 
-                                                  key={optIdx} 
-                                                  className={`p-1.5 rounded text-[10px] border ${
-                                                    q.correct_option_index === optIdx 
-                                                      ? 'bg-green-500/10 border-green-500/20 text-green-700 font-bold' 
-                                                      : 'bg-background border-border text-muted-foreground'
-                                                  }`}
-                                                >
-                                                  {opt}
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        ))
-                                      )}
-                                    </div>
-
-                                    {/* 2. Form biên soạn câu hỏi mới */}
-                                    <div className="bg-card border border-border p-4 rounded-xl space-y-4">
-                                      <h6 className="font-extrabold text-xs text-primary uppercase flex items-center gap-1">
-                                        <HelpCircle className="h-4 w-4" /> Biên soạn câu hỏi mới
-                                      </h6>
-
-                                      <div className="space-y-1.5">
-                                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Nội dung câu hỏi trắc nghiệm</label>
-                                        <textarea
-                                          placeholder="Nhập đề bài câu hỏi..."
-                                          value={newQuestionContent}
-                                          onChange={(e) => setNewQuestionContent(e.target.value)}
-                                          rows={2}
-                                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                                        />
-                                      </div>
-
-                                      <div className="grid gap-3 sm:grid-cols-2">
-                                        <div className="space-y-1">
-                                          <label className="text-[10px] font-bold text-muted-foreground uppercase">Phương án A</label>
-                                          <input
-                                            type="text"
-                                            placeholder="Đáp án A..."
-                                            value={newQuestionOptA}
-                                            onChange={(e) => setNewQuestionOptA(e.target.value)}
-                                            className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                                          />
+                                {/* Preview 2 câu hỏi đầu tiên của đề thi */}
+                                {examQuestions.length > 0 && (
+                                  <div className="pt-2 border-t border-border/60 grid gap-2 sm:grid-cols-2 text-xs">
+                                    {examQuestions.slice(0, 2).map((q, qIdx) => (
+                                      <div key={q.id || qIdx} className="bg-muted/20 border border-border/80 rounded-xl p-2.5 space-y-1">
+                                        <div className="flex items-center justify-between text-[10px] text-muted-foreground font-bold">
+                                          <span>Câu {qIdx + 1} ({q.question_type || 'MCQ'})</span>
+                                          <span className="text-primary">{q.level || 'Nhận biết'}</span>
                                         </div>
-                                        <div className="space-y-1">
-                                          <label className="text-[10px] font-bold text-muted-foreground uppercase">Phương án B</label>
-                                          <input
-                                            type="text"
-                                            placeholder="Đáp án B..."
-                                            value={newQuestionOptB}
-                                            onChange={(e) => setNewQuestionOptB(e.target.value)}
-                                            className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                                          />
-                                        </div>
-                                        <div className="space-y-1">
-                                          <label className="text-[10px] font-bold text-muted-foreground uppercase">Phương án C</label>
-                                          <input
-                                            type="text"
-                                            placeholder="Đáp án C..."
-                                            value={newQuestionOptC}
-                                            onChange={(e) => setNewQuestionOptC(e.target.value)}
-                                            className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                                          />
-                                        </div>
-                                        <div className="space-y-1">
-                                          <label className="text-[10px] font-bold text-muted-foreground uppercase">Phương án D</label>
-                                          <input
-                                            type="text"
-                                            placeholder="Đáp án D..."
-                                            value={newQuestionOptD}
-                                            onChange={(e) => setNewQuestionOptD(e.target.value)}
-                                            className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                                          />
+                                        <div className="line-clamp-2 text-foreground font-semibold">
+                                          <MathRenderer content={q.content} />
                                         </div>
                                       </div>
-
-                                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-t border-border/50 pt-3">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-[10px] font-bold text-muted-foreground uppercase">Đáp án đúng:</span>
-                                          <select
-                                            value={newQuestionCorrectIndex}
-                                            onChange={(e) => setNewQuestionCorrectIndex(Number(e.target.value))}
-                                            className="rounded border border-border bg-background px-2.5 py-1 text-xs focus:outline-none font-bold text-green-500"
-                                          >
-                                            <option value={0}>Đáp án A</option>
-                                            <option value={1}>Đáp án B</option>
-                                            <option value={2}>Đáp án C</option>
-                                            <option value={3}>Đáp án D</option>
-                                          </select>
-                                        </div>
-
-                                        <button
-                                          onClick={() => handleAddQuestion(exam.id)}
-                                          className="flex items-center gap-1 text-xs font-bold bg-green-500 text-white px-4 py-2 rounded-lg hover:opacity-90"
-                                        >
-                                          <Plus className="h-3.5 w-3.5" /> Thêm câu hỏi
-                                        </button>
-                                      </div>
-                                    </div>
-
+                                    ))}
                                   </div>
                                 )}
                               </div>
@@ -1409,6 +1569,19 @@ export default function TeacherDashboardClient({
           </div>
 
         </div>
+      )}
+
+      {/* MODAL SOẠN ĐỀ THI & CÂU HỎI CHUẨN FMATH 2025 */}
+      {editingExamModal && (
+        <ExamEditorModal
+          isOpen={!!editingExamModal}
+          onClose={() => setEditingExamModal(null)}
+          exam={editingExamModal}
+          initialQuestions={localQuestions.filter(q => q.exam_id === editingExamModal.id)}
+          onSave={handleSaveExamModal}
+          lessonTitle={activeLesson?.title}
+          subjectName={assignments.find(a => a.subject_id === selectedSubjectId)?.subjects?.name}
+        />
       )}
 
     </div>

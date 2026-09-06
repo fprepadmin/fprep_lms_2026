@@ -31,6 +31,7 @@ export default async function StudentSupportPage() {
   const { data: studentDetail } = await supabase
     .from('student_details')
     .select('*, classes(name)')
+    .eq('student_id', studentId)
     .maybeSingle();
 
   // Lấy các môn học để chọn

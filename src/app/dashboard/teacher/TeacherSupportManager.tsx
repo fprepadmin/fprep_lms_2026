@@ -76,29 +76,41 @@ export default function TeacherSupportManager({
   });
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3 gap-3">
-        <h2 className="text-base font-extrabold flex items-center gap-2 text-foreground">
+    <div className="flat-card space-y-5 bg-white dark:bg-card">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3.5 gap-3">
+        <h2 className="text-base font-bold font-heading flex items-center gap-2 m-0 text-[#212529] dark:text-foreground">
           <MessageSquare className="h-4.5 w-4.5 text-primary" /> Yêu Cầu Hỗ Trợ Chuyên Môn Của Học Sinh
         </h2>
         
-        {/* Bộ lọc trạng thái */}
-        <div className="flex items-center gap-1 bg-muted/30 border border-border p-1 rounded-lg">
+        {/* Bộ lọc trạng thái dạng Pill FMATH */}
+        <div className="flex items-center gap-1.5 bg-[#f8f9fa] dark:bg-muted/40 border border-border p-1 rounded-xl">
           <button
             onClick={() => setFilter('pending')}
-            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'pending' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+              filter === 'pending'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-[#6c757d] hover:text-[#212529] dark:hover:text-foreground'
+            }`}
           >
             Đang chờ ({requests.filter(r => r.status === 'pending').length})
           </button>
           <button
             onClick={() => setFilter('resolved')}
-            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'resolved' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+              filter === 'resolved'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-[#6c757d] hover:text-[#212529] dark:hover:text-foreground'
+            }`}
           >
             Đã giải quyết ({requests.filter(r => r.status === 'resolved').length})
           </button>
           <button
             onClick={() => setFilter('all')}
-            className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${filter === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+              filter === 'all'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-[#6c757d] hover:text-[#212529] dark:hover:text-foreground'
+            }`}
           >
             Tất cả
           </button>
@@ -111,53 +123,57 @@ export default function TeacherSupportManager({
           const isPending = req.status === 'pending';
 
           return (
-            <div key={req.id} className="pt-4 first:pt-0 space-y-3 group">
+            <div key={req.id} className="pt-4 first:pt-0 space-y-3">
               <div className="flex justify-between items-start gap-3">
                 <div>
-                  <h4 className="font-extrabold text-xs text-primary uppercase flex items-center gap-1">
+                  <h4 className="font-bold text-xs text-primary uppercase flex items-center gap-1.5 m-0">
                     <BookOpen className="h-3.5 w-3.5" /> {subjectName} &bull; Lớp {req.class_name}
                   </h4>
-                  <p className="text-[10px] text-muted-foreground font-semibold mt-0.5 flex items-center gap-1">
-                    <User className="h-3 w-3" /> {req.student_name} &bull; Đăng lúc: {new Date(req.created_at).toLocaleString('vi-VN')}
+                  <p className="text-[11px] text-[#6c757d] dark:text-muted-foreground font-semibold mt-1 flex items-center gap-1.5 m-0">
+                    <User className="h-3 w-3" /> <strong className="text-[#212529] dark:text-foreground">{req.student_name}</strong> &bull; Đăng lúc: {new Date(req.created_at).toLocaleString('vi-VN')}
                   </p>
                 </div>
                 
-                <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2.5 py-0.5 rounded-full border ${!isPending ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'}`}>
-                  {!isPending ? <CheckCircle className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5 animate-spin" />}
+                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  !isPending 
+                    ? 'bg-[#d1e7dd] text-[#0f5132] border-[#a3cfbb]' 
+                    : 'bg-[#fff3cd] text-[#664d03] border-[#ffe69c]'
+                }`}>
+                  {!isPending ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
                   {!isPending ? 'Đã phản hồi' : 'Chờ phản hồi'}
                 </span>
               </div>
 
               {/* Nội dung câu hỏi */}
-              <div className="text-xs text-foreground font-semibold bg-muted/20 p-3 rounded-lg border border-border/50">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Nội dung thắc mắc:</span>
-                <p className="whitespace-pre-line leading-relaxed">{req.message}</p>
+              <div className="text-xs text-[#212529] dark:text-foreground font-semibold bg-[#f8f9fa] dark:bg-muted/30 p-3.5 rounded-xl border border-border">
+                <span className="text-[10px] font-bold text-[#6c757d] uppercase block mb-1">Nội dung thắc mắc:</span>
+                <p className="whitespace-pre-line leading-relaxed m-0">{req.message}</p>
               </div>
 
               {/* Form phản hồi của Giáo viên */}
               {isPending ? (
-                <div className="space-y-2 pt-1 pl-2 border-l-2 border-primary/20">
-                  <div className="flex gap-2">
+                <div className="space-y-2 pt-1 pl-3 border-l-2 border-primary/40">
+                  <div className="flex gap-2.5">
                     <textarea
-                      placeholder="Nhập nội dung giải đáp chuyên môn..."
+                      placeholder="Nhập nội dung giải đáp chuyên môn cho học sinh..."
                       value={replies[req.id] || ''}
                       onChange={(e) => setReplies({ ...replies, [req.id]: e.target.value })}
                       rows={2}
-                      className="flex-1 rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
+                      className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground font-semibold"
                     />
                     <button
                       onClick={() => handleReplySubmit(req.id)}
-                      className="px-4 bg-primary text-primary-foreground font-bold rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center text-xs shrink-0 gap-1"
+                      className="btn-primary shrink-0 self-end"
                     >
-                      <Send className="h-3.5 w-3.5" /> Gửi
+                      <Send className="h-3.5 w-3.5" /> Gửi phản hồi
                     </button>
                   </div>
                 </div>
               ) : (
                 req.reply && (
-                  <div className="text-xs text-foreground bg-green-500/5 p-3 rounded-lg border border-green-500/15 pl-4 border-l-4 border-l-green-500 space-y-1">
-                    <strong className="text-[10px] text-green-600 block">Bạn đã phản hồi:</strong>
-                    <p className="font-semibold text-foreground/90 whitespace-pre-line">{req.reply}</p>
+                  <div className="text-xs bg-[#d1e7dd]/30 p-3.5 rounded-xl border border-[#a3cfbb] pl-4 border-l-4 border-l-[#198754] space-y-1">
+                    <strong className="text-[10px] text-[#0f5132] block font-bold">Thầy/Cô đã phản hồi:</strong>
+                    <p className="font-semibold text-[#212529] dark:text-foreground/90 whitespace-pre-line m-0">{req.reply}</p>
                   </div>
                 )
               )}
@@ -167,7 +183,7 @@ export default function TeacherSupportManager({
         })}
 
         {filteredRequests.length === 0 && (
-          <p className="text-xs text-muted-foreground italic text-center py-8">Không có yêu cầu hỗ trợ chuyên môn nào phù hợp bộ lọc.</p>
+          <p className="text-xs text-[#6c757d] italic text-center py-8 m-0">Không có yêu cầu hỗ trợ chuyên môn nào phù hợp bộ lọc.</p>
         )}
       </div>
 

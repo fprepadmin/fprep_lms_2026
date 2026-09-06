@@ -7,6 +7,7 @@ import {
   ArrowLeft, Sun, Moon, GraduationCap, CheckCircle2,
   FileText, Activity
 } from 'lucide-react';
+import Footer from '@/components/Footer';
 
 function GuideContent() {
   const router = useRouter();
@@ -50,7 +51,7 @@ function GuideContent() {
     { id: 'about', label: 'Giới thiệu hệ thống', icon: <Info className="h-4 w-4" /> },
     { id: 'usage', label: 'Hướng dẫn sử dụng', icon: <BookOpen className="h-4 w-4" /> },
     { id: 'terms', label: 'Điều khoản sử dụng', icon: <Shield className="h-4 w-4" /> },
-    { id: 'privacy', label: 'Điều khoản dữ liệu người dùng', icon: <ShieldCheck className="h-4 w-4" /> },
+    { id: 'privacy', label: 'Bảo mật dữ liệu', icon: <ShieldCheck className="h-4 w-4" /> },
   ];
 
   return (
@@ -114,7 +115,7 @@ function GuideContent() {
               </div>
 
               <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border border-border rounded-2xl p-5 text-xs text-muted-foreground leading-relaxed font-semibold">
-                Hệ thống LMS được tối ưu hóa cho hoạt động dạy và tự học khối 12 của FSchool Cần Thơ. Mọi dữ liệu cá nhân được bảo vệ nghiêm ngặt theo các chính sách bảo mật nội bộ.
+                Hệ thống LMS nội bộ dành cho học sinh và giáo viên Khối 12 – THPT FPT Cần Thơ. Mọi dữ liệu cá nhân được bảo vệ theo chính sách bảo mật nội bộ.
               </div>
             </div>
           </aside>
@@ -136,14 +137,14 @@ function GuideContent() {
 
                 <div className="space-y-4 text-sm leading-relaxed text-muted-foreground font-semibold">
                   <p>
-                    FPREP (FPT School Prep) là nền tảng quản lý học tập (LMS) nội bộ được xây dựng nhằm hỗ trợ công tác giảng dạy của giáo viên và tăng cường khả năng tự học độc lập của học sinh Khối 12. Hệ thống tập trung cung cấp các học liệu chuẩn hóa bám sát chương trình và cung cấp công cụ tự kiểm tra đánh giá năng lực học tập.
+                    FPREP là nền tảng LMS nội bộ hỗ trợ giáo viên quản lý học liệu và giúp học sinh Khối 12 tự học theo chương trình, đánh giá năng lực qua đề thi trắc nghiệm.
                   </p>
                   
                   <h3 className="text-base font-extrabold text-foreground mt-6">Sứ mệnh và Mục tiêu</h3>
                   <ul className="list-disc pl-5 space-y-2">
-                    <li>Hệ thống hóa học liệu số bao gồm video bài giảng trực quan, tài liệu tham khảo và đề thi trắc nghiệm.</li>
-                    <li>Khuyến khích học sinh rèn luyện tinh thần tự chủ học tập, theo dõi chặt chẽ tiến trình và thời lượng ôn tập của bản thân.</li>
-                    <li>Hỗ trợ giáo viên theo dõi, đánh giá trực tiếp kết quả học tập và tiến độ tự học của từng học sinh trong các lớp phụ trách mà không tốn nhiều công sức tổng hợp thủ công.</li>
+                    <li>Hệ thống hóa học liệu số: video bài giảng, tài liệu và đề thi trắc nghiệm.</li>
+                    <li>Giúp học sinh theo dõi tiến trình tự học và thời lượng ôn tập cá nhân.</li>
+                    <li>Hỗ trợ giáo viên theo dõi, đánh giá tiến độ học sinh theo lớp phụ trách.</li>
                   </ul>
 
                   <h3 className="text-base font-extrabold text-foreground mt-6">Đối tượng sử dụng</h3>
@@ -151,13 +152,13 @@ function GuideContent() {
                     <div className="border border-border rounded-xl p-4 bg-muted/20">
                       <h4 className="font-extrabold text-foreground mb-1.5">Học sinh Khối 12</h4>
                       <p className="text-xs text-muted-foreground font-semibold leading-relaxed">
-                        Tham gia tự học theo chương trình, làm các bài thi trắc nghiệm đánh giá năng lực và theo dõi biểu đồ tiến trình cá nhân.
+                        Tự học theo chương trình, luyện đề trắc nghiệm và theo dõi tiến trình cá nhân.
                       </p>
                     </div>
                     <div className="border border-border rounded-xl p-4 bg-muted/20">
                       <h4 className="font-extrabold text-foreground mb-1.5">Giáo viên & Trưởng bộ môn</h4>
                       <p className="text-xs text-muted-foreground font-semibold leading-relaxed">
-                        Thiết lập nội dung học tập, giám sát quá trình tự học và điểm thi của học sinh các lớp giảng dạy để có giải pháp hỗ trợ kịp thời.
+                        Quản lý học liệu, giám sát tiến độ và hỗ trợ học sinh các lớp phụ trách.
                       </p>
                     </div>
                   </div>
@@ -167,73 +168,144 @@ function GuideContent() {
 
             {/* 2. TAB HƯỚNG DẪN SỬ DỤNG */}
             {activeTab === 'usage' && (
-              <div className="space-y-6">
+              <div className="space-y-8 animate-fade-in">
                 <div className="border-b border-border pb-4">
-                  <h1 className="text-2xl font-black tracking-tight sm:text-3xl flex items-center gap-2.5">
-                    <BookOpen className="h-7 w-7 text-primary" /> Hướng Dẫn Sử Dụng Hệ Thống
+                  <h1 className="text-2xl font-black tracking-tight sm:text-3xl flex items-center gap-2.5 text-foreground">
+                    <BookOpen className="h-7 w-7 text-primary" /> Hướng Dẫn Sử Dụng Toàn Diện LMS FPREP
                   </h1>
                   <p className="text-muted-foreground text-sm mt-1.5 font-semibold">
-                    Quy trình học tập và quản lý chi tiết dành cho các vai trò thành viên.
+                    Cẩm nang vận hành chi tiết dành cho Học sinh (Student), Giáo viên bộ môn (Teacher) và Trưởng bộ môn (HOD).
                   </p>
                 </div>
 
-                <div className="space-y-6 text-sm leading-relaxed text-muted-foreground font-semibold">
+                <div className="space-y-8 text-sm leading-relaxed text-muted-foreground font-semibold">
                   
-                  {/* Dành cho học sinh */}
-                  <section className="space-y-3">
-                    <h3 className="text-base font-extrabold text-foreground flex items-center gap-2 border-b border-border/50 pb-1.5">
-                      <CheckCircle2 className="h-5 w-5 text-green-500" /> Dành cho Học sinh (Student)
-                    </h3>
-                    <ol className="list-decimal pl-5 space-y-2">
-                      <li>
-                        <strong className="text-foreground">Đăng nhập:</strong> Truy cập hệ thống bằng nút "Đăng nhập" ở góc phải màn hình, chọn xác thực thông qua tài khoản Google do nhà trường cấp.
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Lựa chọn môn học:</strong> Tại Dashboard Học sinh, chọn môn học bạn cần ôn tập.
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Tiến hành học tập:</strong> Nhấp chọn từng bài học để xem tài liệu chi tiết (video bài giảng hoặc tài liệu đọc PDF/Slide).
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Đánh dấu hoàn thành:</strong> Nhấp nút "Đánh dấu hoàn thành bài học" sau khi hoàn tất để hệ thống ghi nhận tiến độ vào biểu đồ chung.
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Luyện đề:</strong> Vào mục "Đề kiểm tra", làm bài thi trắc nghiệm trực tuyến trực tiếp trên hệ thống và xem kết quả giải thích đáp án ngay sau khi nộp bài.
-                      </li>
-                    </ol>
+                  {/* 1. DÀNH CHO HỌC SINH */}
+                  <section className="space-y-4 bg-card border border-border rounded-2xl p-6 shadow-xs">
+                    <div className="flex items-center gap-2.5 border-b border-border pb-3">
+                      <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <GraduationCap className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-extrabold text-foreground m-0">
+                          1. Hướng Dẫn Dành Cho Học Sinh (STUDENT)
+                        </h3>
+                        <span className="text-xs text-muted-foreground">Tự học lý thuyết, làm bài thi khảo thí 2025 & theo dõi tiến độ cá nhân</span>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 pt-2">
+                      <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" /> A. Tự học Bài giảng & Lý thuyết
+                        </h4>
+                        <ul className="list-disc pl-4 text-xs space-y-1.5 leading-relaxed text-muted-foreground">
+                          <li>Vào menu <strong>"Học liệu & Bài giảng"</strong> $\rightarrow$ Chọn môn học $\rightarrow$ Chọn Chương/Bài học.</li>
+                          <li>Xem video bài giảng hoặc tài liệu tóm tắt kiến thức trọng tâm.</li>
+                          <li>Hệ thống tự động tích lũy thời gian tự học và cập nhật thanh tiến độ % hoàn thành.</li>
+                        </ul>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" /> B. Quy trình Thi & Luyện đề chuẩn 2025
+                        </h4>
+                        <ul className="list-disc pl-4 text-xs space-y-1.5 leading-relaxed text-muted-foreground">
+                          <li><strong>Phần I (MCQ):</strong> 4 lựa chọn A, B, C, D (0.25đ/câu).</li>
+                          <li><strong>Phần II (TF):</strong> Đúng / Sai 4 ý (a, b, c, d) - Tính điểm lũy tiến tối đa 1.0đ/câu.</li>
+                          <li><strong>Phần III (SAQ):</strong> Trả lời ngắn, tự điền số hoặc phân số (0.5đ/câu).</li>
+                          <li><strong>Phiếu trả lời lướt theo:</strong> Tự động trượt dọc màn hình, bấm vào câu hỏi để nhảy nhanh.</li>
+                          <li><strong>Nộp bài & Xem giải:</strong> Bấm Nộp bài $\rightarrow$ Xem điểm số tức thì và lời giải chi tiết từng bước.</li>
+                        </ul>
+                      </div>
+                    </div>
                   </section>
 
-                  {/* Dành cho giáo viên */}
-                  <section className="space-y-3 pt-4">
-                    <h3 className="text-base font-extrabold text-foreground flex items-center gap-2 border-b border-border/50 pb-1.5">
-                      <CheckCircle2 className="h-5 w-5 text-blue-500" /> Dành cho Giáo viên (Teacher)
-                    </h3>
-                    <ol className="list-decimal pl-5 space-y-2">
-                      <li>
-                        <strong className="text-foreground">Theo dõi danh sách học sinh:</strong> Xem danh sách học sinh thuộc các lớp được phân công phụ trách giảng dạy.
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Kiểm tra tiến độ:</strong> Nhấn chọn "Xem chi tiết" để xem báo cáo thống kê thời lượng học tập, các chương bài đã tự học xong và danh sách điểm thi của từng học sinh.
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Quản lý học liệu:</strong> Truy cập Tab "Quản lý học liệu" để thêm, sửa đổi nội dung bài giảng số hoặc tải lên tài liệu mới cho môn học phụ trách.
-                      </li>
-                    </ol>
+                  {/* 2. DÀNH CHO GIÁO VIÊN BỘ MÔN */}
+                  <section className="space-y-4 bg-card border border-border rounded-2xl p-6 shadow-xs">
+                    <div className="flex items-center gap-2.5 border-b border-border pb-3">
+                      <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold">
+                        <BookOpen className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-extrabold text-foreground m-0">
+                          2. Hướng Dẫn Dành Cho Giáo Viên Bộ Môn (TEACHER)
+                        </h3>
+                        <span className="text-xs text-muted-foreground">Quản lý lớp học, biên soạn đề thi chuẩn 2025 & giao bài tập</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-blue-500" /> A. Quản lý Lớp học & Nhập học sinh bằng Excel
+                        </h4>
+                        <p className="text-xs leading-relaxed">
+                          - Truy cập <strong>"Lớp học & Học sinh"</strong>: Xem danh sách các lớp phụ trách, theo dõi tiến độ và phổ điểm học sinh.<br/>
+                          - <strong>Nhập học sinh bằng file Excel (.xlsx):</strong> Bấm nút <em>"Nhập từ Excel (.xlsx)"</em> $\rightarrow$ Tải file mẫu 4 cột chuẩn (<code className="text-primary font-mono font-bold">STT - Họ và Tên - MSHS - Email</code>) $\rightarrow$ Tải file lên và xác nhận nhập học sinh vào lớp.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-blue-500" /> B. Biên soạn Đề thi, Upload ảnh Cloudinary & Dán ảnh (Ctrl + V)
+                        </h4>
+                        <p className="text-xs leading-relaxed">
+                          - Vào <strong>"Đề thi & Kiểm tra"</strong> $\rightarrow$ Bấm <em>"Tạo đề thi mới"</em>.<br/>
+                          - Thiết lập 3 dạng câu hỏi chuẩn Bộ GD&ĐT 2025: Trắc nghiệm 4 ý (MCQ), Đúng/Sai 4 ý (TF), Trả lời ngắn (SAQ).<br/>
+                          - Hỗ trợ công thức LaTeX: <code className="text-primary font-mono">$y = x^2$</code> hoặc <code className="text-primary font-mono">$$\int_0^1 f(x)dx$$</code>.<br/>
+                          - <strong>Tải ảnh / Dán ảnh siêu tốc:</strong> Bấm <em>"Tải ảnh Cloudinary"</em> hoặc chụp màn hình rồi bấm <strong className="text-foreground">Ctrl + V</strong> trực tiếp vào ô nhập đề/phương án/lời giải để tự động upload lên Cloudinary CDN.<br/>
+                          - <strong>Trợ lý AI:</strong> Bấm nút <em>"Trợ lý AI"</em> để sao chép Prompt chuyển đổi đề thi từ Word/PDF sang JSON tự động.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-blue-500" /> C. Giao bài cho Lớp & Quản lý Nộp bài
+                        </h4>
+                        <p className="text-xs leading-relaxed">
+                          - Bấm nút <strong>"Giao bài"</strong> $\rightarrow$ Chọn danh sách các lớp học cần giao $\rightarrow$ Thiết lập hạn nộp (Deadline).<br/>
+                          - Bấm nút <strong>"Xem nộp bài"</strong> để theo dõi danh sách học sinh đã nộp/chưa nộp, xem phổ điểm và chi tiết bài làm từng em.
+                        </p>
+                      </div>
+                    </div>
                   </section>
 
-                  {/* Dành cho Admin/HOD */}
-                  <section className="space-y-3 pt-4">
-                    <h3 className="text-base font-extrabold text-foreground flex items-center gap-2 border-b border-border/50 pb-1.5">
-                      <CheckCircle2 className="h-5 w-5 text-orange-500" /> Dành cho Admin & Trưởng bộ môn (HOD)
-                    </h3>
-                    <ol className="list-decimal pl-5 space-y-2">
-                      <li>
-                        <strong className="text-foreground">Quản lý phân quyền:</strong> Admin và Trưởng bộ môn có thể thêm mới tài khoản giáo viên/học sinh, gán môn giảng dạy và xếp học sinh vào lớp học tương ứng.
-                      </li>
-                      <li>
-                        <strong className="text-foreground">Giám sát hệ thống (Chỉ dành cho Admin):</strong> Truy cập Tab "Nhật ký hoạt động" (Audit Logs) để xem lịch sử chỉnh sửa vai trò, dữ liệu hệ thống phục vụ mục đích bảo mật bảo trì.
-                      </li>
-                    </ol>
+                  {/* 3. DÀNH CHO TRƯỞNG BỘ MÔN (HOD) */}
+                  <section className="space-y-4 bg-card border border-border rounded-2xl p-6 shadow-xs">
+                    <div className="flex items-center gap-2.5 border-b border-border pb-3">
+                      <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold">
+                        <Shield className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-extrabold text-foreground m-0">
+                          3. Hướng Dẫn Dành Cho Trưởng Bộ Môn (HEAD OF DEPARTMENT - HOD)
+                        </h3>
+                        <span className="text-xs text-muted-foreground">Toàn quyền Giáo viên, quản lý phân công giảng dạy & ngân hàng đề tổ chuyên môn</span>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 pt-2">
+                      <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-purple-500" /> A. Phân công Giáo viên Giảng dạy
+                        </h4>
+                        <p className="text-xs leading-relaxed">
+                          - Vào <strong>"Lớp học & Học sinh"</strong> $\rightarrow$ Chuyển tab <em>"Giáo viên & Phân công"</em>.<br/>
+                          - Chọn từng lớp học và gán giáo viên bộ môn phụ trách giảng dạy trực tiếp.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-purple-500" /> B. Quản trị Nhân sự & Đề thi Tổ
+                        </h4>
+                        <p className="text-xs leading-relaxed">
+                          - Thêm tài khoản Giáo viên mới vào tổ bộ môn.<br/>
+                          - Duyệt và quản lý ngân hàng đề thi chung của toàn bộ môn khối 12.
+                        </p>
+                      </div>
+                    </div>
                   </section>
 
                 </div>
@@ -254,7 +326,7 @@ function GuideContent() {
 
                 <div className="space-y-4 text-sm leading-relaxed text-muted-foreground font-semibold">
                   <p>
-                    Chào mừng bạn đến với FPREP. Bằng việc đăng nhập và sử dụng hệ thống này, bạn đồng ý tuân thủ toàn bộ các quy định và điều khoản sử dụng được nêu dưới đây. Nếu bạn không đồng ý với bất kỳ phần nào của điều khoản này, vui lòng ngừng sử dụng hệ thống ngay lập tức.
+                    Bằng việc đăng nhập và sử dụng hệ thống, bạn đồng ý tuân thủ các quy định dưới đây.
                   </p>
 
                   <h3 className="text-base font-extrabold text-foreground mt-6">1. Quyền sở hữu tài khoản và Xác thực</h3>
@@ -331,6 +403,9 @@ function GuideContent() {
           </article>
         </div>
       </main>
+
+      {/* FOOTER ĐỒNG BỘ TOÀN HỆ THỐNG */}
+      <Footer />
 
     </div>
   );

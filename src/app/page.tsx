@@ -8,6 +8,7 @@ import {
   Mail, MapPin, Sun, Moon, CheckCircle2, 
   ChevronDown, GraduationCap, Laptop, Shield
 } from 'lucide-react';
+import Footer from '@/components/Footer';
 
 export default function LandingPage() {
   const { user, loading, loginWithGoogle, loginAsDemo, isDemo } = useAuth();
@@ -34,17 +35,6 @@ export default function LandingPage() {
       router.push(`/dashboard/${targetRole}`);
     }
   }, [user, loading, router]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm font-bold text-muted-foreground animate-pulse">Đang tải cấu hình bảo mật...</p>
-        </div>
-      </div>
-    );
-  }
 
   const toggleDarkMode = () => {
     const nextDark = !darkMode;
@@ -75,17 +65,17 @@ export default function LandingPage() {
     {
       icon: <BookOpen className="h-6 w-6 text-primary" />,
       title: "Lộ trình tự học rõ ràng",
-      desc: "Nội dung học tập được chia chi tiết theo Chương và Bài học tương ứng với khung chương trình Khối 12 mới."
+      desc: "Nội dung chia theo Chương và Bài học, bám sát chương trình Khối 12."
     },
     {
       icon: <Clock className="h-6 w-6 text-primary" />,
       title: "Theo dõi thời lượng học",
-      desc: "Hệ thống tự động ghi nhận thời gian đọc tài liệu, xem video của từng học sinh để tối ưu hóa lộ trình."
+      desc: "Hệ thống tự động ghi nhận thời gian học và tiến độ từng bài."
     },
     {
       icon: <BarChart3 className="h-6 w-6 text-primary" />,
       title: "Báo cáo tiến độ trực quan",
-      desc: "Giáo viên và học sinh đều có thể xem biểu đồ tiến độ hoàn thành các bài học chi tiết theo thời gian thực."
+      desc: "Học sinh và giáo viên xem biểu đồ tiến độ theo thời gian thực."
     }
   ];
 
@@ -93,36 +83,36 @@ export default function LandingPage() {
     {
       step: "01",
       title: "Đăng nhập Google",
-      desc: "Sử dụng tài khoản Email FPT do nhà trường cung cấp để đăng nhập nhanh qua Google Sign-In."
+      desc: "Dùng tài khoản Email FPT do nhà trường cấp để đăng nhập qua Google."
     },
     {
       step: "02",
-      title: "Lựa chọn môn học",
-      desc: "Xem danh sách môn học theo phân ban Tự nhiên (Toán, Lý, Hóa, Sinh, Tin) hoặc Xã hội (Văn, Sử, Địa, GD KTPL) và Tiếng Anh."
+      title: "Chọn môn học",
+      desc: "Xem danh sách môn theo phân ban Tự nhiên, Xã hội hoặc Tiếng Anh."
     },
     {
       step: "03",
-      title: "Học tập tự chủ",
-      desc: "Xem video bài giảng trực tiếp, đọc tài liệu PDF, Slide và đánh dấu hoàn thành bài học để lưu tiến trình."
+      title: "Tự học",
+      desc: "Xem video, đọc tài liệu và đánh dấu hoàn thành để lưu tiến trình."
     }
   ];
 
   const faqs = [
     {
-      q: "Tài khoản nào có thể đăng nhập vào hệ thống?",
-      a: "Hệ thống tích hợp Google Sign-In, người dùng đăng nhập bằng Email do FPT School Cần Thơ cấp (định dạng @fpt.edu.vn hoặc @fe.edu.vn) để được tự động nhận diện vai trò tương ứng."
+      q: "Tài khoản nào có thể đăng nhập?",
+      a: "Chỉ tài khoản Email @fpt.edu.vn hoặc @fe.edu.vn do FPT School Cần Thơ cấp. Hệ thống tự nhận diện vai trò học sinh/giáo viên."
     },
     {
-      q: "Hệ thống lưu trữ lịch sử học tập như thế nào?",
-      a: "Khi bạn mở một bài giảng, hệ thống sẽ bắt đầu ghi nhận thời gian bạn xem video bài giảng (Youtube embed) hoặc đọc PDF (Google Drive preview). Khi kết thúc bài, bạn bấm nút 'Đánh dấu hoàn thành' để cập nhật tiến độ."
+      q: "Hệ thống ghi nhận lịch sử học tập như thế nào?",
+      a: "Thời gian xem video, đọc tài liệu được tự động ghi lại. Sau mỗi bài học, bấm 'Đánh dấu hoàn thành' để cập nhật tiến độ."
     },
     {
-      q: "Giáo viên quản lý thông tin học sinh như thế nào?",
-      a: "Giáo viên được phân quyền sẽ thấy danh sách các lớp mình giảng dạy (12T1-T6, 12X1-X4, 12K), xem thông tin tiến độ, MSHS, họ tên, email và chi tiết thời lượng học tập của từng học sinh thuộc lớp phụ trách."
+      q: "Giáo viên theo dõi học sinh như thế nào?",
+      a: "Giáo viên xem được tiến độ, thời lượng học tập và điểm thi của học sinh trong các lớp được phân công."
     },
     {
-      q: "Tài khoản Admin có xem được điểm hay thông tin học sinh không?",
-      a: "Không. Để bảo mật và tôn trọng quyền riêng tư học tập của học sinh, tài khoản Admin chỉ được phân quyền theo dõi log hệ thống, lỗi, giám sát bảo mật và phân quyền mà không được phép truy cập bất kỳ dữ liệu học tập nào."
+      q: "Admin có xem được dữ liệu học tập không?",
+      a: "Không. Admin chỉ quản lý hệ thống, phân quyền và nhật ký bảo mật — không truy cập dữ liệu học tập của học sinh."
     }
   ];
 
@@ -181,7 +171,7 @@ export default function LandingPage() {
                 <span className="text-primary">LMS KHỐI 12</span>
               </h1>
               <p className="mx-auto lg:mx-0 max-w-2xl text-lg text-muted-foreground leading-relaxed">
-                Nền tảng hỗ trợ học sinh Khối 12 Trường THPT FPT Cần Thơ tự học, nâng cao kiến thức theo lộ trình bài bản, đa dạng học liệu và theo dõi tiến trình thông minh.
+                Hệ thống tự học nội bộ dành cho học sinh Khối 12 – THPT FPT Cần Thơ.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
                 {user ? (
@@ -243,8 +233,8 @@ export default function LandingPage() {
                     Đăng nhập bằng Google FPT
                   </button>
 
-                  <p className="text-[10px] text-muted-foreground text-center font-semibold leading-relaxed">
-                    Hệ thống tự động nhận diện Email FPT và phân quyền học sinh/giáo viên ngay sau khi xác thực thành công.
+                  <p className="text-[10px] text-muted-foreground text-center leading-relaxed">
+                    Chỉ dành cho tài khoản Email <strong>@fpt.edu.vn</strong> do nhà trường cấp.
                   </p>
 
                   {isDemo && (
@@ -382,9 +372,9 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid gap-12 md:grid-cols-2">
             <div className="space-y-6">
-              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Liên Hệ Ban Quản Trị</h2>
+              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Liên hệ hỗ trợ</h2>
               <p className="text-muted-foreground leading-relaxed">
-                Nếu bạn gặp khó khăn trong quá trình đăng nhập hoặc lỗi nội dung học tập, vui lòng liên hệ với bộ phận kỹ thuật để được hỗ trợ nhanh nhất.
+                Gặp lỗi đăng nhập hoặc sự cố nội dung? Liên hệ bộ phận kỹ thuật:
               </p>
               
               <div className="space-y-4">
@@ -400,7 +390,7 @@ export default function LandingPage() {
                   <MapPin className="h-5 w-5 text-primary" />
                   <div>
                     <span className="block text-xs text-muted-foreground font-semibold">Địa chỉ trường</span>
-                    <span className="font-semibold text-sm">Đại học FPT Cần Thơ, Nguyễn Văn Cừ Nối Dài, Q. Ninh Kiều, TP. Cần Thơ</span>
+                    <span className="font-semibold text-sm">Nguyễn Văn Cừ Nối Dài, Q. Ninh Kiều, TP. Cần Thơ</span>
                   </div>
                 </div>
               </div>
@@ -432,37 +422,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 7. FOOTER */}
-      <footer className="border-t border-border py-12 bg-card">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8">
-            {/* Left Column: Logo & Copyright */}
-            <div className="flex flex-col items-center md:items-start gap-3">
-              <img src="/logo_chu_duoi.png" alt="FPREP Logo" className="h-24 w-auto object-contain" />
-              <p className="text-xs text-muted-foreground font-semibold">
-                Phát triển bởi <span className="font-bold text-primary">Trần Ngọc Minh Thông</span>
-              </p>
-              <p className="text-[10px] text-muted-foreground">
-                &copy; {new Date().getFullYear()} THPT FPT Cần Thơ. Tất cả quyền lợi được bảo lưu.
-              </p>
-            </div>
-
-            {/* Right Column: Links */}
-            <div className="flex flex-wrap justify-center md:justify-start gap-x-12 gap-y-6 text-sm text-muted-foreground font-semibold">
-              <div className="flex flex-col gap-2.5">
-                <span className="text-xs font-black uppercase tracking-wider text-foreground">Giới thiệu & Hướng dẫn</span>
-                <a href="/guide?tab=about" className="hover:text-primary transition-colors">Giới thiệu</a>
-                <a href="/guide?tab=usage" className="hover:text-primary transition-colors">Hướng dẫn sử dụng</a>
-              </div>
-              <div className="flex flex-col gap-2.5">
-                <span className="text-xs font-black uppercase tracking-wider text-foreground">Pháp lý & Điều khoản</span>
-                <a href="/guide?tab=terms" className="hover:text-primary transition-colors">Điều khoản sử dụng</a>
-                <a href="/guide?tab=privacy" className="hover:text-primary transition-colors">Điều khoản dữ liệu người dùng</a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* 7. FOOTER ĐỒNG BỘ */}
+      <Footer />
 
     </div>
   );
