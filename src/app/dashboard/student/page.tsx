@@ -1,5 +1,4 @@
-import React from 'react';
-import { getSupabaseServerClient } from '@/lib/supabase';
+import { getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import { 
   Clock, ChevronRight, GraduationCap, Award,
   Bell, FileText, Calendar, CheckCircle2, BookOpen,
@@ -23,19 +22,14 @@ export default async function StudentDashboardPage() {
     redirect('/');
   }
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
-  let studentId = '';
-  let studentEmail = '';
-  let userRole = 'student';
-
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    studentId = payload.sub || '';
-    studentEmail = payload.email || '';
-    userRole = payload.role || 'student';
-  } catch (err) {
+  const payload = verifySessionToken(token);
+  if (!payload || !payload.sub) {
     redirect('/');
   }
+
+  const studentId = payload.sub || '';
+  const studentEmail = payload.email || '';
+  const userRole = payload.role || 'student';
 
   const supabase = await getSupabaseServerClient();
 
@@ -149,16 +143,6 @@ export default async function StudentDashboardPage() {
       return b.avgScore - a.avgScore;
     })
     .slice(0, 5);
-  }
-
-  if (leaderboard.length < 3) {
-    leaderboard = [
-      { name: "Trần Ngọc Minh Thông", mshs: "FPT00123", completedCount: 18, avgScore: 9.6 },
-      { name: "Nguyễn Hoàng Nam", mshs: "FPT00154", completedCount: 15, avgScore: 8.8 },
-      { name: "Phạm Lê Thảo Vy", mshs: "FPT00188", completedCount: 14, avgScore: 9.0 },
-      { name: "Lê Minh Triết", mshs: "FPT00201", completedCount: 12, avgScore: 8.5 },
-      { name: "Hoàng Thanh Vân", mshs: "FPT00147", completedCount: 11, avgScore: 8.2 }
-    ];
   }
 
   const hour = new Date().getHours();
@@ -403,37 +387,41 @@ export default async function StudentDashboardPage() {
               <span className="badge-warning">Thi đua</span>
             </div>
             
-            <div className="space-y-3">
-              {leaderboard.map((item, index) => {
-                let rankClass = "bg-[#f8f9fa] text-[#6c757d] border-[#dee2e6]";
-                if (index === 0) {
-                  rankClass = "bg-[#fff3cd] text-[#ffc107] border-[#ffe69c]";
-                } else if (index === 1) {
-                  rankClass = "bg-[#e9ecef] text-[#495057] border-[#ced4da]";
-                } else if (index === 2) {
-                  rankClass = "bg-[#f8d7da] text-[#dc3545] border-[#f1aeb5]";
-                }
+            {leaderboard.length === 0 ? (
+              <p className="text-xs text-[#6c757d] italic m-0">Chưa có dữ liệu xếp hạng học sinh.</p>
+            ) : (
+              <div className="space-y-3">
+                {leaderboard.map((item, index) => {
+                  let rankClass = "bg-[#f8f9fa] text-[#6c757d] border-[#dee2e6]";
+                  if (index === 0) {
+                    rankClass = "bg-[#fff3cd] text-[#ffc107] border-[#ffe69c]";
+                  } else if (index === 1) {
+                    rankClass = "bg-[#e9ecef] text-[#495057] border-[#ced4da]";
+                  } else if (index === 2) {
+                    rankClass = "bg-[#f8d7da] text-[#dc3545] border-[#f1aeb5]";
+                  }
 
-                return (
-                  <div key={index} className="flex items-center justify-between text-xs border-b border-border/50 pb-2.5 last:border-b-0 last:pb-0 font-semibold">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`h-6 w-6 rounded-lg flex items-center justify-center text-[11px] font-bold border shrink-0 ${rankClass}`}>
-                        {index + 1}
+                  return (
+                    <div key={index} className="flex items-center justify-between text-xs border-b border-border/50 pb-2.5 last:border-b-0 last:pb-0 font-semibold">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`h-6 w-6 rounded-lg flex items-center justify-center text-[11px] font-bold border shrink-0 ${rankClass}`}>
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#212529] dark:text-foreground truncate m-0">{item.name}</p>
+                          <span className="block text-[10px] text-[#6c757d] uppercase">{item.mshs}</span>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-[#212529] dark:text-foreground truncate m-0">{item.name}</p>
-                        <span className="block text-[10px] text-[#6c757d] uppercase">{item.mshs}</span>
+                      
+                      <div className="text-right shrink-0">
+                        <span className="block text-[11px] font-bold text-primary">{item.avgScore} Điểm TB</span>
+                        <span className="block text-[10px] text-[#6c757d]">Đã học: {item.completedCount} bài</span>
                       </div>
                     </div>
-                    
-                    <div className="text-right shrink-0">
-                      <span className="block text-[11px] font-bold text-primary">{item.avgScore} Điểm TB</span>
-                      <span className="block text-[10px] text-[#6c757d]">Đã học: {item.completedCount} bài</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* HOẠT ĐỘNG GẦN ĐÂY */}

@@ -8,9 +8,11 @@ import {
   GraduationCap, LogOut, BookOpen, User, 
   Menu, X, Sun, Moon, Home, ChevronRight,
   Users, ClipboardList, Activity, Library, MessageSquare,
-  Bell
+  Bell, AlertTriangle, Wrench
 } from 'lucide-react';
 import Footer from '@/components/Footer';
+import MaintenanceScreen from '@/components/MaintenanceScreen';
+import { getMaintenanceStatus, setMaintenanceStatus } from '@/lib/maintenance';
 
 export default function DashboardLayout({
   children,
@@ -23,6 +25,16 @@ export default function DashboardLayout({
   const mainRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [isMaintenance, setIsMaintenance] = useState(false);
+
+  useEffect(() => {
+    const checkMaintenance = () => {
+      setIsMaintenance(getMaintenanceStatus());
+    };
+    checkMaintenance();
+    window.addEventListener('maintenance_status_changed', checkMaintenance);
+    return () => window.removeEventListener('maintenance_status_changed', checkMaintenance);
+  }, []);
 
   const [profileInfo, setProfileInfo] = useState<{
     fullName: string;
@@ -53,10 +65,12 @@ export default function DashboardLayout({
             .single();
 
           if (data) {
+            const cls = data.classes as any;
+            const className = (Array.isArray(cls) ? cls[0]?.name : cls?.name) || 'Chưa xếp lớp';
             setProfileInfo({
               fullName: data.full_name,
               mshs: data.mshs,
-              className: data.classes?.name || 'Chưa xếp lớp',
+              className,
               roleName
             });
             return;
@@ -220,11 +234,37 @@ export default function DashboardLayout({
     }
   };
 
+  if (isMaintenance && user?.role === 'student') {
+    return <MaintenanceScreen />;
+  }
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col transition-colors duration-300 relative w-full overflow-hidden">
+    <div className={`min-h-screen bg-background text-foreground flex flex-col transition-colors duration-300 relative w-full overflow-hidden ${isMaintenance ? 'pt-8' : ''}`}>
       
+      {/* MAINTENANCE WARNING BANNER CHO GIÁO VIÊN / ADMIN */}
+      {isMaintenance && user?.role !== 'student' && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 text-amber-700 dark:text-amber-300 px-4 py-1.5 text-xs font-semibold flex items-center justify-between fixed top-0 left-0 right-0 z-50 backdrop-blur-md">
+          <div className="max-w-[1400px] mx-auto w-full flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 truncate">
+              <Wrench className="w-3.5 h-3.5 text-amber-500 animate-pulse shrink-0" />
+              <span className="truncate">
+                <strong className="uppercase">Chế độ bảo trì đang BẬT:</strong> Học sinh hiện không thể truy cập hệ thống.
+              </span>
+            </div>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => setMaintenanceStatus(false)}
+                className="px-2.5 py-0.5 rounded bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] shadow-sm transition-colors shrink-0"
+              >
+                Tắt Bảo Trì
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 1. TOP NAVIGATION BAR DÀNH CHO DESKTOP CHUẨN FMATH */}
-      <header className="hidden md:flex h-[70px] fixed top-0 left-0 right-0 z-40 px-6 lg:px-8 items-center justify-between select-none bg-card border-b border-border shadow-sm">
+      <header className={`hidden md:flex h-[70px] fixed ${isMaintenance ? 'top-8' : 'top-0'} left-0 right-0 z-40 px-6 lg:px-8 items-center justify-between select-none bg-card border-b border-border shadow-sm`}>
         <div className="flex items-center gap-4 lg:gap-8">
           {/* Logo block */}
           <div className="flex items-center gap-2">
@@ -294,7 +334,7 @@ export default function DashboardLayout({
       </header>
 
       {/* 2. HEADER DÀNH CHO MOBILE */}
-      <header className="flex h-16 items-center justify-between px-4 md:hidden fixed top-0 left-0 right-0 z-40 shadow-sm bg-card/80 backdrop-blur-md border-b border-border">
+      <header className={`flex h-16 items-center justify-between px-4 md:hidden fixed ${isMaintenance ? 'top-8' : 'top-0'} left-0 right-0 z-40 shadow-sm bg-card/80 backdrop-blur-md border-b border-border`}>
         <button onClick={() => setSidebarOpen(true)} className="p-2 border border-border rounded-lg bg-background">
           <Menu className="h-5 w-5" />
         </button>

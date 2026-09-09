@@ -1,10 +1,9 @@
 import React from 'react';
-import { getSupabaseServerClient } from '@/lib/supabase';
+import { getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import TeacherSupportManager from '../TeacherSupportManager';
 import { MessageSquare } from 'lucide-react';
-import jwt from 'jsonwebtoken';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,14 +14,11 @@ export default async function TeacherSupportPage() {
     redirect('/');
   }
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
-  let teacherId = '';
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    teacherId = payload.sub;
-  } catch (err) {
+  const payload = verifySessionToken(token);
+  if (!payload || !payload.sub) {
     redirect('/');
   }
+  const teacherId = payload.sub;
 
   const supabase = await getSupabaseServerClient();
 

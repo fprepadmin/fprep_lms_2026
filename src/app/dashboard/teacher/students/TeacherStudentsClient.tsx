@@ -244,42 +244,94 @@ export default function TeacherStudentsClient({
       return;
     }
     try {
-      const newStudentId = crypto.randomUUID();
+      const cleanEmail = newEmail.trim().toLowerCase();
 
-      const { data: newProfile, error: profileErr } = await supabase
+      // 1. Kiểm tra xem học sinh đã có Profile trước đó chưa (ví dụ đã đăng nhập Google trước)
+      const { data: existingProfile } = await supabase
         .from('profiles')
-        .insert({
-          id: newStudentId,
-          email: newEmail.trim().toLowerCase(),
-          role: 'student'
-        })
-        .select()
-        .single();
+        .select('*')
+        .eq('email', cleanEmail)
+        .maybeSingle();
 
-      if (profileErr) throw profileErr;
+      let studentId = existingProfile?.id;
+      let finalProfile = existingProfile;
 
-      const { data: newStudent, error: studentErr } = await supabase
+      if (!studentId) {
+        studentId = crypto.randomUUID();
+        const { data: newProfile, error: profileErr } = await supabase
+          .from('profiles')
+          .insert({
+            id: studentId,
+            email: cleanEmail,
+            role: 'student'
+          })
+          .select()
+          .single();
+
+        if (profileErr) throw profileErr;
+        finalProfile = newProfile;
+      }
+
+      // 2. Thêm hoặc cập nhật thông tin chi tiết vào lớp học được chọn
+      const { data: existingDetail } = await supabase
         .from('student_details')
-        .insert({
-          student_id: newStudentId,
-          mshs: newMshs.trim().toUpperCase(),
-          full_name: newFullName.trim(),
-          class_id: selectedClassId
-        })
-        .select()
-        .single();
+        .select('*')
+        .eq('student_id', studentId)
+        .maybeSingle();
 
-      if (studentErr) throw studentErr;
+      let finalStudent: any = null;
+      if (existingDetail) {
+        const { data: updatedStudent, error: updateErr } = await supabase
+          .from('student_details')
+          .update({
+            mshs: newMshs.trim().toUpperCase(),
+            full_name: newFullName.trim(),
+            class_id: selectedClassId
+          })
+          .eq('student_id', studentId)
+          .select()
+          .single();
 
-      setLocalProfiles([...localProfiles, newProfile]);
-      setLocalStudents([...localStudents, newStudent]);
+        if (updateErr) throw updateErr;
+        finalStudent = updatedStudent;
+      } else {
+        const { data: newStudent, error: studentErr } = await supabase
+          .from('student_details')
+          .insert({
+            student_id: studentId,
+            mshs: newMshs.trim().toUpperCase(),
+            full_name: newFullName.trim(),
+            class_id: selectedClassId
+          })
+          .select()
+          .single();
+
+        if (studentErr) throw studentErr;
+        finalStudent = newStudent;
+      }
+
+      // Cập nhật state cục bộ
+      if (finalProfile) {
+        setLocalProfiles(prev => {
+          const exists = prev.some(p => p.id === finalProfile.id);
+          return exists ? prev.map(p => p.id === finalProfile.id ? finalProfile : p) : [...prev, finalProfile];
+        });
+      }
+
+      if (finalStudent) {
+        setLocalStudents(prev => {
+          const exists = prev.some(s => s.student_id === finalStudent.student_id);
+          return exists ? prev.map(s => s.student_id === finalStudent.student_id ? finalStudent : s) : [...prev, finalStudent];
+        });
+      }
+
       setNewFullName('');
       setNewMshs('');
       setNewEmail('');
       setAddingStudent(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Không thể thêm học sinh.');
+      alert('Không thể thêm học sinh: ' + (err?.message || 'Lỗi không xác định'));
     }
   };
 

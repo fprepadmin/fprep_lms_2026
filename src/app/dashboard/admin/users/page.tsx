@@ -1,9 +1,8 @@
 import React from 'react';
-import { getSupabaseServerClient } from '@/lib/supabase';
+import { getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import AdminDashboardClient from '../AdminDashboardClient';
-import jwt from 'jsonwebtoken';
 import { Users } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -15,14 +14,11 @@ export default async function AdminUsersPage() {
     redirect('/');
   }
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
-  let currentUserId = '';
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    currentUserId = payload.sub;
-  } catch (err) {
+  const payload = verifySessionToken(token);
+  if (!payload || !payload.sub) {
     redirect('/');
   }
+  const currentUserId = payload.sub;
 
   const supabase = await getSupabaseServerClient();
 

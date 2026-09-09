@@ -1,5 +1,4 @@
-import React from 'react';
-import { getSupabaseServerClient } from '@/lib/supabase';
+import { getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import LessonViewerClient from './LessonViewerClient';
@@ -42,16 +41,10 @@ export default async function LessonViewerPage({ params }: PageProps) {
   // Lấy Token và userId từ cookie
   const cookieStore = await cookies();
   const token = cookieStore.get('supabase-jwt')?.value || '';
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
   let userId = '';
   if (token) {
-    try {
-      const jwtModule = await import('jsonwebtoken');
-      const payload = jwtModule.default.verify(token, jwtSecret) as any;
-      userId = payload.sub || '';
-    } catch (e) {
-      // ignore
-    }
+    const payload = verifySessionToken(token);
+    userId = payload?.sub || '';
   }
 
   // 4. Lấy trạng thái tiến độ bài học, danh sách đề trắc nghiệm và kết quả làm bài

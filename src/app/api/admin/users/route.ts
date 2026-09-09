@@ -1,23 +1,19 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin, verifySessionToken } from '@/lib/supabase';
 import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 // Hàm helper để xác thực quyền admin của người dùng hiện tại
 async function verifyAdmin() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('supabase-jwt')?.value;
+  const token = cookieStore.get('supabase-jwt')?.value || '';
   if (!token) return null;
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    if (payload.role === 'admin' || payload.role === 'head_of_department') {
-      return payload.sub; // Trả về admin hoặc HOD userId
-    }
-  } catch (e) {
-    console.error('Lỗi xác thực token admin/HOD:', e);
+  const payload = verifySessionToken(token);
+  if (payload && (payload.role === 'admin' || payload.role === 'head_of_department')) {
+    return payload.sub; // Trả về admin hoặc HOD userId
   }
   return null;
 }
@@ -78,7 +74,7 @@ export async function POST(request: Request) {
             mshs: fptName.trim().toUpperCase(),
             full_name: fullName.trim(),
             class_id: classId || null
-          });
+          }, { onConflict: 'student_id' });
 
         if (stdError) {
           console.error('Lỗi upsert student_details:', stdError);
@@ -275,7 +271,7 @@ export async function PUT(request: Request) {
             mshs: fptName.trim().toUpperCase(),
             full_name: fullName.trim(),
             class_id: classId || null
-          });
+          }, { onConflict: 'student_id' });
 
         if (stdError) console.error('Lỗi cập nhật student_details:', stdError);
       }

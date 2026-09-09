@@ -237,7 +237,7 @@ export default function ExcelImportModal({
     reader.readAsArrayBuffer(file);
   };
 
-  // 3. THỰC HIỆN LƯU VÀO DATABASE SUPABASE / MOCK DB
+  // 3. THỰC HIỆN LƯU VÀO DATABASE SUPABASE
   const handleExecuteImport = async () => {
     const validRows = parsedRows.filter(r => r.isValid);
     if (validRows.length === 0) {
@@ -260,30 +260,61 @@ export default function ExcelImportModal({
     for (let i = 0; i < validRows.length; i++) {
       const student = validRows[i];
       try {
-        const studentUserId = crypto.randomUUID();
+        const cleanEmail = student.email.trim().toLowerCase();
 
-        // 1. Tạo hoặc cập nhật Profile học sinh
-        const { error: profileErr } = await supabase
+        // 1. Kiểm tra xem học sinh đã có Profile trước đó chưa (do đã đăng nhập Google trước)
+        const { data: existingProfile } = await supabase
           .from('profiles')
-          .upsert({
-            id: studentUserId,
-            email: student.email,
-            role: 'student'
-          }, { onConflict: 'email' });
+          .select('id, role')
+          .eq('email', cleanEmail)
+          .maybeSingle();
 
-        if (profileErr) {
-          console.warn('Lỗi tạo profile cho:', student.email, profileErr);
+        let studentUserId = existingProfile?.id;
+
+        if (!studentUserId) {
+          studentUserId = crypto.randomUUID();
+          const { error: insertProfileErr } = await supabase
+            .from('profiles')
+            .insert({
+              id: studentUserId,
+              email: cleanEmail,
+              role: 'student'
+            });
+
+          if (insertProfileErr) {
+            console.warn('Lỗi tạo profile cho:', cleanEmail, insertProfileErr);
+          }
         }
 
         // 2. Thêm hoặc cập nhật thông tin chi tiết học sinh vào lớp học
-        const { error: detailErr } = await supabase
+        const { data: existingDetail } = await supabase
           .from('student_details')
-          .upsert({
-            student_id: studentUserId,
-            mshs: student.mshs,
-            full_name: student.fullName,
-            class_id: selectedClassId
-          }, { onConflict: 'mshs' });
+          .select('student_id')
+          .eq('student_id', studentUserId)
+          .maybeSingle();
+
+        let detailErr = null;
+        if (existingDetail) {
+          const { error: updateErr } = await supabase
+            .from('student_details')
+            .update({
+              mshs: student.mshs.trim().toUpperCase(),
+              full_name: student.fullName.trim(),
+              class_id: selectedClassId
+            })
+            .eq('student_id', studentUserId);
+          detailErr = updateErr;
+        } else {
+          const { error: insertErr } = await supabase
+            .from('student_details')
+            .insert({
+              student_id: studentUserId,
+              mshs: student.mshs.trim().toUpperCase(),
+              full_name: student.fullName.trim(),
+              class_id: selectedClassId
+            });
+          detailErr = insertErr;
+        }
 
         if (detailErr) {
           console.warn('Lỗi cập nhật student_details:', student.mshs, detailErr);

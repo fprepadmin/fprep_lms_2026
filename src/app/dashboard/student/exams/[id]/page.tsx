@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { supabaseAdmin } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
+import { supabaseAdmin, verifySessionToken } from '@/lib/supabase';
 import ExamSessionClient from './ExamSessionClient';
 
 interface PageProps {
@@ -14,20 +13,16 @@ export default async function ExamPage({ params }: PageProps) {
 
   // 1. Kiểm tra xác thực của học sinh
   const cookieStore = await cookies();
-  const token = cookieStore.get('supabase-jwt')?.value;
+  const token = cookieStore.get('supabase-jwt')?.value || '';
   if (!token) {
     redirect('/');
   }
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
-  let studentId = '';
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    studentId = payload.sub;
-  } catch (err) {
-    console.error('Lỗi verify token tại trang đề thi:', err);
+  const payload = verifySessionToken(token);
+  if (!payload || !payload.sub) {
     redirect('/');
   }
+  const studentId = payload.sub;
 
   if (!supabaseAdmin) {
     redirect('/dashboard/student');

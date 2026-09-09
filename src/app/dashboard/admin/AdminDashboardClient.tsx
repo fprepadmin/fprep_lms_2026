@@ -6,7 +6,7 @@ import {
   Shield, Users, Activity, Settings, Database, 
   CheckCircle, AlertCircle, RefreshCw, Terminal, Check,
   ChevronRight, Calendar, Info, Building2, GraduationCap, BookOpen, Plus, Trash2, Edit3,
-  FileSpreadsheet
+  FileSpreadsheet, AlertTriangle, CheckSquare, Square, X, Filter, UserX, FolderX
 } from 'lucide-react';
 import ExcelImportModal from '@/components/student/ExcelImportModal';
 
@@ -207,7 +207,118 @@ export default function AdminDashboardClient({
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState<string>('all');
   const [userClassFilter, setUserClassFilter] = useState<string>('all');
+  const [teacherSubjectFilter, setTeacherSubjectFilter] = useState<string>('all');
   const [adminSubTab, setAdminSubTab] = useState<'classes' | 'teachers' | 'students'>('classes');
+
+  // --- TRẠNG THÁI CHỌN NHIỀU ĐỂ XOÁ HÀNG LOẠT (BATCH SELECTION) ---
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+
+  // --- MODAL XÁC NHẬN XOÁ DỮ LIỆU KHỎI DB ---
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [batchModalConfig, setBatchModalConfig] = useState<{
+    title: string;
+    description: string;
+    count: number;
+    actionType: string;
+    payload: any;
+    requiresTextConfirm?: boolean;
+    confirmKeyword?: string;
+  } | null>(null);
+  const [batchConfirmInput, setBatchConfirmInput] = useState('');
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+
+  const handleOpenBatchModal = (config: {
+    title: string;
+    description: string;
+    count: number;
+    actionType: string;
+    payload: any;
+    requiresTextConfirm?: boolean;
+    confirmKeyword?: string;
+  }) => {
+    setBatchModalConfig(config);
+    setBatchConfirmInput('');
+    setBatchModalOpen(true);
+  };
+
+  const handleExecuteBatchDelete = async () => {
+    if (!batchModalConfig) return;
+    if (batchModalConfig.requiresTextConfirm && batchConfirmInput.trim().toUpperCase() !== (batchModalConfig.confirmKeyword || 'XOA')) {
+      alert(`Vui lòng nhập chính xác chữ "${batchModalConfig.confirmKeyword || 'XOA'}" để xác nhận xóa.`);
+      return;
+    }
+
+    setIsDeletingBatch(true);
+    try {
+      const res = await fetch('/api/admin/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actionType: batchModalConfig.actionType,
+          ...batchModalConfig.payload
+        })
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Lỗi khi xóa dữ liệu');
+
+      // Cập nhật state cục bộ tương ứng
+      if (batchModalConfig.actionType === 'delete_selected_users') {
+        const deletedIds = new Set(batchModalConfig.payload.userIds || []);
+        setProfiles(prev => prev.filter(p => !deletedIds.has(p.id)));
+        setLocalStudentDetails(prev => prev.filter(s => !deletedIds.has(s.student_id)));
+        setLocalTeacherClasses(prev => prev.filter(tc => !deletedIds.has(tc.teacher_id)));
+        setSelectedStudentIds(prev => prev.filter(id => !deletedIds.has(id)));
+        setSelectedTeacherIds(prev => prev.filter(id => !deletedIds.has(id)));
+      } else if (batchModalConfig.actionType === 'delete_selected_classes') {
+        const deletedClassIds = new Set(batchModalConfig.payload.classIds || []);
+        setClasses(prev => prev.filter(c => !deletedClassIds.has(c.id)));
+        setLocalStudentDetails(prev => prev.map(s => deletedClassIds.has(s.class_id) ? { ...s, class_id: null } : s));
+        setLocalTeacherClasses(prev => prev.filter(tc => !deletedClassIds.has(tc.class_id)));
+        setSelectedClassIds([]);
+      } else if (batchModalConfig.actionType === 'delete_students_by_filter') {
+        const classFilter = batchModalConfig.payload.filter?.classId;
+        if (!classFilter || classFilter === 'all') {
+          setProfiles(prev => prev.filter(p => p.role !== 'student'));
+          setLocalStudentDetails([]);
+          setSelectedStudentIds([]);
+        } else if (classFilter === 'unassigned') {
+          const unassignedIds = new Set(localStudentDetails.filter(s => !s.class_id).map(s => s.student_id));
+          setProfiles(prev => prev.filter(p => !unassignedIds.has(p.id)));
+          setLocalStudentDetails(prev => prev.filter(s => Boolean(s.class_id)));
+          setSelectedStudentIds(prev => prev.filter(id => !unassignedIds.has(id)));
+        } else {
+          const targetIds = new Set(localStudentDetails.filter(s => s.class_id === classFilter).map(s => s.student_id));
+          setProfiles(prev => prev.filter(p => !targetIds.has(p.id)));
+          setLocalStudentDetails(prev => prev.filter(s => s.class_id !== classFilter));
+          setSelectedStudentIds(prev => prev.filter(id => !targetIds.has(id)));
+        }
+      } else if (batchModalConfig.actionType === 'delete_teachers_by_filter') {
+        const subjectFilter = batchModalConfig.payload.filter?.subjectId;
+        if (!subjectFilter || subjectFilter === 'all') {
+          setProfiles(prev => prev.filter(p => p.role !== 'teacher' && p.role !== 'head_of_department'));
+          setLocalTeacherClasses([]);
+          setSelectedTeacherIds([]);
+        } else {
+          const teacherIdsWithSubject = new Set(localTeacherClasses.filter(tc => tc.subject_id === subjectFilter).map(tc => tc.teacher_id));
+          setProfiles(prev => prev.filter(p => !teacherIdsWithSubject.has(p.id)));
+          setLocalTeacherClasses(prev => prev.filter(tc => tc.subject_id !== subjectFilter));
+          setSelectedTeacherIds(prev => prev.filter(id => !teacherIdsWithSubject.has(id)));
+        }
+      }
+
+      setBatchModalOpen(false);
+      setBatchModalConfig(null);
+      alert(`Đã xóa vĩnh viễn ${resData.count || 0} bản ghi khỏi cơ sở dữ liệu Supabase thành công!`);
+    } catch (err: any) {
+      console.error('Lỗi khi xóa batch:', err);
+      alert('Không thể thực hiện xóa: ' + err.message);
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  };
 
   const [localTeacherClasses, setLocalTeacherClasses] = useState<any[]>(initialTeacherClasses);
   const [editingUserClassId, setEditingUserClassId] = useState<string>('');
@@ -942,13 +1053,39 @@ export default function AdminDashboardClient({
               
               {/* BẢNG DANH SÁCH LỚP HỌC */}
               <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-border bg-muted/10 flex items-center justify-between">
+                <div className="p-4 border-b border-border bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="font-extrabold text-sm flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-primary" /> Danh sách Lớp học Khối 12 ({classes.length} lớp)
                     </h3>
                     <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Quản lý các lớp học và môn học được phân công</p>
                   </div>
+
+                  {/* THANH THAO TÁC HÀNG LOẠT LỚP HỌC */}
+                  {selectedClassIds.length > 0 && (
+                    <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 px-3 py-1.5 rounded-xl">
+                      <span className="text-xs font-bold text-destructive">Đã chọn: {selectedClassIds.length} lớp</span>
+                      <button
+                        onClick={() => handleOpenBatchModal({
+                          title: `Xóa ${selectedClassIds.length} Lớp học đã chọn`,
+                          description: `Bạn có chắc chắn muốn xóa vĩnh viễn ${selectedClassIds.length} lớp học này khỏi cơ sở dữ liệu? Tất cả học sinh thuộc các lớp này sẽ tự động chuyển về trạng thái chưa xếp lớp.`,
+                          count: selectedClassIds.length,
+                          actionType: 'delete_selected_classes',
+                          payload: { classIds: selectedClassIds },
+                          requiresTextConfirm: false
+                        })}
+                        className="inline-flex items-center gap-1 bg-destructive hover:bg-destructive/90 text-white font-bold text-xs px-2.5 py-1 rounded-lg transition-colors shadow-xs"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Xóa lớp đã chọn
+                      </button>
+                      <button
+                        onClick={() => setSelectedClassIds([])}
+                        className="text-xs font-semibold text-muted-foreground hover:text-foreground px-1.5 py-0.5"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {editingClassId && (
@@ -1007,6 +1144,20 @@ export default function AdminDashboardClient({
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        <th className="p-4 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={classes.length > 0 && selectedClassIds.length === classes.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedClassIds(classes.map(c => c.id));
+                              } else {
+                                setSelectedClassIds([]);
+                              }
+                            }}
+                            className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                          />
+                        </th>
                         <th className="p-4">Tên Lớp học</th>
                         <th className="p-4">Ban đào tạo</th>
                         <th className="p-4">Niên khóa</th>
@@ -1019,9 +1170,24 @@ export default function AdminDashboardClient({
                       {classes.map(cls => {
                         const classStudentsCount = localStudentDetails.filter(s => s.class_id === cls.id).length;
                         const classAssignments = localTeacherClasses.filter(tc => tc.class_id === cls.id);
+                        const isSelected = selectedClassIds.includes(cls.id);
 
                         return (
-                          <tr key={cls.id} className="border-b border-border hover:bg-muted/5 transition-colors">
+                          <tr key={cls.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                            <td className="p-4 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedClassIds(prev => [...prev, cls.id]);
+                                  } else {
+                                    setSelectedClassIds(prev => prev.filter(id => id !== cls.id));
+                                  }
+                                }}
+                                className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                              />
+                            </td>
                             <td className="p-4 font-black text-sm text-foreground">{cls.name}</td>
                             <td className="p-4">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -1142,12 +1308,97 @@ export default function AdminDashboardClient({
               
               {/* BẢNG DANH SÁCH GIÁO VIÊN & HOD */}
               <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-border bg-muted/10 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-extrabold text-sm flex items-center gap-2">
-                      <Users className="h-4 w-4 text-primary" /> Danh sách Giáo viên & Trưởng bộ môn ({profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department').length})
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Phân công môn học và các lớp giảng dạy phụ trách</p>
+                <div className="p-4 border-b border-border bg-muted/10 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-extrabold text-sm flex items-center gap-2">
+                        <Users className="h-4 w-4 text-primary" /> Danh sách Giáo viên & Trưởng bộ môn ({profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department').length})
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Phân công môn học và các lớp giảng dạy phụ trách</p>
+                    </div>
+
+                    {/* NÚT XOÁ TOÀN BỘ GIÁO VIÊN KHỎI DB */}
+                    <button
+                      onClick={() => handleOpenBatchModal({
+                        title: 'Xóa TOÀN BỘ Giáo viên & Trưởng bộ môn',
+                        description: `CẢNH BÁO NGUY HIỂM: Hành động này sẽ XÓA VĨNH VIỄN toàn bộ ${profiles.filter(p => (p.role === 'teacher' || p.role === 'head_of_department') && p.id !== currentUserId && p.email !== 'fprep.fschool@gmail.com').length} tài khoản Giáo viên & HOD khỏi cơ sở dữ liệu Supabase. Vui lòng nhập "XOA" để xác nhận.`,
+                        count: profiles.filter(p => (p.role === 'teacher' || p.role === 'head_of_department') && p.id !== currentUserId && p.email !== 'fprep.fschool@gmail.com').length,
+                        actionType: 'delete_teachers_by_filter',
+                        payload: { filter: { subjectId: 'all' } },
+                        requiresTextConfirm: true,
+                        confirmKeyword: 'XOA'
+                      })}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-destructive hover:bg-destructive/10 border border-destructive/20 px-3 py-1.5 rounded-xl transition-colors self-start sm:self-auto"
+                    >
+                      <UserX className="h-3.5 w-3.5" /> Xóa TOÀN BỘ Giáo viên (DB)
+                    </button>
+                  </div>
+
+                  {/* BỘ LỌC MÔN HỌC & THANH XOÁ BATCH */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                    <div className="flex items-center gap-2 flex-1 max-w-xs">
+                      <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                      <select
+                        value={teacherSubjectFilter}
+                        onChange={(e) => setTeacherSubjectFilter(e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold focus:outline-none"
+                      >
+                        <option value="all">Tất cả bộ môn ({profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department').length})</option>
+                        {subjects.map(s => {
+                          const count = localTeacherClasses.filter(tc => tc.subject_id === s.id).length;
+                          return <option key={s.id} value={s.id}>{s.name} ({count} GV)</option>;
+                        })}
+                      </select>
+                    </div>
+
+                    {/* CÁC THAO TÁC XOÁ BATCH THEO LỰA CHỌN HOẶC BỘ LỌC */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedTeacherIds.length > 0 && (
+                        <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 px-2.5 py-1 rounded-xl">
+                          <span className="text-xs font-bold text-destructive">Đã chọn: {selectedTeacherIds.length}</span>
+                          <button
+                            onClick={() => handleOpenBatchModal({
+                              title: `Xóa ${selectedTeacherIds.length} Giáo viên đã chọn`,
+                              description: `Bạn có chắc chắn muốn xóa vĩnh viễn ${selectedTeacherIds.length} tài khoản giáo viên này khỏi cơ sở dữ liệu Supabase?`,
+                              count: selectedTeacherIds.length,
+                              actionType: 'delete_selected_users',
+                              payload: { userIds: selectedTeacherIds },
+                              requiresTextConfirm: false
+                            })}
+                            className="inline-flex items-center gap-1 bg-destructive hover:bg-destructive/90 text-white font-bold text-xs px-2 py-0.5 rounded-lg transition-colors shadow-xs"
+                          >
+                            <Trash2 className="h-3 w-3" /> Xóa đã chọn
+                          </button>
+                          <button
+                            onClick={() => setSelectedTeacherIds([])}
+                            className="text-[11px] font-semibold text-muted-foreground hover:text-foreground px-1"
+                          >
+                            Bỏ
+                          </button>
+                        </div>
+                      )}
+
+                      {teacherSubjectFilter !== 'all' && (
+                        <button
+                          onClick={() => {
+                            const subName = subjects.find(s => s.id === teacherSubjectFilter)?.name || 'môn này';
+                            const matchCount = localTeacherClasses.filter(tc => tc.subject_id === teacherSubjectFilter).length;
+                            handleOpenBatchModal({
+                              title: `Xóa toàn bộ Giáo viên bộ môn ${subName}`,
+                              description: `Bạn có chắc chắn muốn xóa vĩnh viễn tất cả giáo viên phụ trách môn ${subName} khỏi cơ sở dữ liệu Supabase?`,
+                              count: matchCount,
+                              actionType: 'delete_teachers_by_filter',
+                              payload: { filter: { subjectId: teacherSubjectFilter } },
+                              requiresTextConfirm: true,
+                              confirmKeyword: 'XOA'
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-2.5 py-1.5 rounded-xl transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Xóa GV theo môn đang lọc
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1237,57 +1488,101 @@ export default function AdminDashboardClient({
                   </div>
                 )}
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                        <th className="p-4">Email Giáo viên</th>
-                        <th className="p-4">Vai trò chuyên môn</th>
-                        <th className="p-4">Môn học phụ trách</th>
-                        <th className="p-4">Lớp giảng dạy</th>
-                        <th className="p-4 text-center">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {profiles
-                        .filter(p => p.role === 'teacher' || p.role === 'head_of_department')
-                        .map(p => {
-                          const assignments = localTeacherClasses.filter(tc => tc.teacher_id === p.id);
-                          const teacherSubject = assignments[0]?.subject_id ? subjects.find(s => s.id === assignments[0].subject_id)?.name : '';
-                          const teacherClassesNames = assignments.map(tc => classes.find(c => c.id === tc.class_id)?.name).filter(Boolean).join(', ');
+                {(() => {
+                  const filteredTeachers = profiles
+                    .filter(p => p.role === 'teacher' || p.role === 'head_of_department')
+                    .filter(p => {
+                      if (teacherSubjectFilter === 'all') return true;
+                      const assignments = localTeacherClasses.filter(tc => tc.teacher_id === p.id);
+                      return assignments.some(tc => tc.subject_id === teacherSubjectFilter);
+                    });
 
-                          return (
-                            <tr key={p.id} className="border-b border-border hover:bg-muted/5 transition-colors">
-                              <td className="p-4 font-bold text-foreground">
-                                {p.email}
-                                <span className="block text-[10px] text-muted-foreground font-semibold">Tên FPT: {p.email.split('@')[0].toUpperCase()}</span>
-                              </td>
-                              <td className="p-4">{getRoleBadge(p.role)}</td>
-                              <td className="p-4 font-bold text-primary">{teacherSubject || <span className="text-muted-foreground italic font-normal">Chưa gán môn</span>}</td>
-                              <td className="p-4 font-semibold text-xs text-foreground">{teacherClassesNames || <span className="text-muted-foreground italic font-normal">Chưa phân lớp</span>}</td>
-                              <td className="p-4 text-center">
-                                <div className="flex items-center justify-center gap-1.5">
-                                  <button
-                                    onClick={() => startEditUser(p)}
-                                    className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
-                                  >
-                                    Sửa
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteUser(p.id)}
-                                    disabled={p.id === currentUserId}
-                                    className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px] disabled:opacity-50"
-                                  >
-                                    Xóa
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+                  const selectableTeacherIds = filteredTeachers.filter(p => p.id !== currentUserId && p.email !== 'fprep.fschool@gmail.com').map(p => p.id);
+                  const isAllSelected = selectableTeacherIds.length > 0 && selectableTeacherIds.every(id => selectedTeacherIds.includes(id));
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                            <th className="p-4 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isAllSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedTeacherIds(Array.from(new Set([...selectedTeacherIds, ...selectableTeacherIds])));
+                                  } else {
+                                    setSelectedTeacherIds(selectedTeacherIds.filter(id => !selectableTeacherIds.includes(id)));
+                                  }
+                                }}
+                                className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                              />
+                            </th>
+                            <th className="p-4">Email Giáo viên</th>
+                            <th className="p-4">Vai trò chuyên môn</th>
+                            <th className="p-4">Môn học phụ trách</th>
+                            <th className="p-4">Lớp giảng dạy</th>
+                            <th className="p-4 text-center">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredTeachers.map(p => {
+                            const assignments = localTeacherClasses.filter(tc => tc.teacher_id === p.id);
+                            const teacherSubject = assignments[0]?.subject_id ? subjects.find(s => s.id === assignments[0].subject_id)?.name : '';
+                            const teacherClassesNames = assignments.map(tc => classes.find(c => c.id === tc.class_id)?.name).filter(Boolean).join(', ');
+                            const isSelected = selectedTeacherIds.includes(p.id);
+                            const isProtected = p.id === currentUserId || p.email === 'fprep.fschool@gmail.com';
+
+                            return (
+                              <tr key={p.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                                <td className="p-4 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    disabled={isProtected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedTeacherIds(prev => [...prev, p.id]);
+                                      } else {
+                                        setSelectedTeacherIds(prev => prev.filter(id => id !== p.id));
+                                      }
+                                    }}
+                                    className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-30"
+                                  />
+                                </td>
+                                <td className="p-4 font-bold text-foreground">
+                                  {p.email}
+                                  <span className="block text-[10px] text-muted-foreground font-semibold">Tên FPT: {p.email.split('@')[0].toUpperCase()}</span>
+                                </td>
+                                <td className="p-4">{getRoleBadge(p.role)}</td>
+                                <td className="p-4 font-bold text-primary">{teacherSubject || <span className="text-muted-foreground italic font-normal">Chưa gán môn</span>}</td>
+                                <td className="p-4 font-semibold text-xs text-foreground">{teacherClassesNames || <span className="text-muted-foreground italic font-normal">Chưa phân lớp</span>}</td>
+                                <td className="p-4 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      onClick={() => startEditUser(p)}
+                                      className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
+                                    >
+                                      Sửa
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteUser(p.id)}
+                                      disabled={isProtected}
+                                      className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px] disabled:opacity-50"
+                                    >
+                                      Xóa
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* THÊM TÀI KHOẢN GIÁO VIÊN / HOD MỚI */}
@@ -1386,16 +1681,35 @@ export default function AdminDashboardClient({
                       <GraduationCap className="h-4 w-4 text-primary" /> Danh sách Học sinh ({profiles.filter(p => p.role === 'student').length})
                     </h3>
 
-                    <button
-                      onClick={() => setShowExcelModal(true)}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition-colors self-start sm:self-auto"
-                    >
-                      <FileSpreadsheet className="h-3.5 w-3.5" /> Nhập học sinh từ Excel (.xlsx)
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => setShowExcelModal(true)}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition-colors self-start sm:self-auto"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5" /> Nhập Excel (.xlsx)
+                      </button>
+
+                      {/* NÚT XOÁ TOÀN BỘ HỌC SINH KHỎI DATABASE */}
+                      <button
+                        onClick={() => handleOpenBatchModal({
+                          title: 'Xóa TOÀN BỘ Học sinh trong Cơ sở dữ liệu',
+                          description: `CẢNH BÁO NGUY HIỂM TỘI CAO: Hành động này sẽ XÓA VĨNH VIỄN toàn bộ ${profiles.filter(p => p.role === 'student').length} học sinh và toàn bộ lịch sử học tập, điểm thi, tiến độ của họ khỏi cơ sở dữ liệu Supabase. Vui lòng nhập "XOA" để xác nhận.`,
+                          count: profiles.filter(p => p.role === 'student').length,
+                          actionType: 'delete_students_by_filter',
+                          payload: { filter: { classId: 'all' } },
+                          requiresTextConfirm: true,
+                          confirmKeyword: 'XOA'
+                        })}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-destructive hover:bg-destructive/10 border border-destructive/20 px-3 py-1.5 rounded-xl transition-colors self-start sm:self-auto"
+                      >
+                        <UserX className="h-3.5 w-3.5" /> Xóa TOÀN BỘ Học sinh (DB)
+                      </button>
+                    </div>
                   </div>
 
+                  {/* BỘ LỌC TÌM KIẾM & BỘ LỌC LỚP HỌC */}
                   <div className="grid gap-3 sm:grid-cols-12 items-center text-xs">
-                    <div className="sm:col-span-8 relative">
+                    <div className="sm:col-span-7 relative">
                       <input
                         type="text"
                         placeholder="Tìm kiếm họ tên, email, tên FPT/MSHS..."
@@ -1404,19 +1718,100 @@ export default function AdminDashboardClient({
                         className="w-full rounded-lg border border-border bg-background px-3 py-1.5 focus:outline-none font-semibold"
                       />
                     </div>
-                    <div className="sm:col-span-4">
+                    <div className="sm:col-span-5">
                       <select
                         value={userClassFilter}
                         onChange={(e) => setUserClassFilter(e.target.value)}
                         className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none font-semibold"
                       >
-                        <option value="all">Tất cả lớp</option>
-                        {classes.map(cls => (
-                          <option key={cls.id} value={cls.id}>{cls.name}</option>
-                        ))}
+                        <option value="all">Tất cả lớp ({profiles.filter(p => p.role === 'student').length})</option>
+                        <option value="unassigned">Chưa xếp lớp ({localStudentDetails.filter(s => !s.class_id).length})</option>
+                        {classes.map(cls => {
+                          const count = localStudentDetails.filter(s => s.class_id === cls.id).length;
+                          return <option key={cls.id} value={cls.id}>{cls.name} ({count} HS)</option>;
+                        })}
                       </select>
                     </div>
                   </div>
+
+                  {/* THANH THAO TÁC XOÁ BATCH HỌC SINH */}
+                  {(() => {
+                    const filteredStudents = profiles
+                      .filter(p => p.role === 'student')
+                      .filter(p => {
+                        if (userClassFilter !== 'all') {
+                          const details = localStudentDetails.find(s => s.student_id === p.id);
+                          if (userClassFilter === 'unassigned') {
+                            if (details?.class_id) return false;
+                          } else {
+                            if (!details || details.class_id !== userClassFilter) return false;
+                          }
+                        }
+                        if (userSearchTerm.trim() !== '') {
+                          const query = userSearchTerm.toLowerCase().trim();
+                          const details = localStudentDetails.find(s => s.student_id === p.id);
+                          const matchEmail = p.email?.toLowerCase().includes(query);
+                          const matchName = details?.full_name?.toLowerCase().includes(query);
+                          const matchMshs = details?.mshs?.toLowerCase().includes(query);
+                          if (!matchEmail && !matchName && !matchMshs) return false;
+                        }
+                        return true;
+                      });
+
+                    const isFiltered = userClassFilter !== 'all' || userSearchTerm.trim() !== '';
+
+                    return (
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/50">
+                        {selectedStudentIds.length > 0 && (
+                          <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 px-2.5 py-1 rounded-xl">
+                            <span className="text-xs font-bold text-destructive">Đã chọn: {selectedStudentIds.length} HS</span>
+                            <button
+                              onClick={() => handleOpenBatchModal({
+                                title: `Xóa ${selectedStudentIds.length} Học sinh đã chọn`,
+                                description: `Bạn có chắc chắn muốn xóa vĩnh viễn ${selectedStudentIds.length} tài khoản học sinh này khỏi cơ sở dữ liệu Supabase? Toàn bộ tiến độ và kết quả thi của họ cũng sẽ bị xóa.`,
+                                count: selectedStudentIds.length,
+                                actionType: 'delete_selected_users',
+                                payload: { userIds: selectedStudentIds },
+                                requiresTextConfirm: false
+                              })}
+                              className="inline-flex items-center gap-1 bg-destructive hover:bg-destructive/90 text-white font-bold text-xs px-2 py-0.5 rounded-lg transition-colors shadow-xs"
+                            >
+                              <Trash2 className="h-3 w-3" /> Xóa đã chọn
+                            </button>
+                            <button
+                              onClick={() => setSelectedStudentIds([])}
+                              className="text-[11px] font-semibold text-muted-foreground hover:text-foreground px-1"
+                            >
+                              Bỏ
+                            </button>
+                          </div>
+                        )}
+
+                        {isFiltered && filteredStudents.length > 0 && (
+                          <button
+                            onClick={() => {
+                              const filterLabel = userClassFilter !== 'all' 
+                                ? (userClassFilter === 'unassigned' ? 'chưa xếp lớp' : `lớp ${classes.find(c => c.id === userClassFilter)?.name || ''}`)
+                                : `theo từ khóa "${userSearchTerm}"`;
+                              
+                              handleOpenBatchModal({
+                                title: `Xóa ${filteredStudents.length} Học sinh theo bộ lọc (${filterLabel})`,
+                                description: `Bạn có chắc chắn muốn xóa vĩnh viễn toàn bộ ${filteredStudents.length} học sinh đang lọc (${filterLabel}) khỏi cơ sở dữ liệu Supabase?`,
+                                count: filteredStudents.length,
+                                actionType: 'delete_selected_users',
+                                payload: { userIds: filteredStudents.map(s => s.id) },
+                                requiresTextConfirm: true,
+                                confirmKeyword: 'XOA'
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-xl transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Xóa {filteredStudents.length} HS theo bộ lọc hiện tại
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {editingUserId && (
@@ -1472,73 +1867,123 @@ export default function AdminDashboardClient({
                   </div>
                 )}
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                        <th className="p-4">Họ và Tên</th>
-                        <th className="p-4">Tên FPT / MSHS</th>
-                        <th className="p-4">Tài khoản Email</th>
-                        <th className="p-4">Lớp học</th>
-                        <th className="p-4 text-center">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {profiles
-                        .filter(p => p.role === 'student')
-                        .filter(p => {
-                          if (userClassFilter !== 'all') {
-                            const details = localStudentDetails.find(s => s.student_id === p.id);
-                            if (!details || details.class_id !== userClassFilter) return false;
-                          }
-                          if (userSearchTerm.trim() !== '') {
-                            const query = userSearchTerm.toLowerCase().trim();
-                            const details = localStudentDetails.find(s => s.student_id === p.id);
-                            const matchEmail = p.email?.toLowerCase().includes(query);
-                            const matchName = details?.full_name?.toLowerCase().includes(query);
-                            const matchMshs = details?.mshs?.toLowerCase().includes(query);
-                            if (!matchEmail && !matchName && !matchMshs) return false;
-                          }
-                          return true;
-                        })
-                        .map(p => {
-                          const details = localStudentDetails.find((s: any) => s.student_id === p.id);
-                          const cls = classes.find(c => c.id === details?.class_id);
+                {(() => {
+                  const filteredStudents = profiles
+                    .filter(p => p.role === 'student')
+                    .filter(p => {
+                      if (userClassFilter !== 'all') {
+                        const details = localStudentDetails.find(s => s.student_id === p.id);
+                        if (userClassFilter === 'unassigned') {
+                          if (details?.class_id) return false;
+                        } else {
+                          if (!details || details.class_id !== userClassFilter) return false;
+                        }
+                      }
+                      if (userSearchTerm.trim() !== '') {
+                        const query = userSearchTerm.toLowerCase().trim();
+                        const details = localStudentDetails.find(s => s.student_id === p.id);
+                        const matchEmail = p.email?.toLowerCase().includes(query);
+                        const matchName = details?.full_name?.toLowerCase().includes(query);
+                        const matchMshs = details?.mshs?.toLowerCase().includes(query);
+                        if (!matchEmail && !matchName && !matchMshs) return false;
+                      }
+                      return true;
+                    });
 
-                          return (
-                            <tr key={p.id} className="border-b border-border hover:bg-muted/5 transition-colors">
-                              <td className="p-4 font-black text-foreground">{details?.full_name || 'Chưa cập nhật'}</td>
-                              <td className="p-4 font-bold text-primary">{details?.mshs || 'N/A'}</td>
-                              <td className="p-4 font-semibold text-muted-foreground">{p.email}</td>
-                              <td className="p-4">
-                                {cls ? (
-                                  <span className="font-bold text-foreground bg-muted/30 px-2 py-0.5 rounded border border-border/50">{cls.name}</span>
-                                ) : (
-                                  <span className="text-muted-foreground italic text-[11px]">Chưa xếp lớp</span>
-                                )}
-                              </td>
-                              <td className="p-4 text-center">
-                                <div className="flex items-center justify-center gap-1.5">
-                                  <button
-                                    onClick={() => startEditUser(p)}
-                                    className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
-                                  >
-                                    Sửa
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteUser(p.id)}
-                                    className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
-                                  >
-                                    Xóa
-                                  </button>
-                                </div>
+                  const isAllFilteredSelected = filteredStudents.length > 0 && filteredStudents.every(s => selectedStudentIds.includes(s.id));
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                            <th className="p-4 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isAllFilteredSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    const allFilteredIds = filteredStudents.map(s => s.id);
+                                    setSelectedStudentIds(Array.from(new Set([...selectedStudentIds, ...allFilteredIds])));
+                                  } else {
+                                    const filteredIdSet = new Set(filteredStudents.map(s => s.id));
+                                    setSelectedStudentIds(selectedStudentIds.filter(id => !filteredIdSet.has(id)));
+                                  }
+                                }}
+                                className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                              />
+                            </th>
+                            <th className="p-4">Họ và Tên</th>
+                            <th className="p-4">Tên FPT / MSHS</th>
+                            <th className="p-4">Tài khoản Email</th>
+                            <th className="p-4">Lớp học</th>
+                            <th className="p-4 text-center">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredStudents.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="p-8 text-center text-muted-foreground italic font-semibold">
+                                Không tìm thấy học sinh nào phù hợp bộ lọc.
                               </td>
                             </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+                          ) : (
+                            filteredStudents.map(p => {
+                              const details = localStudentDetails.find((s: any) => s.student_id === p.id);
+                              const cls = classes.find(c => c.id === details?.class_id);
+                              const isSelected = selectedStudentIds.includes(p.id);
+
+                              return (
+                                <tr key={p.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                                  <td className="p-4 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedStudentIds(prev => [...prev, p.id]);
+                                        } else {
+                                          setSelectedStudentIds(prev => prev.filter(id => id !== p.id));
+                                        }
+                                      }}
+                                      className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                    />
+                                  </td>
+                                  <td className="p-4 font-black text-foreground">{details?.full_name || 'Chưa cập nhật'}</td>
+                                  <td className="p-4 font-bold text-primary">{details?.mshs || 'N/A'}</td>
+                                  <td className="p-4 font-semibold text-muted-foreground">{p.email}</td>
+                                  <td className="p-4">
+                                    {cls ? (
+                                      <span className="font-bold text-foreground bg-muted/30 px-2 py-0.5 rounded border border-border/50">{cls.name}</span>
+                                    ) : (
+                                      <span className="text-muted-foreground italic text-[11px]">Chưa xếp lớp</span>
+                                    )}
+                                  </td>
+                                  <td className="p-4 text-center">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        onClick={() => startEditUser(p)}
+                                        className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
+                                      >
+                                        Sửa
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteUser(p.id)}
+                                        className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
+                                      >
+                                        Xóa
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* THÊM HỌC SINH MỚI */}
@@ -1662,6 +2107,91 @@ export default function AdminDashboardClient({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* MODAL XÁC NHẬN XOÁ HÀNG LOẠT DỮ LIỆU KHỎI DB */}
+      {/* ==================================================== */}
+      {batchModalOpen && batchModalConfig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-card border border-destructive/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-extrabold text-foreground">{batchModalConfig.title}</h3>
+                <span className="inline-block mt-1 text-[11px] font-bold bg-destructive/10 text-destructive border border-destructive/20 px-2 py-0.5 rounded-full">
+                  Ảnh hưởng: {batchModalConfig.count} bản ghi trong DB
+                </span>
+              </div>
+              <button
+                onClick={() => { setBatchModalOpen(false); setBatchModalConfig(null); }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {batchModalConfig.description}
+            </p>
+
+            <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-3 text-xs text-destructive font-semibold space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertCircle className="h-4 w-4 shrink-0" /> Thao tác này sẽ xoá vĩnh viễn:
+              </p>
+              <ul className="list-disc list-inside text-[11px] text-destructive/90 space-y-0.5">
+                <li>Tài khoản người dùng (profiles)</li>
+                <li>Hồ sơ chi tiết (student_details / teacher_classes)</li>
+                <li>Lịch sử học tập, nhật ký và điểm số thi thử</li>
+              </ul>
+            </div>
+
+            {batchModalConfig.requiresTextConfirm && (
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[11px] font-bold text-foreground block">
+                  Nhập chính xác chữ <span className="font-mono text-destructive font-extrabold bg-destructive/10 px-1.5 py-0.5 rounded">{batchModalConfig.confirmKeyword || 'XOA'}</span> để xác nhận:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Gõ XOA vào đây..."
+                  value={batchConfirmInput}
+                  onChange={(e) => setBatchConfirmInput(e.target.value)}
+                  className="w-full rounded-xl border border-destructive/30 bg-background px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:border-destructive text-destructive"
+                  autoFocus
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                disabled={isDeletingBatch}
+                onClick={() => { setBatchModalOpen(false); setBatchModalConfig(null); }}
+                className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingBatch || (batchModalConfig.requiresTextConfirm && batchConfirmInput.trim().toUpperCase() !== (batchModalConfig.confirmKeyword || 'XOA'))}
+                onClick={handleExecuteBatchDelete}
+                className="px-4 py-2 rounded-xl bg-destructive hover:bg-destructive/90 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                {isDeletingBatch ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Đang xóa khỏi DB...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" /> Xác nhận Xóa Vĩnh Viễn
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,23 +1,19 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin, verifySessionToken } from '@/lib/supabase';
 import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 // Hàm helper để xác thực quyền admin của người dùng hiện tại
 async function verifyAdmin() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('supabase-jwt')?.value;
+  const token = cookieStore.get('supabase-jwt')?.value || '';
   if (!token) return null;
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    if (payload.role === 'admin') {
-      return payload.sub; // Trả về admin userId
-    }
-  } catch (e) {
-    console.error('Lỗi xác thực token admin:', e);
+  const payload = verifySessionToken(token);
+  if (payload && payload.role === 'admin') {
+    return payload.sub;
   }
   return null;
 }

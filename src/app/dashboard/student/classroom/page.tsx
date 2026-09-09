@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { supabaseAdmin, getSupabaseServerClient } from '@/lib/supabase';
-import jwt from 'jsonwebtoken';
+import { supabaseAdmin, getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import { Users } from 'lucide-react';
 import ClassroomClient from './ClassroomClient';
 
@@ -10,19 +9,16 @@ export const dynamic = 'force-dynamic';
 export default async function ClassroomPage() {
   // 1. Xác thực học sinh
   const cookieStore = await cookies();
-  const token = cookieStore.get('supabase-jwt')?.value;
+  const token = cookieStore.get('supabase-jwt')?.value || '';
   if (!token) {
     redirect('/');
   }
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
-  let studentId = '';
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    studentId = payload.sub;
-  } catch (err) {
+  const payload = verifySessionToken(token);
+  if (!payload || !payload.sub) {
     redirect('/');
   }
+  const studentId = payload.sub;
 
   const supabase = (await getSupabaseServerClient()) || supabaseAdmin;
 

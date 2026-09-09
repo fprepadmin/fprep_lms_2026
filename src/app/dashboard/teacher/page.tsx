@@ -1,5 +1,4 @@
-import React from 'react';
-import { getSupabaseServerClient } from '@/lib/supabase';
+import { getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import { redirect } from 'next/navigation';
 import { 
   GraduationCap, Bell, Calendar, BookOpen, Users, 
@@ -20,16 +19,13 @@ export default async function TeacherDashboardPage() {
     redirect('/');
   }
 
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
-  let teacherId = '';
-  let teacherEmail = '';
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    teacherId = payload.sub;
-    teacherEmail = payload.email || '';
-  } catch (err) {
+  const payload = verifySessionToken(token);
+  if (!payload || !payload.sub) {
     redirect('/');
   }
+
+  const teacherId = payload.sub;
+  const teacherEmail = payload.email || '';
 
   const supabase = await getSupabaseServerClient();
 

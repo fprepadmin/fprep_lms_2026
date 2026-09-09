@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
-import { getSupabaseServerClient } from '@/lib/supabase';
+import { getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import AnnouncementManager from '../../teacher/AnnouncementManager';
 import { Bell } from 'lucide-react';
 
@@ -9,25 +8,20 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminAnnouncementsPage() {
   const cookieStore = await cookies();
-  const token = cookieStore.get('supabase-jwt')?.value;
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET || 'demo-jwt-secret-key-12345';
+  const token = cookieStore.get('supabase-jwt')?.value || '';
 
   if (!token) {
     redirect('/');
   }
 
-  let adminId = '';
-  let adminEmail = '';
-  let userRole = '';
-
-  try {
-    const payload = jwt.verify(token, jwtSecret) as any;
-    adminId = payload.sub;
-    adminEmail = payload.email || '';
-    userRole = payload.role;
-  } catch (err) {
+  const payload = verifySessionToken(token);
+  if (!payload || !payload.sub) {
     redirect('/');
   }
+
+  const adminId = payload.sub;
+  const adminEmail = payload.email || '';
+  const userRole = payload.role || 'admin';
 
   if (userRole !== 'admin') {
     redirect('/');
