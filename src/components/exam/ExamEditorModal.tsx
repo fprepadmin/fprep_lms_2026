@@ -10,8 +10,9 @@ import {
 } from 'lucide-react';
 import MathRenderer from '@/components/MathRenderer';
 import { uploadImageToCloudinary, getImageFromClipboardEvent } from '@/lib/cloudinary';
+import { parseAndRepairJson } from '@/lib/jsonRepair';
 
-const AI_PROMPT_FMATH = `Bạn là một chuyên gia giáo dục và kỹ sư dữ liệu khảo thí. 
+const AI_PROMPT_FPREP = `Bạn là một chuyên gia giáo dục và kỹ sư dữ liệu khảo thí của hệ thống FPREP. 
 Nhiệm vụ: Đọc đề thi dưới đây và chuyển đổi toàn bộ câu hỏi sang mảng JSON chuẩn 2025. 
 ĐẶC BIỆT LƯU Ý: Giáo viên đã cung cấp sẵn đáp án đúng trong đề (bằng cách gạch chân, in đậm, bôi đỏ, có dấu * ở phương án đúng, hoặc để bảng đáp án ở cuối file). 
 Bạn PHẢI dò tìm và trích xuất chính xác đáp án này làm \`correct_answer\`. TUYỆT ĐỐI KHÔNG tự giải và chọn đáp án khác với ý đồ của giáo viên. 
@@ -349,7 +350,7 @@ export default function ExamEditorModal({
   };
 
   const handleCopyPrompt = () => {
-    navigator.clipboard.writeText(AI_PROMPT_FMATH);
+    navigator.clipboard.writeText(AI_PROMPT_FPREP);
     setCopiedPrompt(true);
     setTimeout(() => setCopiedPrompt(false), 2500);
   };
@@ -361,12 +362,11 @@ export default function ExamEditorModal({
     }
 
     try {
-      const jsonMatch = jsonInput.match(/\[\s*\{[\s\S]*\}\s*\]/);
-      if (!jsonMatch) throw new Error('Không tìm thấy định dạng mảng JSON hợp lệ [ ... ]');
-      const parsed = JSON.parse(jsonMatch[0]);
+      // Sử dụng công cụ tự động phục hồi và phân tích cú pháp JSON
+      const parsed = parseAndRepairJson<any[]>(jsonInput);
 
       if (!Array.isArray(parsed) || parsed.length === 0) {
-        throw new Error('Dữ liệu JSON phải là mảng các câu hỏi!');
+        throw new Error('Dữ liệu sau khi xử lý phải là một danh sách các câu hỏi!');
       }
 
       const formattedQuestions: QuestionData[] = parsed.map((item: any, idx: number) => {
@@ -443,9 +443,9 @@ export default function ExamEditorModal({
       setActiveQuestionIdx(0);
       setShowAiModal(false);
       setJsonInput('');
-      alert(`Đã nhập thành công ${formattedQuestions.length} câu hỏi chuẩn hóa từ AI!`);
+      alert(`Đã tự động sửa lỗi và nạp thành công ${formattedQuestions.length} câu hỏi vào đề thi!`);
     } catch (err: any) {
-      alert('Lỗi phân tích JSON: ' + err.message);
+      alert('Không thể tự động phân tích JSON: ' + err.message);
     }
   };
 
@@ -1051,9 +1051,14 @@ export default function ExamEditorModal({
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-bold text-foreground block">
-                  Bước 2: Dán mảng JSON kết quả từ AI vào ô bên dưới:
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-foreground block">
+                    Bước 2: Dán mảng JSON kết quả từ AI vào ô bên dưới:
+                  </label>
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" /> Tự động sửa lỗi LaTeX & Escapes
+                  </span>
+                </div>
                 <textarea
                   rows={8}
                   value={jsonInput}
@@ -1061,21 +1066,24 @@ export default function ExamEditorModal({
                   placeholder='[\n  {\n    "type": "mcq",\n    "level": "Nhận biết",\n    "content": "...",\n    "options": [...],\n    "correct_answer": "A",\n    "explanation": "..."\n  }\n]'
                   className="w-full rounded-xl border border-border bg-background p-3 font-mono text-xs focus:outline-none"
                 />
+                <p className="text-[11px] text-muted-foreground italic m-0">
+                  💡 Hệ thống FPREP tự động xử lý các lỗi thường gặp từ ChatGPT/Gemini: lỗi gạch chéo LaTeX (<code className="text-primary font-mono">\frac, \alpha, \sqrt</code>), dấu phẩy thừa, xuống dòng thô và markdown.
+                </p>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t border-border">
               <button
                 onClick={() => setShowAiModal(false)}
-                className="px-4 py-2 rounded-xl border border-border font-bold text-muted-foreground text-xs"
+                className="px-4 py-2 rounded-xl border border-border font-bold text-muted-foreground text-xs hover:bg-muted transition-colors"
               >
                 Hủy
               </button>
               <button
                 onClick={handleImportJson}
-                className="px-4 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs hover:opacity-90 transition-opacity"
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition-colors shadow-xs flex items-center gap-1.5"
               >
-                Phân tích & Nạp vào Đề
+                <Sparkles className="h-3.5 w-3.5" /> Phân tích & Tự động Sửa Lỗi Nạp Đề
               </button>
             </div>
           </div>

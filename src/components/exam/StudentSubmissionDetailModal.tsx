@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronUp, Printer, ArrowRight
 } from 'lucide-react';
 import MathRenderer from '@/components/MathRenderer';
+import { parseAndRepairJson } from '@/lib/jsonRepair';
 
 export interface QuestionDetail {
   id: string;
@@ -89,7 +90,7 @@ const getQuestionType = (q: QuestionDetail): 'mcq' | 'tf' | 'saq' => {
   }
   if (typeof q.correct_answer === 'string') {
     try {
-      const parsedCa = JSON.parse(q.correct_answer);
+      const parsedCa = parseAndRepairJson(q.correct_answer);
       if (typeof parsedCa === 'object' && parsedCa !== null && !Array.isArray(parsedCa)) return 'tf';
     } catch (e) {}
   }
@@ -107,7 +108,7 @@ const parseOptions = (rawOptions: any, type?: 'mcq' | 'tf' | 'saq'): { id: strin
     list = rawOptions;
   } else if (typeof rawOptions === 'string') {
     try {
-      const parsed = JSON.parse(rawOptions);
+      const parsed = parseAndRepairJson(rawOptions);
       if (Array.isArray(parsed)) list = parsed;
     } catch (e) {}
   }
