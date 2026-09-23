@@ -190,7 +190,7 @@ function GuideContent() {
                         <h3 className="text-base font-extrabold text-foreground m-0">
                           1. Hướng Dẫn Dành Cho Học Sinh (STUDENT)
                         </h3>
-                        <span className="text-xs text-muted-foreground">Tự học lý thuyết, làm bài thi khảo thí 2025 & theo dõi tiến độ cá nhân</span>
+                        <span className="text-xs text-muted-foreground">Tự học lý thuyết, làm bài thi khảo thí 2026 & theo dõi tiến độ cá nhân</span>
                       </div>
                     </div>
 
@@ -208,7 +208,7 @@ function GuideContent() {
 
                       <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2">
                         <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" /> B. Quy trình Thi & Luyện đề chuẩn 2025
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" /> B. Quy trình Thi & Luyện đề chuẩn 2026
                         </h4>
                         <ul className="list-disc pl-4 text-xs space-y-1.5 leading-relaxed text-muted-foreground">
                           <li><strong>Phần I (MCQ):</strong> 4 lựa chọn A, B, C, D (0.25đ/câu).</li>
@@ -231,7 +231,7 @@ function GuideContent() {
                         <h3 className="text-base font-extrabold text-foreground m-0">
                           2. Hướng Dẫn Dành Cho Giáo Viên Bộ Môn (TEACHER)
                         </h3>
-                        <span className="text-xs text-muted-foreground">Quản lý lớp học, biên soạn đề thi chuẩn 2025 & giao bài tập</span>
+                        <span className="text-xs text-muted-foreground">Quản lý lớp học, biên soạn đề thi chuẩn 2026 & giao bài tập</span>
                       </div>
                     </div>
 
@@ -252,7 +252,7 @@ function GuideContent() {
                         </h4>
                         <p className="text-xs leading-relaxed">
                           - Vào <strong>"Đề thi & Kiểm tra"</strong> $\rightarrow$ Bấm <em>"Tạo đề thi mới"</em>.<br/>
-                          - Thiết lập 3 dạng câu hỏi chuẩn Bộ GD&ĐT 2025: Trắc nghiệm 4 ý (MCQ), Đúng/Sai 4 ý (TF), Trả lời ngắn (SAQ).<br/>
+                          - Thiết lập 3 dạng câu hỏi chuẩn Bộ GD&ĐT 2026: Trắc nghiệm 4 ý (MCQ), Đúng/Sai 4 ý (TF), Trả lời ngắn (SAQ).<br/>
                           - Hỗ trợ công thức LaTeX: <code className="text-primary font-mono">$y = x^2$</code> hoặc <code className="text-primary font-mono">$$\int_0^1 f(x)dx$$</code>.<br/>
                           - <strong>Tải ảnh / Dán ảnh siêu tốc:</strong> Bấm <em>"Tải ảnh Cloudinary"</em> hoặc chụp màn hình rồi bấm <strong className="text-foreground">Ctrl + V</strong> trực tiếp vào ô nhập đề/phương án/lời giải để tự động upload lên Cloudinary CDN.<br/>
                           - <strong>Trợ lý AI:</strong> Bấm nút <em>"Trợ lý AI"</em> để sao chép Prompt chuyển đổi đề thi từ Word/PDF sang JSON tự động.

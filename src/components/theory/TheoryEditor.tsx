@@ -225,7 +225,7 @@ Cho hàm số $y = f(x)$ có đạo hàm trên khoảng $(a; b)$:
             type="button"
             onClick={handleLoadSample}
             className="p-1.5 rounded hover:bg-primary/10 text-purple-600 font-bold flex items-center gap-1 text-[11px]"
-            title="Nạp cấu trúc bài giảng mẫu chuẩn 2025"
+            title="Nạp cấu trúc bài giảng mẫu chuẩn 2026"
           >
             <Sparkles className="h-3.5 w-3.5" /> Nạp mẫu
           </button>

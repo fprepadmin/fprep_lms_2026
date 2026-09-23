@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Raleway, Inter, Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { Suspense } from "react";
+import RouteProgressBar from "@/components/RouteProgressBar";
 
 const raleway = Raleway({
   subsets: ["latin", "vietnamese"],
@@ -47,6 +49,9 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen flex flex-col font-sans bg-background text-foreground" suppressHydrationWarning>
+        <Suspense fallback={null}>
+          <RouteProgressBar />
+        </Suspense>
         <AuthProvider>
           {children}
         </AuthProvider>

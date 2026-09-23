@@ -24,6 +24,8 @@ export default function Footer({ className = '' }: { className?: string }) {
 
         {/* Right: Quick links */}
         <div className="flex items-center gap-x-3 font-medium text-muted-foreground">
+          <a href="mailto:bythongtran@gmail.com" className="hover:text-primary transition-colors text-orange-600 dark:text-orange-400 font-semibold">bythongtran@gmail.com</a>
+          <span className="text-border/60">&bull;</span>
           <Link href="/guide?tab=about" className="hover:text-primary transition-colors">Giới thiệu</Link>
           <span className="text-border/60">&bull;</span>
           <Link href="/guide?tab=usage" className="hover:text-primary transition-colors">Hướng dẫn</Link>

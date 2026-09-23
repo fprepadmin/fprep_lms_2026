@@ -5,15 +5,18 @@ import { createPortal } from 'react-dom';
 import { 
   X, Check, AlertCircle, Award, Clock, Calendar, 
   User, CheckCircle2, XCircle, HelpCircle, BookOpen,
-  ChevronDown, ChevronUp, Printer, ArrowRight
+  ChevronDown, ChevronUp, Printer, ArrowRight, Loader2
 } from 'lucide-react';
 import MathRenderer from '@/components/MathRenderer';
 import { parseAndRepairJson } from '@/lib/jsonRepair';
+import { createSupabaseClient } from '@/lib/supabase';
 
 export interface QuestionDetail {
   id: string;
+  exam_id?: string;
   content: string;
   question_type?: 'mcq' | 'tf' | 'saq';
+  type?: 'mcq' | 'tf' | 'saq';
   options: any;
   correct_answer?: any;
   correct_option_index?: number;
@@ -52,9 +55,32 @@ interface StudentSubmissionDetailModalProps {
   questions: QuestionDetail[];
 }
 
+export function cleanOptionText(raw: any): string {
+  if (raw === null || raw === undefined) return '';
+  if (typeof raw === 'object') {
+    if (raw.text !== undefined) return cleanOptionText(raw.text);
+    if (raw.content !== undefined) return cleanOptionText(raw.content);
+    return JSON.stringify(raw);
+  }
+  let str = String(raw).trim();
+  if (
+    (str.startsWith('{') && str.endsWith('}')) ||
+    (str.startsWith('[') && str.endsWith(']'))
+  ) {
+    try {
+      const parsed = JSON.parse(str);
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.text !== undefined) return cleanOptionText(parsed.text);
+        if (parsed.content !== undefined) return cleanOptionText(parsed.content);
+      }
+    } catch (e) {}
+  }
+  return str;
+}
+
 // Helpers
 const getQuestionType = (q: QuestionDetail): 'mcq' | 'tf' | 'saq' => {
-  const declaredType = q.question_type || (q as any).type;
+  const declaredType = q.question_type || q.type;
   if (declaredType === 'tf' || declaredType === 'saq') return declaredType;
   if (declaredType === 'mcq') {
     const opts = parseOptions(q.options, 'mcq');
@@ -110,6 +136,9 @@ const parseOptions = (rawOptions: any, type?: 'mcq' | 'tf' | 'saq'): { id: strin
     try {
       const parsed = parseAndRepairJson(rawOptions);
       if (Array.isArray(parsed)) list = parsed;
+      else if (typeof parsed === 'object' && parsed !== null) {
+        list = Object.entries(parsed).map(([key, val]) => ({ id: key, text: val }));
+      }
     } catch (e) {}
   }
 
@@ -123,12 +152,12 @@ const parseOptions = (rawOptions: any, type?: 'mcq' | 'tf' | 'saq'): { id: strin
       const rawId = opt.id || defaultKeys[idx] || String(idx + 1);
       return {
         id: isTf ? String(rawId).toLowerCase() : String(rawId).toUpperCase(),
-        text: String(opt.text || opt.content || '')
+        text: cleanOptionText(opt.text ?? opt.content ?? opt)
       };
     }
     return {
       id: defaultKeys[idx] || String(idx + 1),
-      text: String(opt)
+      text: cleanOptionText(opt)
     };
   });
 };
@@ -139,17 +168,52 @@ export default function StudentSubmissionDetailModal({
   submission,
   questions
 }: StudentSubmissionDetailModalProps) {
-  const [mounted, setMounted] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'correct' | 'wrong'>('all');
   const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>({});
+  const [internalQuestions, setInternalQuestions] = useState<QuestionDetail[]>(questions);
+  const [loadingQuestions, setLoadingQuestions] = useState<boolean>(false);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    if (questions && questions.length > 0) {
+      setInternalQuestions(questions);
+      return;
+    }
 
-  if (!mounted || !isOpen || !submission) return null;
+    const targetExamId = submission?.exam_id;
+    if (!targetExamId) return;
 
-  const sortedQuestions = [...questions].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+    let isMounted = true;
+    const fetchQuestions = async () => {
+      setLoadingQuestions(true);
+      try {
+        const supabase = createSupabaseClient();
+        const { data } = await supabase
+          .from('questions')
+          .select('*')
+          .eq('exam_id', targetExamId)
+          .order('order_index', { ascending: true });
+
+        if (isMounted && data && data.length > 0) {
+          setInternalQuestions(data);
+        }
+      } catch (err) {
+        console.error('Lỗi tải câu hỏi bài nộp:', err);
+      } finally {
+        if (isMounted) setLoadingQuestions(false);
+      }
+    };
+
+    fetchQuestions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [submission?.exam_id, questions]);
+
+  if (!isOpen || !submission) return null;
+  if (typeof document === 'undefined') return null;
+
+  const sortedQuestions = [...internalQuestions].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
   const userAnswers: Record<string, any> = typeof submission.answers === 'object' && submission.answers !== null
     ? submission.answers
     : (typeof submission.answers === 'string' ? (() => { try { return JSON.parse(submission.answers); } catch(e) { return {}; } })() : {});
@@ -172,21 +236,32 @@ export default function StudentSubmissionDetailModal({
 
     if (qType === 'tf') {
       let correctTarget: Record<string, boolean> = {};
-      if (typeof q.correct_answer === 'object' && q.correct_answer !== null) {
+      if (typeof q.correct_answer === 'object' && q.correct_answer !== null && !Array.isArray(q.correct_answer)) {
         correctTarget = q.correct_answer;
       } else if (typeof q.correct_answer === 'string') {
-        try { correctTarget = JSON.parse(q.correct_answer); } catch (e) {}
+        try {
+          const parsed = JSON.parse(q.correct_answer);
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            correctTarget = parsed;
+          }
+        } catch (e) {}
       }
 
+      const userAnsObj: Record<string, any> = (typeof userAns === 'object' && userAns !== null) 
+        ? userAns 
+        : {};
+
       let matchingSubs = 0;
-      const opts = parseOptions(q.options);
+      const opts = parseOptions(q.options, 'tf');
       const subKeys = opts.length > 0 ? opts.map(o => o.id.toLowerCase()) : ['a', 'b', 'c', 'd'];
 
       subKeys.forEach(k => {
-        if (userAns[k] === correctTarget[k]) matchingSubs++;
+        if (userAnsObj[k] !== undefined && Boolean(userAnsObj[k]) === Boolean(correctTarget[k])) {
+          matchingSubs++;
+        }
       });
 
-      if (matchingSubs === 4) return 'correct';
+      if (matchingSubs === subKeys.length && subKeys.length > 0) return 'correct';
       if (matchingSubs > 0) return 'partial';
       return 'wrong';
     }
@@ -281,7 +356,7 @@ export default function StudentSubmissionDetailModal({
               <span className="text-2xl font-black text-foreground">
                 {submission.correct_answers}
               </span>
-              <span className="text-xs text-muted-foreground font-bold">/ {submission.total_questions || questions.length} câu</span>
+              <span className="text-xs text-muted-foreground font-bold">/ {submission.total_questions || internalQuestions.length} câu</span>
             </div>
           </div>
 
@@ -312,7 +387,7 @@ export default function StudentSubmissionDetailModal({
                   : 'bg-muted/40 hover:bg-muted text-muted-foreground'
               }`}
             >
-              Tất cả ({questions.length})
+              Tất cả ({internalQuestions.length})
             </button>
             <button
               onClick={() => setFilterType('correct')}
@@ -322,7 +397,7 @@ export default function StudentSubmissionDetailModal({
                   : 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
               }`}
             >
-              Đúng ({questions.filter(q => checkQuestionStatus(q) === 'correct').length})
+              Đúng ({internalQuestions.filter(q => checkQuestionStatus(q) === 'correct').length})
             </button>
             <button
               onClick={() => setFilterType('wrong')}
@@ -332,11 +407,16 @@ export default function StudentSubmissionDetailModal({
                   : 'bg-red-500/10 text-red-600 hover:bg-red-500/20'
               }`}
             >
-              Sai / Chưa làm ({questions.filter(q => checkQuestionStatus(q) !== 'correct').length})
+              Sai / Chưa làm ({internalQuestions.filter(q => checkQuestionStatus(q) !== 'correct').length})
             </button>
           </div>
 
-          <span className="text-[11px] text-muted-foreground font-semibold">
+          <span className="text-[11px] text-muted-foreground font-semibold flex items-center gap-2">
+            {loadingQuestions && (
+              <span className="inline-flex items-center gap-1 text-primary animate-pulse">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tải câu hỏi...
+              </span>
+            )}
             Hiển thị {filteredQuestions.length} câu hỏi
           </span>
         </div>
@@ -469,15 +549,21 @@ export default function StudentSubmissionDetailModal({
                       {opts.map((opt, optIdx) => {
                         const subKey = ['a', 'b', 'c', 'd'][optIdx] || opt.id.toLowerCase();
                         let correctTarget: Record<string, boolean> = {};
-                        if (typeof q.correct_answer === 'object' && q.correct_answer !== null) {
+                        if (typeof q.correct_answer === 'object' && q.correct_answer !== null && !Array.isArray(q.correct_answer)) {
                           correctTarget = q.correct_answer;
                         } else if (typeof q.correct_answer === 'string') {
-                          try { correctTarget = JSON.parse(q.correct_answer); } catch (e) {}
+                          try {
+                            const parsed = JSON.parse(q.correct_answer);
+                            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                              correctTarget = parsed;
+                            }
+                          } catch (e) {}
                         }
 
-                        const studentSubAns = userAns ? userAns[subKey] : undefined;
+                        const userAnsObj: Record<string, any> = (typeof userAns === 'object' && userAns !== null) ? userAns : {};
+                        const studentSubAns = userAnsObj[subKey];
                         const correctSubVal = correctTarget[subKey];
-                        const isSubMatch = studentSubAns === correctSubVal;
+                        const isSubMatch = studentSubAns !== undefined && Boolean(studentSubAns) === Boolean(correctSubVal);
 
                         return (
                           <div 

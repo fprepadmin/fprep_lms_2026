@@ -256,12 +256,16 @@ export default function TeacherExamsClient({
     const targetCat = cat || (activeCategory === 'all' ? 'test' : activeCategory);
     setNewCategory(targetCat);
     setNewDuration(targetCat === 'test' ? 45 : targetCat === 'thptqg' ? 50 : 60);
+    // Luôn khóa newSubjectId vào môn phụ trách hợp lệ của giáo viên
+    if (!newSubjectId || !allSubjects.some(s => s.id === newSubjectId)) {
+      setNewSubjectId(allSubjects[0]?.id || assignments[0]?.subject_id || '');
+    }
     setNewTitle(
       targetCat === 'test' 
-        ? 'Đề kiểm tra 1 tiết Đại số & Giải tích' 
+        ? 'Đề kiểm tra 1 tiết' 
         : targetCat === 'thptqg' 
-        ? 'Đề thi thử Tốt nghiệp THPT 2025 - Đề số 1' 
-        : 'Đề thi Đánh giá năng lực - HSA / VNU'
+        ? 'Đề thi thử Tốt nghiệp THPT 2026' 
+        : 'Đề thi Đánh giá năng lực'
     );
     setShowCreateModal(true);
   };
@@ -287,16 +291,57 @@ export default function TeacherExamsClient({
   };
 
   const handleDeleteExam = async (examId: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa đề thi này cùng toàn bộ câu hỏi liên quan?')) return;
+    const examToDelete = localExams.find(e => e.id === examId);
+    const examName = examToDelete?.title ? `"${examToDelete.title}"` : 'đề thi này';
+
+    if (!confirm(`Bạn có chắc chắn muốn xóa ${examName}?\n\nLƯU Ý: Toàn bộ câu hỏi, phân công giao bài cho lớp và kết quả làm bài của học sinh đối với đề thi này sẽ bị xóa vĩnh viễn!`)) {
+      return;
+    }
+
     try {
-      const { error } = await supabase.from('exams').delete().eq('id', examId);
-      if (error) throw error;
+      // 1. Thử gọi API Server route trước (sử dụng quyền Admin bypass RLS)
+      const res = await fetch('/api/exams/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ examId })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        // Nếu API thất bại, fallback xóa trực tiếp qua client theo thứ tự cascade
+        await supabase.from('exam_results').delete().eq('exam_id', examId);
+        await supabase.from('questions').delete().eq('exam_id', examId);
+        await supabase.from('exam_assignments').delete().eq('exam_id', examId);
+        const { error: directErr } = await supabase.from('exams').delete().eq('id', examId);
+        if (directErr) {
+          throw new Error(errorData.error || directErr.message);
+        }
+      }
+
+      // 2. Dọn sạch toàn bộ state cục bộ liên quan đến đề thi
       setLocalExams(prev => prev.filter(e => e.id !== examId));
       setLocalQuestions(prev => prev.filter(q => q.exam_id !== examId));
       setLocalExamAssignments(prev => prev.filter(a => a.exam_id !== examId));
-      alert('Đã xóa đề thi thành công!');
+      setLocalExamResults(prev => prev.filter(r => r.exam_id !== examId));
+
+      // Reset các modal / filter đang trỏ tới đề thi này
+      if (selectedExamFilterId === examId) {
+        setSelectedExamFilterId('all');
+      }
+      if (inspectingSubmission?.exam_id === examId) {
+        setInspectingSubmission(null);
+      }
+      if (editingExamModal?.id === examId) {
+        setEditingExamModal(null);
+      }
+      if (assigningExam?.id === examId) {
+        setAssigningExam(null);
+      }
+
+      alert('Đã xóa đề thi cùng toàn bộ dữ liệu câu hỏi, giao bài và điểm thi liên quan thành công!');
     } catch (err: any) {
-      alert('Không thể xóa đề thi: ' + err.message);
+      console.error('Lỗi khi xóa đề thi:', err);
+      alert('Không thể xóa đề thi: ' + (err.message || 'Lỗi không xác định'));
     }
   };
 
@@ -502,44 +547,96 @@ export default function TeacherExamsClient({
   // LOGIC QUẢN LÝ NỘP BÀI & SỔ ĐIỂM (GRADEBOOK ENGINE)
   // ----------------------------------------------------
 
-  // Lấy các lớp phụ trách
-  const targetClass = availableClasses.find(c => c.id === selectedClassId) || availableClasses[0];
+  // Lấy lớp phụ trách đang chọn (nếu chọn cụ thể)
+  const targetClass = availableClasses.find(c => c.id === selectedClassId);
 
-  // Danh sách học sinh thuộc lớp đang chọn
-  const classStudents = students.filter(s => selectedClassId === 'all' ? true : s.class_id === targetClass?.id);
+  // Danh sách học sinh thuộc lớp đang chọn (hoặc tất cả các lớp nếu 'all')
+  const classStudents = students.filter(s => {
+    if (selectedClassId === 'all') return true;
+    return s.class_id === selectedClassId;
+  });
 
   // Danh sách các đề thi được giao cho lớp này (hoặc tất cả đề thi nếu 'all')
   const assignedExamsForClass = localExams.filter(exam => {
     if (selectedClassId === 'all') return true;
-    return localExamAssignments.some(a => a.exam_id === exam.id && a.class_id === targetClass?.id);
+    return localExamAssignments.some(a => a.exam_id === exam.id && a.class_id === selectedClassId);
   });
 
-  // Đề thi đang chọn để xem báo cáo
+  // Đề thi đang chọn để xem báo cáo (nếu 'all' thì là null để hiển thị toàn bộ)
   const activeExamReport = selectedExamFilterId !== 'all' 
-    ? localExams.find(e => e.id === selectedExamFilterId)
-    : (assignedExamsForClass.length > 0 ? assignedExamsForClass[0] : localExams[0]);
+    ? (localExams.find(e => e.id === selectedExamFilterId) || null)
+    : null;
 
-  // Kết quả thi của lớp đối với đề thi đang chọn
-  const examSubmissions = classStudents.map(student => {
-    const studentResults = localExamResults.filter(
-      r => r.student_id === student.student_id && (!activeExamReport || r.exam_id === activeExamReport.id)
-    );
-    // Lấy bài làm có điểm cao nhất hoặc mới nhất
-    const bestResult = studentResults.length > 0
-      ? studentResults.reduce((prev, curr) => (Number(curr.score) > Number(prev.score) ? curr : prev), studentResults[0])
-      : null;
+  // Xây dựng danh sách kết quả nộp bài
+  const examSubmissions = (() => {
+    const studentIds = new Set(classStudents.map(s => s.student_id));
+    const studentMap = new Map(classStudents.map(s => [s.student_id, s]));
 
-    const assignmentInfo = localExamAssignments.find(
-      a => a.exam_id === activeExamReport?.id && a.class_id === student.class_id
-    );
+    if (activeExamReport) {
+      // Chế độ 1: Xem cụ thể 1 đề thi
+      return classStudents.map(student => {
+        const studentResults = localExamResults.filter(
+          r => r.student_id === student.student_id && r.exam_id === activeExamReport.id
+        );
+        const bestResult = studentResults.length > 0
+          ? studentResults.reduce((prev, curr) => (Number(curr.score) > Number(prev.score) ? curr : prev), studentResults[0])
+          : null;
 
-    return {
-      student,
-      result: bestResult,
-      isSubmitted: Boolean(bestResult),
-      assignment: assignmentInfo
-    };
-  });
+        const assignmentInfo = localExamAssignments.find(
+          a => a.exam_id === activeExamReport.id && a.class_id === student.class_id
+        );
+
+        return {
+          student,
+          exam: activeExamReport,
+          result: bestResult,
+          isSubmitted: Boolean(bestResult),
+          assignment: assignmentInfo
+        };
+      });
+    }
+
+    // Chế độ 2: Xem tất cả đề thi (selectedExamFilterId === 'all')
+    // Lấy toàn bộ bài thi đã nộp của các học sinh thuộc lớp đang chọn
+    const resultsForClass = localExamResults
+      .filter(r => studentIds.has(r.student_id))
+      .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+
+    const submittedItems = resultsForClass.map(r => {
+      const student = studentMap.get(r.student_id)!;
+      const exam = localExams.find(e => e.id === r.exam_id) || {
+        id: r.exam_id,
+        title: 'Đề kiểm tra',
+        duration_minutes: 45,
+        subjects: undefined
+      };
+      const assignmentInfo = localExamAssignments.find(
+        a => a.exam_id === r.exam_id && a.class_id === student.class_id
+      );
+
+      return {
+        student,
+        exam,
+        result: r,
+        isSubmitted: true,
+        assignment: assignmentInfo
+      };
+    });
+
+    // Danh sách các học sinh chưa làm bài nào
+    const submittedStudentIds = new Set(resultsForClass.map(r => r.student_id));
+    const unsubmittedStudents = classStudents
+      .filter(s => !submittedStudentIds.has(s.student_id))
+      .map(student => ({
+        student,
+        exam: null as any,
+        result: null as any,
+        isSubmitted: false,
+        assignment: undefined
+      }));
+
+    return [...submittedItems, ...unsubmittedStudents];
+  })();
 
   // Lọc học sinh theo trạng thái & từ khóa
   const filteredSubmissions = examSubmissions.filter(item => {
@@ -554,11 +651,13 @@ export default function TeacherExamsClient({
     return true;
   });
 
-  // Thống kê chi tiết lớp học
+  // Thống kê chi tiết
   const totalClassStudents = classStudents.length;
   const submittedCount = examSubmissions.filter(s => s.isSubmitted).length;
-  const unsubmittedCount = totalClassStudents - submittedCount;
-  const submissionRate = totalClassStudents > 0 ? Math.round((submittedCount / totalClassStudents) * 100) : 0;
+  const unsubmittedCount = examSubmissions.filter(s => !s.isSubmitted).length;
+  const submissionRate = totalClassStudents > 0 
+    ? Math.round((new Set(examSubmissions.filter(s => s.isSubmitted).map(s => s.student.student_id)).size / totalClassStudents) * 100) 
+    : 0;
 
   const validScores = examSubmissions.filter(s => s.result).map(s => Number(s.result!.score));
   const avgScore = validScores.length > 0 
@@ -604,19 +703,17 @@ export default function TeacherExamsClient({
 
   // Xuất bảng điểm CSV
   const handleExportCSV = () => {
-    if (!activeExamReport || !targetClass) return;
-
     let csvContent = `STT,MSHS,Họ và tên,Lớp,Đề thi,Điểm số,Số câu đúng,Thời gian làm bài,Thời điểm nộp bài,Trạng thái\n`;
 
-    examSubmissions.forEach((item, idx) => {
+    filteredSubmissions.forEach((item, idx) => {
       const stt = idx + 1;
       const mshs = item.student.mshs || '';
       const name = `"${item.student.full_name || ''}"`;
-      const clsName = targetClass.name;
-      const examTitle = `"${activeExamReport.title}"`;
+      const clsName = item.student.classes?.name || availableClasses.find(c => c.id === item.student.class_id)?.name || targetClass?.name || '12';
+      const examTitle = `"${item.exam?.title || activeExamReport?.title || 'Đề thi'}"`;
       const score = item.result ? item.result.score : '';
       const correct = item.result ? `${item.result.correct_answers}/${item.result.total_questions || 0}` : '';
-      const timeSpent = item.result ? `${Math.floor(item.result.time_spent_seconds / 60)} phút` : '';
+      const timeSpent = item.result ? `${Math.floor((item.result.time_spent_seconds || 0) / 60)} phút ${(item.result.time_spent_seconds || 0) % 60}s` : '';
       const date = item.result?.created_at ? new Date(item.result.created_at).toLocaleString('vi-VN') : '';
       const status = item.isSubmitted ? 'Đã nộp' : 'Chưa làm';
 
@@ -627,7 +724,8 @@ export default function TeacherExamsClient({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `BangDiem_${targetClass.name}_${activeExamReport.title.replace(/\s+/g, '_')}.csv`);
+    const downloadFileName = `BangDiem_${targetClass?.name || 'TatCaLop'}_${activeExamReport ? activeExamReport.title.replace(/\s+/g, '_') : 'TatCaDeThi'}.csv`;
+    link.setAttribute('download', downloadFileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -635,12 +733,16 @@ export default function TeacherExamsClient({
 
   // Mở modal xem bài thi học sinh
   const handleInspectStudentTest = (item: any) => {
-    if (!item.result || !activeExamReport) return;
+    if (!item.result) return;
+
+    const examId = item.result.exam_id || item.exam?.id || activeExamReport?.id;
+    const examObj = item.exam || localExams.find(e => e.id === examId) || activeExamReport;
+    const studentClass = item.student.classes?.name || availableClasses.find(c => c.id === item.student.class_id)?.name || targetClass?.name || '12';
 
     const submissionPayload: SubmissionData = {
       id: item.result.id,
       student_id: item.student.student_id,
-      exam_id: activeExamReport.id,
+      exam_id: examId,
       score: Number(item.result.score),
       correct_answers: Number(item.result.correct_answers),
       total_questions: Number(item.result.total_questions || 0),
@@ -650,12 +752,12 @@ export default function TeacherExamsClient({
       student: {
         full_name: item.student.full_name,
         mshs: item.student.mshs,
-        classes: { name: targetClass?.name || '12' }
+        classes: { name: studentClass }
       },
       exams: {
-        title: activeExamReport.title,
-        duration_minutes: activeExamReport.duration_minutes,
-        subjects: activeExamReport.subjects
+        title: examObj?.title || 'Đề thi',
+        duration_minutes: examObj?.duration_minutes || 45,
+        subjects: examObj?.subjects
       }
     };
 
@@ -738,17 +840,24 @@ export default function TeacherExamsClient({
           {/* THANH CÔNG CỤ & TẠO ĐỀ NHANH */}
           <div className="flat-card flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2.5">
-              {/* Lọc theo môn */}
-              <select
-                value={selectedSubjectId}
-                onChange={(e) => setSelectedSubjectId(e.target.value)}
-                className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none"
-              >
-                <option value="all">Tất cả môn học</option>
-                {allSubjects.map(sub => (
-                  <option key={sub.id} value={sub.id}>{sub.name}</option>
-                ))}
-              </select>
+              {/* Lọc theo môn phụ trách */}
+              {allSubjects.length > 1 ? (
+                <select
+                  value={selectedSubjectId}
+                  onChange={(e) => setSelectedSubjectId(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none"
+                >
+                  <option value="all">Tất cả môn phụ trách ({allSubjects.length})</option>
+                  {allSubjects.map(sub => (
+                    <option key={sub.id} value={sub.id}>{sub.name}</option>
+                  ))}
+                </select>
+              ) : allSubjects.length === 1 ? (
+                <div className="px-3 py-1.5 rounded-lg border border-primary/20 bg-primary/5 text-xs font-extrabold text-primary flex items-center gap-1.5">
+                  <span className="text-muted-foreground font-semibold">Môn phụ trách:</span>
+                  <span>{allSubjects[0].name}</span>
+                </div>
+              ) : null}
 
               {/* Tìm kiếm */}
               <div className="relative">
@@ -1169,13 +1278,13 @@ export default function TeacherExamsClient({
 
               {/* BẢNG DANH SÁCH NỘP BÀI VÀ ĐIỂM SỐ */}
               <div className="flat-card overflow-hidden p-0 border border-border">
-                <div className="p-4 border-b border-border bg-muted/20 flex items-center justify-between">
+                <div className="p-4 border-b border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <h3 className="font-extrabold text-sm text-foreground flex items-center gap-2">
                     <ClipboardList className="h-4 w-4 text-primary" /> 
-                    Sổ Điểm Khảo Thí: {activeExamReport?.title || 'Đề thi'} &bull; Lớp {targetClass?.name || '12'}
+                    Sổ Điểm Khảo Thí: <span className="text-primary">{activeExamReport ? activeExamReport.title : 'Tất cả đề thi đã giao'}</span> &bull; <span>{targetClass ? `Lớp ${targetClass.name}` : (selectedClassId === 'all' ? 'Tất cả các lớp' : 'Lớp đã chọn')}</span>
                   </h3>
                   <span className="text-xs text-muted-foreground font-semibold">
-                    Đang hiển thị {filteredSubmissions.length} học sinh
+                    Đang hiển thị {filteredSubmissions.length} mục
                   </span>
                 </div>
 
@@ -1186,6 +1295,8 @@ export default function TeacherExamsClient({
                         <th className="p-3.5">STT</th>
                         <th className="p-3.5">MSHS</th>
                         <th className="p-3.5">Họ và tên học sinh</th>
+                        <th className="p-3.5">Lớp</th>
+                        <th className="p-3.5">Đề thi</th>
                         <th className="p-3.5">Trạng thái</th>
                         <th className="p-3.5">Điểm số</th>
                         <th className="p-3.5">Số câu đúng</th>
@@ -1197,34 +1308,44 @@ export default function TeacherExamsClient({
                     <tbody className="divide-y divide-border">
                       {filteredSubmissions.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="p-8 text-center text-muted-foreground italic">
-                            Không có dữ liệu học sinh phù hợp.
+                          <td colSpan={11} className="p-8 text-center text-muted-foreground italic">
+                            Không có dữ liệu học sinh phù hợp với bộ lọc hiện tại.
                           </td>
                         </tr>
                       ) : (
                         filteredSubmissions.map((item, idx) => {
                           const hasSubmitted = item.isSubmitted;
                           const score = item.result ? Number(item.result.score) : null;
+                          const studentClass = item.student.classes?.name || availableClasses.find(c => c.id === item.student.class_id)?.name || targetClass?.name || '12';
+                          const examTitle = item.exam?.title || activeExamReport?.title || 'Đề thi';
 
                           return (
-                            <tr key={item.student.student_id} className="hover:bg-muted/10 transition-colors font-medium">
+                            <tr key={item.result ? item.result.id : `${item.student.student_id}_${idx}`} className="hover:bg-muted/10 transition-colors font-medium">
                               <td className="p-3.5 text-muted-foreground font-semibold">{idx + 1}</td>
                               <td className="p-3.5 font-bold text-foreground">{item.student.mshs}</td>
                               <td className="p-3.5 font-bold text-foreground">{item.student.full_name}</td>
                               <td className="p-3.5">
+                                <span className="bg-muted px-2 py-0.5 rounded text-[11px] font-bold text-muted-foreground border border-border">
+                                  Lớp {studentClass}
+                                </span>
+                              </td>
+                              <td className="p-3.5 font-semibold text-foreground max-w-[200px] truncate" title={examTitle}>
+                                {examTitle}
+                              </td>
+                              <td className="p-3.5">
                                 {hasSubmitted ? (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 rounded-full">
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 rounded-full whitespace-nowrap">
                                     <CheckCircle2 className="h-3 w-3" /> Đã hoàn thành
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-muted border border-border px-2.5 py-0.5 rounded-full">
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-muted border border-border px-2.5 py-0.5 rounded-full whitespace-nowrap">
                                     <Clock className="h-3 w-3" /> Chưa làm bài
                                   </span>
                                 )}
                               </td>
                               <td className="p-3.5">
                                 {hasSubmitted && score !== null ? (
-                                  <span className={`text-sm font-black px-2 py-0.5 rounded ${
+                                  <span className={`text-sm font-black px-2 py-0.5 rounded whitespace-nowrap ${
                                     score >= 8.0 
                                       ? 'text-green-700 bg-green-500/10 dark:text-green-300' 
                                       : score >= 5.0 
@@ -1239,7 +1360,7 @@ export default function TeacherExamsClient({
                               </td>
                               <td className="p-3.5">
                                 {hasSubmitted && item.result ? (
-                                  <span className="font-bold text-foreground">
+                                  <span className="font-bold text-foreground whitespace-nowrap">
                                     {item.result.correct_answers} / {item.result.total_questions || '—'} câu
                                   </span>
                                 ) : (
@@ -1248,7 +1369,7 @@ export default function TeacherExamsClient({
                               </td>
                               <td className="p-3.5">
                                 {hasSubmitted && item.result ? (
-                                  <span className="font-semibold text-muted-foreground">
+                                  <span className="font-semibold text-muted-foreground whitespace-nowrap">
                                     {Math.floor((item.result.time_spent_seconds || 0) / 60)} phút {(item.result.time_spent_seconds || 0) % 60}s
                                   </span>
                                 ) : (
@@ -1257,14 +1378,14 @@ export default function TeacherExamsClient({
                               </td>
                               <td className="p-3.5">
                                 {hasSubmitted && item.result?.created_at ? (
-                                  <span className="text-muted-foreground text-[11px] font-medium">
+                                  <span className="text-muted-foreground text-[11px] font-medium whitespace-nowrap">
                                     {new Date(item.result.created_at).toLocaleString('vi-VN')}
                                   </span>
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
                                 )}
                               </td>
-                              <td className="p-3.5 text-right">
+                              <td className="p-3.5 text-right whitespace-nowrap">
                                 {hasSubmitted ? (
                                   <button
                                     onClick={() => handleInspectStudentTest(item)}
@@ -1334,16 +1455,32 @@ export default function TeacherExamsClient({
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-extrabold text-foreground">Môn học:</label>
-                <select
-                  value={newSubjectId}
-                  onChange={(e) => setNewSubjectId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-border bg-background font-bold focus:outline-none"
-                >
-                  {allSubjects.map(sub => (
-                    <option key={sub.id} value={sub.id}>{sub.name}</option>
-                  ))}
-                </select>
+                <label className="font-extrabold text-foreground">Môn học phụ trách:</label>
+                {allSubjects.length === 1 ? (
+                  <div className="p-2.5 rounded-xl border border-primary/20 bg-primary/5 font-extrabold text-primary text-xs flex items-center justify-between">
+                    <span>{allSubjects[0].name}</span>
+                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold uppercase">
+                      Môn được phân công
+                    </span>
+                  </div>
+                ) : allSubjects.length > 1 ? (
+                  <select
+                    value={newSubjectId}
+                    onChange={(e) => setNewSubjectId(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-border bg-background font-bold focus:outline-none"
+                  >
+                    {allSubjects.map(sub => (
+                      <option key={sub.id} value={sub.id}>{sub.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 font-bold text-amber-700 dark:text-amber-300 text-xs">
+                    Chưa được phân công môn học nào.
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground font-medium">
+                  💡 Thầy/Cô chỉ có thể khởi tạo đề thi cho môn học được phân công giảng dạy.
+                </p>
               </div>
 
               <div className="space-y-1.5">
@@ -1407,7 +1544,7 @@ export default function TeacherExamsClient({
       )}
 
       {/* ==================================================== */}
-      {/* MODAL 3: SOẠN ĐỀ THI CHUẨN FMATH 2025 */}
+      {/* MODAL 3: SOẠN ĐỀ THI CHUẨN FMATH 2026 */}
       {/* ==================================================== */}
       {mounted && editingExamModal && (
         <ExamEditorModal

@@ -6,9 +6,10 @@ import {
   FileText, CheckCircle2, Circle, ChevronRight, Award, 
   Clock, ArrowLeft, GraduationCap, Sparkles, Layers,
   Compass, BarChart3, CheckSquare, RotateCcw, ArrowRight,
-  ClipboardList
+  ClipboardList, ArrowUpRight
 } from 'lucide-react';
 import Link from 'next/link';
+import FMathNotice from '@/components/common/FMathNotice';
 
 interface Lesson {
   id: string;
@@ -212,6 +213,11 @@ export default function StudentDashboardClient({
             </button>
           </div>
         </div>
+
+        {/* THÔNG BÁO FMATH KHI CHỌN MÔN TOÁN */}
+        {sub.name.toLowerCase().includes('toán') && (
+          <FMathNotice className="my-2" />
+        )}
 
         {/* NỘI DUNG THEO TAB ĐÃ CHỌN */}
         
@@ -515,6 +521,7 @@ export default function StudentDashboardClient({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filteredSubjects.map((sub) => {
           const stats = getSubjectStats(sub.id);
+          const isMath = sub.name.toLowerCase().includes('toán');
 
           return (
             <div
@@ -523,14 +530,23 @@ export default function StudentDashboardClient({
                 setSelectedSubjectId(sub.id);
                 setSubjectViewTab('lessons');
               }}
-              className="flat-card-interactive flex flex-col justify-between gap-4"
+              className={`flat-card-interactive flex flex-col justify-between gap-4 relative overflow-hidden ${
+                isMath ? 'ring-2 ring-blue-500/40 bg-gradient-to-br from-blue-50/40 via-card to-card' : ''
+              }`}
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="w-10 h-10 rounded-xl bg-[#e7f1ff] dark:bg-primary/20 text-primary flex items-center justify-center font-black text-base border border-primary/20">
                     <BookOpen className="h-5 w-5" />
                   </div>
-                  {getGroupBadge(sub.group_type)}
+                  <div className="flex items-center gap-1.5">
+                    {isMath && (
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-600 text-white shadow-xs">
+                        FMATH12
+                      </span>
+                    )}
+                    {getGroupBadge(sub.group_type)}
+                  </div>
                 </div>
 
                 <div>
@@ -541,6 +557,13 @@ export default function StudentDashboardClient({
                     {stats.totalChapters} Chương &bull; {stats.totalLessons} Bài học
                   </p>
                 </div>
+
+                {isMath && (
+                  <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-600 dark:text-blue-400 font-bold flex items-center justify-between">
+                    <span>Học trên FMATH12</span>
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </div>
+                )}
               </div>
 
               {/* Tiến độ hoàn thành */}

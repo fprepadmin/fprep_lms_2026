@@ -194,3 +194,80 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Lỗi hệ thống: ' + err.message }, { status: 500 });
   }
 }
+
+// 4. PATCH: Cập nhật phân công giáo viên bộ môn cho Lớp học
+export async function PATCH(request: Request) {
+  try {
+    const adminId = await verifyAdmin();
+    if (!adminId) {
+      return NextResponse.json({ error: 'Bạn không có quyền truy cập quản trị hệ thống' }, { status: 403 });
+    }
+
+    const { classId, assignments } = await request.json();
+
+    if (!classId || !Array.isArray(assignments)) {
+      return NextResponse.json({ error: 'Thiếu thông tin bắt buộc hoặc assignments không hợp lệ' }, { status: 400 });
+    }
+
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Database Admin Client chưa được cấu hình' }, { status: 500 });
+    }
+
+    // 1. Xóa toàn bộ phân công cũ của lớp này
+    const { error: delErr } = await supabaseAdmin
+      .from('teacher_classes')
+      .delete()
+      .eq('class_id', classId);
+
+    if (delErr) {
+      console.error('Lỗi xóa teacher_classes cũ của lớp:', delErr);
+      return NextResponse.json({ error: 'Không thể xóa phân công cũ' }, { status: 500 });
+    }
+
+    // 2. Thêm các phân công mới hợp lệ (teacherId và subjectId có giá trị)
+    const validAssignments = assignments
+      .filter((a: any) => a.teacherId && a.subjectId)
+      .map((a: any) => ({
+        class_id: classId,
+        teacher_id: a.teacherId,
+        subject_id: a.subjectId
+      }));
+
+    if (validAssignments.length > 0) {
+      const { error: insErr } = await supabaseAdmin
+        .from('teacher_classes')
+        .insert(validAssignments);
+
+      if (insErr) {
+        console.error('Lỗi thêm phân công mới teacher_classes:', insErr);
+        return NextResponse.json({ error: 'Không thể lưu phân công giáo viên mới' }, { status: 500 });
+      }
+    }
+
+    // 3. Ghi audit log
+    try {
+      await supabaseAdmin.from('audit_logs').insert({
+        actor_id: adminId,
+        action: 'UPDATE_CLASS_TEACHER_ASSIGNMENTS',
+        target_table: 'teacher_classes',
+        target_id: classId,
+        new_values: { classId, validAssignments }
+      });
+    } catch (auditErr) {
+      console.error('Lỗi ghi audit log:', auditErr);
+    }
+
+    // 4. Lấy danh sách phân công mới trả về
+    const { data: updatedAssignments } = await supabaseAdmin
+      .from('teacher_classes')
+      .select('*')
+      .eq('class_id', classId);
+
+    return NextResponse.json({ success: true, data: updatedAssignments || [] });
+
+  } catch (err: any) {
+    console.error('Lỗi API patch class assignments:', err);
+    return NextResponse.json({ error: 'Lỗi hệ thống: ' + err.message }, { status: 500 });
+  }
+}
+

@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
 import { 
   Users, Plus, Trash2, Edit3, Check, X, 
   Video, FileText, ChevronRight, Play, BookOpen,
-  ChevronDown, BarChart2, Clock, Award, HelpCircle,
-  ClipboardList, CheckSquare, Library, ArrowLeft, ExternalLink, Sparkles
+  ChevronDown, ChevronUp, BarChart2, Clock, Award, HelpCircle,
+  ClipboardList, CheckSquare, Library, ArrowLeft, ExternalLink, Sparkles,
+  Search, Presentation, Paperclip, File, AlertCircle, RefreshCw, FolderOpen,
+  Eye, CheckCircle2, MoreVertical, Link as LinkIcon
 } from 'lucide-react';
 import ExamEditorModal, { QuestionData } from '@/components/exam/ExamEditorModal';
 import MathRenderer from '@/components/MathRenderer';
@@ -141,13 +143,30 @@ export default function TeacherDashboardClient({
   const [selectedLessonId, setSelectedLessonId] = useState<string | 'general' | null>(null);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
 
-  // Modal Soạn đề thi chuẩn FMATH 2025
+  // Tìm kiếm & Lọc trong cấu trúc bài giảng
+  const [searchQuery, setSearchQuery] = useState('');
+  const [collapsedChapters, setCollapsedChapters] = useState<Record<string, boolean>>({});
+
+  // Modals chỉnh sửa trực quan (thay thế prompt() trình duyệt)
+  const [editingChapterModal, setEditingChapterModal] = useState<{ id: string; title: string } | null>(null);
+  const [editingLessonModal, setEditingLessonModal] = useState<{ chapterId: string; id: string; title: string } | null>(null);
+  const [materialModal, setMaterialModal] = useState<{
+    mode: 'create' | 'edit';
+    chapterId: string;
+    lessonId: string;
+    materialId?: string;
+    title: string;
+    material_type: 'video' | 'slide' | 'pdf' | 'attachment';
+    source_url: string;
+  } | null>(null);
+
+  // Modal Soạn đề thi chuẩn FMATH 2026
   const [editingExamModal, setEditingExamModal] = useState<any | null>(null);
 
   // Right Panel: Sub tabs ('materials' vs 'theory' vs 'exams')
   const [rightPanelTab, setRightPanelTab] = useState<'materials' | 'theory' | 'exams'>('theory');
 
-  // Trạng thái các Form thêm mới
+  // Trạng thái các Form thêm mới inline
   const [addingChapter, setAddingChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
 
@@ -434,7 +453,7 @@ export default function TeacherDashboardClient({
     }
   };
 
-  // 7. Lưu Đề thi và Bộ câu hỏi từ ExamEditorModal (Chuẩn FMATH 2025)
+  // 7. Lưu Đề thi và Bộ câu hỏi từ ExamEditorModal (Chuẩn FMATH 2026)
   const handleSaveExamModal = async (examMeta: any, questionsData: QuestionData[]) => {
     try {
       const activeChapter = localChapters.find(c => c.id === selectedChapterId);
@@ -594,14 +613,39 @@ export default function TeacherDashboardClient({
 
   // 8. Xóa Đề thi
   const handleDeleteExam = async (examId: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa đề thi này?')) return;
+    const examToDelete = localExams.find(e => e.id === examId);
+    const examName = examToDelete?.title ? `"${examToDelete.title}"` : 'đề thi này';
+
+    if (!confirm(`Bạn có chắc chắn muốn xóa ${examName}?\n\nLƯU Ý: Toàn bộ câu hỏi, phân công giao bài và kết quả làm bài của học sinh liên quan đến đề thi này sẽ bị xóa vĩnh viễn!`)) {
+      return;
+    }
+
     try {
-      const { error } = await supabase.from('exams').delete().eq('id', examId);
-      if (error) throw error;
-      setLocalExams(localExams.filter(e => e.id !== examId));
-    } catch (err) {
+      const res = await fetch('/api/exams/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ examId })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        await supabase.from('exam_results').delete().eq('exam_id', examId);
+        await supabase.from('questions').delete().eq('exam_id', examId);
+        await supabase.from('exam_assignments').delete().eq('exam_id', examId);
+        const { error: directErr } = await supabase.from('exams').delete().eq('id', examId);
+        if (directErr) {
+          throw new Error(errorData.error || directErr.message);
+        }
+      }
+
+      setLocalExams(prev => prev.filter(e => e.id !== examId));
+      setLocalQuestions(prev => prev.filter(q => q.exam_id !== examId));
+      if (activeEditingExamId === examId) setActiveEditingExamId(null);
+      if (editingExamModal?.id === examId) setEditingExamModal(null);
+      alert('Đã xóa đề thi cùng toàn bộ dữ liệu đi kèm thành công!');
+    } catch (err: any) {
       console.error(err);
-      alert('Không thể xóa đề thi.');
+      alert('Không thể xóa đề thi: ' + (err.message || 'Lỗi không xác định'));
     }
   };
 
@@ -817,11 +861,99 @@ export default function TeacherDashboardClient({
   // ----------------------------------------------------
   // XỬ LÝ CHỌN LỰA BÀI HỌC Ở WORKSPACE
   // ----------------------------------------------------
-  const filteredChapters = localChapters.filter(c => c.subject_id === selectedSubjectId);
-  
-  // Xác định thông tin của bài học đang chọn
-  const activeChapter = localChapters.find(c => c.id === selectedChapterId);
-  const activeLesson = activeChapter?.lessons?.find(l => l.id === selectedLessonId);
+  const teacherSubjects = useMemo(() => {
+    const list: { id: string; name: string }[] = [];
+    const seen = new Set<string>();
+    for (const a of assignments) {
+      if (a.subject_id && a.subjects && !seen.has(a.subject_id)) {
+        seen.add(a.subject_id);
+        list.push({ id: a.subject_id, name: a.subjects.name });
+      }
+    }
+    if (list.length === 0 && allSubjects && allSubjects.length > 0) {
+      for (const s of allSubjects) {
+        if (!seen.has(s.id)) {
+          seen.add(s.id);
+          list.push({ id: s.id, name: s.name });
+        }
+      }
+    }
+    return list;
+  }, [assignments, allSubjects]);
+
+  // Đảm bảo môn học đang chọn luôn luôn thuộc danh sách môn phụ trách hợp lệ của giáo viên
+  useEffect(() => {
+    if (teacherSubjects.length > 0) {
+      if (!selectedSubjectId || !teacherSubjects.some(s => s.id === selectedSubjectId)) {
+        setSelectedSubjectId(teacherSubjects[0].id);
+      }
+    }
+  }, [teacherSubjects, selectedSubjectId]);
+
+  const filteredChapters = useMemo(() => {
+    return localChapters.filter(c => c.subject_id === selectedSubjectId);
+  }, [localChapters, selectedSubjectId]);
+
+  // Tự động chọn bài học đầu tiên khi vào tab học liệu nếu chưa chọn bài nào
+  useEffect(() => {
+    if (activeTab === 'materials' && !selectedLessonId && filteredChapters.length > 0) {
+      for (const chap of filteredChapters) {
+        if (chap.lessons && chap.lessons.length > 0) {
+          setSelectedChapterId(chap.id);
+          setSelectedLessonId(chap.lessons[0].id);
+          break;
+        }
+      }
+    }
+  }, [activeTab, filteredChapters, selectedLessonId]);
+
+  // Bộ lọc tìm kiếm bài học & chương
+  const searchedChapters = useMemo(() => {
+    if (!searchQuery.trim()) return filteredChapters;
+    const q = searchQuery.toLowerCase().trim();
+    return filteredChapters
+      .map(chap => {
+        const matchesChap = chap.title.toLowerCase().includes(q);
+        const matchingLessons = (chap.lessons || []).filter(les => les.title.toLowerCase().includes(q));
+        if (matchesChap) return chap;
+        if (matchingLessons.length > 0) {
+          return { ...chap, lessons: matchingLessons };
+        }
+        return null;
+      })
+      .filter(Boolean) as Chapter[];
+  }, [filteredChapters, searchQuery]);
+
+  const toggleChapterCollapse = (chapId: string) => {
+    setCollapsedChapters(prev => ({
+      ...prev,
+      [chapId]: !prev[chapId]
+    }));
+  };
+
+  const toggleCollapseAll = () => {
+    const allCollapsed = filteredChapters.every(c => collapsedChapters[c.id]);
+    const newState: Record<string, boolean> = {};
+    filteredChapters.forEach(c => {
+      newState[c.id] = !allCollapsed;
+    });
+    setCollapsedChapters(newState);
+  };
+
+  // Xác định thông tin của bài học đang chọn an toàn
+  const activeLesson = useMemo(() => {
+    if (!selectedLessonId || selectedLessonId === 'general') return null;
+    for (const chap of localChapters) {
+      const les = (chap.lessons || []).find(l => l.id === selectedLessonId);
+      if (les) return les;
+    }
+    return null;
+  }, [localChapters, selectedLessonId]);
+
+  const activeChapter = useMemo(() => {
+    if (!activeLesson) return localChapters.find(c => c.id === selectedChapterId) || null;
+    return localChapters.find(c => c.id === activeLesson.chapter_id) || null;
+  }, [localChapters, activeLesson, selectedChapterId]);
 
   // Lọc đề thi theo Bài học đang chọn (hoặc đề chung môn học)
   const activeExams = localExams.filter(exam => {
@@ -830,6 +962,111 @@ export default function TeacherDashboardClient({
     }
     return exam.lesson_id === selectedLessonId;
   });
+
+  // Modal Handlers
+  const handleSaveChapterModal = async () => {
+    if (!editingChapterModal || !editingChapterModal.title.trim()) return;
+    await handleUpdateChapter(editingChapterModal.id, editingChapterModal.title.trim());
+    setEditingChapterModal(null);
+  };
+
+  const handleSaveLessonModal = async () => {
+    if (!editingLessonModal || !editingLessonModal.title.trim()) return;
+    await handleUpdateLesson(editingLessonModal.chapterId, editingLessonModal.id, editingLessonModal.title.trim());
+    setEditingLessonModal(null);
+  };
+
+  const handleSaveMaterialModal = async () => {
+    if (!materialModal || !materialModal.title.trim() || !materialModal.source_url.trim()) return;
+    const { mode, chapterId, lessonId, materialId, title, material_type, source_url } = materialModal;
+
+    let finalUrl = source_url.trim();
+    if (material_type === 'video') {
+      if (finalUrl.includes('youtube.com/watch')) {
+        const videoId = new URL(finalUrl).searchParams.get('v');
+        if (videoId) finalUrl = `https://www.youtube.com/embed/${videoId}`;
+      } else if (finalUrl.includes('youtu.be/')) {
+        const videoId = finalUrl.split('youtu.be/')[1]?.split('?')[0];
+        if (videoId) finalUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
+    }
+
+    if (mode === 'create') {
+      try {
+        const chapter = localChapters.find(c => c.id === chapterId);
+        const lesson = chapter?.lessons?.find(l => l.id === lessonId);
+        const orderIndex = (lesson?.lesson_materials?.length || 0) + 1;
+
+        const { data, error } = await supabase.from('lesson_materials').insert({
+          lesson_id: lessonId,
+          title: title.trim(),
+          material_type: material_type,
+          source_url: finalUrl,
+          order_index: orderIndex
+        }).select().single();
+
+        if (error) throw error;
+
+        setLocalChapters(prev => prev.map(c => {
+          if (c.id === chapterId) {
+            return {
+              ...c,
+              lessons: (c.lessons || []).map(l => {
+                if (l.id === lessonId) {
+                  return { ...l, lesson_materials: [...(l.lesson_materials || []), data] };
+                }
+                return l;
+              })
+            };
+          }
+          return c;
+        }));
+
+        setMaterialModal(null);
+      } catch (err) {
+        console.error(err);
+        alert('Không thể đăng tải học liệu.');
+      }
+    } else if (mode === 'edit' && materialId) {
+      try {
+        const { data, error } = await supabase
+          .from('lesson_materials')
+          .update({
+            title: title.trim(),
+            material_type: material_type,
+            source_url: finalUrl
+          })
+          .eq('id', materialId)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setLocalChapters(prev => prev.map(c => {
+          if (c.id === chapterId) {
+            return {
+              ...c,
+              lessons: (c.lessons || []).map(l => {
+                if (l.id === lessonId) {
+                  return {
+                    ...l,
+                    lesson_materials: (l.lesson_materials || []).map(m => m.id === materialId ? { ...m, ...data } : m)
+                  };
+                }
+                return l;
+              })
+            };
+          }
+          return c;
+        }));
+
+        setMaterialModal(null);
+      } catch (err) {
+        console.error(err);
+        alert('Không thể cập nhật học liệu.');
+      }
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1044,215 +1281,466 @@ export default function TeacherDashboardClient({
       {activeTab === 'materials' && (
         <div className="space-y-6">
           
-          {/* Tiêu đề môn học đang soạn thảo */}
-          {assignments.length > 0 && (
-            <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-lg flex items-center justify-between text-xs font-bold text-primary">
-              <span>Đang soạn thảo học liệu cho môn học của Thầy/Cô: <strong className="text-foreground">{assignments.find(a => a.subject_id === selectedSubjectId)?.subjects?.name}</strong></span>
+          {/* THANH HIỂN THỊ MÔN HỌC ĐƯỢC PHÂN CÔNG SOẠN THẢO */}
+          <div className="bg-card border border-border p-4 rounded-2xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                <BookOpen className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">Không gian bài giảng</span>
+                <span className="text-sm font-extrabold text-foreground">
+                  Môn học phụ trách: <strong className="text-primary">{teacherSubjects.find(s => s.id === selectedSubjectId)?.name || 'Chưa phân công'}</strong>
+                </span>
+                <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
+                  Thầy/Cô chỉ có quyền biên soạn bài giảng và quản lý học liệu thuộc môn học được phân công.
+                </p>
+              </div>
             </div>
-          )}
+
+            {teacherSubjects.length > 1 && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                <span className="text-xs font-semibold text-muted-foreground shrink-0">Chuyển môn phụ trách:</span>
+                {teacherSubjects.map(sub => (
+                  <button
+                    key={sub.id}
+                    onClick={() => {
+                      setSelectedSubjectId(sub.id);
+                      setSelectedLessonId(null);
+                      setSelectedChapterId(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                      selectedSubjectId === sub.id
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'bg-muted/40 hover:bg-muted text-foreground border border-border'
+                    }`}
+                  >
+                    {sub.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* TWO-COLUMN (SPLIT-SCREEN) WORKSPACE LAYOUT */}
-          <div className="grid gap-6 md:grid-cols-12 items-start">
+          <div className="grid gap-6 lg:grid-cols-12 items-start">
             
-            {/* COLUMN 1: LEFT SIDEBAR - TREE OF CHAPTERS & LESSONS */}
-            <div className="md:col-span-4 bg-card border border-border rounded-2xl p-4 space-y-4 shadow-sm max-h-[75vh] overflow-y-auto">
-              <div className="flex justify-between items-center border-b border-border pb-3">
-                <h3 className="font-extrabold text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Library className="h-4.5 w-4.5 text-primary" /> Cấu trúc bài giảng
-                </h3>
+            {/* ==================================================== */}
+            {/* CỘT TRÁI: CÂY CẤU TRÚC CHƯƠNG & BÀI HỌC (SIDEBAR) */}
+            {/* ==================================================== */}
+            <div className="lg:col-span-4 bg-card border border-border rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm max-h-[85vh] flex flex-col">
+              
+              {/* Header Sidebar & Thêm Chương */}
+              <div className="flex items-center justify-between gap-2 border-b border-border pb-3 shrink-0">
+                <div>
+                  <h3 className="font-black text-sm text-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Library className="h-4 w-4 text-primary" /> Cấu trúc bài giảng
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">
+                    {filteredChapters.length} chương &bull; {filteredChapters.reduce((acc, c) => acc + (c.lessons?.length || 0), 0)} bài học
+                  </p>
+                </div>
                 
-                {addingChapter ? (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="text"
-                      placeholder="Chương mới..."
-                      value={newChapterTitle}
-                      onChange={(e) => setNewChapterTitle(e.target.value)}
-                      className="rounded border border-border bg-background px-2 py-1 text-[11px] focus:outline-none w-28"
-                    />
-                    <button onClick={handleAddChapter} className="p-1 rounded bg-green-500 text-white hover:opacity-90"><Check className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => setAddingChapter(false)} className="p-1 rounded bg-red-500 text-white hover:opacity-90"><X className="h-3.5 w-3.5" /></button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setAddingChapter(true)}
-                    className="flex items-center gap-1 text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded"
-                  >
-                    <Plus className="h-3 w-3" /> Thêm Chương
-                  </button>
-                )}
+                <button
+                  onClick={() => setAddingChapter(!addingChapter)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 border border-primary/25 px-3 py-1.5 rounded-xl transition-all shadow-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>{addingChapter ? 'Đóng' : 'Thêm Chương'}</span>
+                </button>
               </div>
 
-              {/* Luyện tập chung môn học */}
+              {/* Form Thêm Chương mới (Mở rộng thoải mái, không chật chội) */}
+              {addingChapter && (
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-2.5 shrink-0 animate-fade-in">
+                  <span className="text-[11px] font-bold text-primary block">Tạo chương học mới</span>
+                  <input
+                    type="text"
+                    placeholder="Nhập tên chương (VD: Chương 1: Hàm số...)"
+                    value={newChapterTitle}
+                    onChange={(e) => setNewChapterTitle(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddChapter(); }}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setAddingChapter(false)}
+                      className="px-2.5 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-lg"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      onClick={handleAddChapter}
+                      className="px-3 py-1 bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-xs hover:opacity-90 flex items-center gap-1"
+                    >
+                      <Check className="h-3.5 w-3.5" /> Lưu chương
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Thanh tìm kiếm bài học & Nút thu gọn */}
+              <div className="space-y-2 shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm chương, bài học..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-muted/20 pl-8 pr-8 py-2 text-xs focus:outline-none focus:bg-background focus:ring-2 focus:ring-primary/20 transition-all"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1">
+                  <span>{searchQuery ? `Tìm thấy ${searchedChapters.reduce((acc, c) => acc + (c.lessons?.length || 0), 0)} bài học` : 'Danh sách chương mục'}</span>
+                  <button
+                    onClick={toggleCollapseAll}
+                    className="hover:text-primary font-semibold flex items-center gap-1"
+                  >
+                    {filteredChapters.every(c => collapsedChapters[c.id]) ? (
+                      <><span>Mở rộng tất cả</span> <ChevronDown className="h-3 w-3" /></>
+                    ) : (
+                      <><span>Thu gọn tất cả</span> <ChevronUp className="h-3 w-3" /></>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Mục Luyện tập chung môn học */}
               <button
-                onClick={() => { setSelectedLessonId('general'); setSelectedChapterId(null); setRightPanelTab('exams'); }}
-                className={`w-full text-left flex items-center justify-between p-2.5 rounded-lg text-xs font-bold border transition-colors ${selectedLessonId === 'general' ? 'bg-primary/5 border-primary text-primary' : 'bg-background hover:bg-muted/10 border-border'}`}
+                onClick={() => {
+                  setSelectedLessonId('general');
+                  setSelectedChapterId(null);
+                  setRightPanelTab('exams');
+                }}
+                className={`w-full text-left flex items-center justify-between p-3 rounded-xl text-xs font-bold border transition-all shrink-0 ${
+                  selectedLessonId === 'general'
+                    ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                    : 'bg-muted/10 hover:bg-muted/30 border-border/80 text-foreground'
+                }`}
               >
-                <span className="flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4 shrink-0" />
-                  Đề luyện tập chung môn học
+                <span className="flex items-center gap-2.5">
+                  <ClipboardList className={`h-4 w-4 shrink-0 ${selectedLessonId === 'general' ? 'text-primary-foreground' : 'text-primary'}`} />
+                  <span>Đề luyện tập chung môn học</span>
                 </span>
-                <ChevronRight className="h-3.5 w-3.5" />
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                  selectedLessonId === 'general' ? 'bg-white/20 text-white' : 'bg-muted border border-border text-muted-foreground'
+                }`}>
+                  {localExams.filter(e => e.subject_id === selectedSubjectId && !e.lesson_id).length} đề
+                </span>
               </button>
 
-              <div className="space-y-3.5 divide-y divide-border/50">
-                {filteredChapters.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic text-center py-6">Môn học này chưa có chương học nào.</p>
+              {/* Danh sách các Chương & Bài học (Scrollable Container) */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+                {searchedChapters.length === 0 ? (
+                  <div className="text-center py-10 px-4 border border-dashed border-border rounded-xl bg-muted/5 text-muted-foreground space-y-2">
+                    <Library className="h-8 w-8 mx-auto text-muted-foreground/50" />
+                    <p className="text-xs font-semibold">
+                      {searchQuery ? 'Không tìm thấy bài học nào phù hợp.' : 'Chưa có chương học nào được tạo.'}
+                    </p>
+                  </div>
                 ) : (
-                  filteredChapters.map((chap, chapIdx) => (
-                    <div key={chap.id} className="pt-3 first:pt-0 space-y-2">
-                      {/* Tiêu đề Chương */}
-                      <div className="flex justify-between items-center group">
-                        <span className="font-extrabold text-[11px] text-muted-foreground truncate" title={chap.title}>
-                          Chương {chapIdx + 1}: {chap.title}
-                        </span>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => {
-                              const newTitle = prompt('Nhập tên chương học mới:', chap.title);
-                              if (newTitle) handleUpdateChapter(chap.id, newTitle);
-                            }}
-                            className="text-primary hover:bg-primary/10 p-0.5 rounded"
-                            title="Sửa chương"
-                          >
-                            <Edit3 className="h-3 w-3" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteChapter(chap.id)}
-                            className="text-red-500 hover:bg-red-500/10 p-0.5 rounded"
-                            title="Xóa chương"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </div>
+                  searchedChapters.map((chap, chapIdx) => {
+                    const isCollapsed = !!collapsedChapters[chap.id];
+                    const lessonList = chap.lessons || [];
 
-                      {/* Các bài học trong chương */}
-                      <div className="grid gap-1 pl-1.5 border-l border-border/70">
-                        {(chap.lessons || []).map(les => {
-                          const isSelected = selectedLessonId === les.id;
-                          return (
-                            <div 
-                              key={les.id}
-                              className={`flex items-center justify-between p-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer group ${isSelected ? 'bg-primary border-primary text-primary-foreground font-extrabold' : 'bg-background border-border hover:bg-muted/20 text-foreground'}`}
-                              onClick={() => { setSelectedLessonId(les.id); setSelectedChapterId(chap.id); }}
+                    return (
+                      <div
+                        key={chap.id}
+                        className="border border-border/80 bg-card rounded-xl overflow-hidden shadow-2xs hover:border-primary/30 transition-colors"
+                      >
+                        {/* Header Chương */}
+                        <div className="bg-muted/20 p-2.5 sm:p-3 flex items-center justify-between gap-2 border-b border-border/50">
+                          <button
+                            onClick={() => toggleChapterCollapse(chap.id)}
+                            className="flex items-center gap-2 flex-1 text-left min-w-0 group"
+                          >
+                            <span className="text-muted-foreground group-hover:text-primary transition-colors">
+                              {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                  Chương {chapIdx + 1}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground font-semibold">
+                                  {lessonList.length} bài
+                                </span>
+                              </div>
+                              <h4 className="font-bold text-xs text-foreground mt-1 break-words line-clamp-2" title={chap.title}>
+                                {chap.title}
+                              </h4>
+                            </div>
+                          </button>
+
+                          {/* Quick Actions cho Chương */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => setAddingLessonToChapterId(addingLessonToChapterId === chap.id ? null : chap.id)}
+                              className="p-1 rounded-lg text-primary hover:bg-primary/10 border border-primary/20"
+                              title="Thêm bài học vào chương này"
                             >
-                              <span className="truncate">{les.title}</span>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingChapterModal({ id: chap.id, title: chap.title })}
+                              className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted border border-border"
+                              title="Đổi tên chương"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteChapter(chap.id)}
+                              className="p-1 rounded-lg text-red-500 hover:bg-red-500/10 border border-border"
+                              title="Xóa chương học"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Danh sách Bài học bên trong Chương (Khi không thu gọn) */}
+                        {!isCollapsed && (
+                          <div className="p-2 space-y-1.5 bg-background/50">
+                            {/* Inline Form Thêm bài học mới */}
+                            {addingLessonToChapterId === chap.id && (
+                              <div className="p-2 bg-muted/20 border border-border rounded-lg space-y-2 mb-2 animate-fade-in">
+                                <span className="text-[10px] font-bold text-primary block">Tên bài học mới:</span>
+                                <input
+                                  type="text"
+                                  placeholder="Nhập tên bài học (VD: Bài 1. Tính đơn điệu...)"
+                                  value={newLessonTitle}
+                                  onChange={(e) => setNewLessonTitle(e.target.value)}
+                                  className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none"
+                                  autoFocus
+                                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddLesson(chap.id); }}
+                                />
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    onClick={() => setAddingLessonToChapterId(null)}
+                                    className="px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted rounded"
+                                  >
+                                    Hủy
+                                  </button>
+                                  <button
+                                    onClick={() => handleAddLesson(chap.id)}
+                                    className="px-2.5 py-1 text-[11px] font-bold bg-primary text-primary-foreground rounded shadow-xs"
+                                  >
+                                    Tạo bài học
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {lessonList.length === 0 ? (
+                              <div className="py-4 text-center text-muted-foreground text-[11px] italic">
+                                Chương này chưa có bài học nào.
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const newTitle = prompt('Nhập tên bài học mới:', les.title);
-                                    if (newTitle) handleUpdateLesson(chap.id, les.id, newTitle);
-                                  }}
-                                  className={`p-0.5 rounded hover:bg-muted/50 ${isSelected ? 'text-primary-foreground hover:bg-white/10' : 'text-primary'}`}
-                                  title="Sửa bài học"
+                                  onClick={() => setAddingLessonToChapterId(chap.id)}
+                                  className="block mx-auto text-primary font-bold hover:underline mt-1"
                                 >
-                                  <Edit3 className="h-3 w-3" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteLesson(chap.id, les.id); }}
-                                  className={`p-0.5 rounded hover:bg-red-500/20 text-red-500 ${isSelected ? 'text-primary-foreground hover:bg-white/10' : ''}`}
-                                  title="Xóa bài học"
-                                >
-                                  <Trash2 className="h-3 w-3" />
+                                  + Thêm bài học ngay
                                 </button>
                               </div>
-                            </div>
-                          );
-                        })}
+                            ) : (
+                              lessonList.map((les, lesIdx) => {
+                                const isSelected = selectedLessonId === les.id;
+                                const hasTheory = !!(les.theory_markdown || les.theory_content || les.lesson_materials?.some(m => m.title === '__theory_markdown__'));
+                                const matCount = (les.lesson_materials || []).filter(m => m.title !== '__theory_markdown__').length;
+                                const examCount = localExams.filter(e => e.lesson_id === les.id).length;
 
-                        {/* Thêm bài học mới */}
-                        {addingLessonToChapterId === chap.id ? (
-                          <div className="flex items-center gap-1 mt-1 bg-muted/20 p-1.5 rounded-lg border border-border">
-                            <input
-                              type="text"
-                              placeholder="Bài học mới..."
-                              value={newLessonTitle}
-                              onChange={(e) => setNewLessonTitle(e.target.value)}
-                              className="rounded border border-border bg-background px-2 py-1 text-[11px] focus:outline-none flex-1"
-                            />
-                            <button onClick={() => handleAddLesson(chap.id)} className="p-1 rounded bg-green-500 text-white hover:opacity-90"><Check className="h-3 w-3" /></button>
-                            <button onClick={() => setAddingLessonToChapterId(null)} className="p-1 rounded bg-red-500 text-white hover:opacity-90"><X className="h-3 w-3" /></button>
+                                return (
+                                  <div
+                                    key={les.id}
+                                    onClick={() => {
+                                      setSelectedLessonId(les.id);
+                                      setSelectedChapterId(chap.id);
+                                    }}
+                                    className={`group flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                                      isSelected
+                                        ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-1 ring-primary/20'
+                                        : 'bg-card border-border/70 hover:border-border hover:bg-muted/30 text-foreground'
+                                    }`}
+                                  >
+                                    <div className="min-w-0 flex-1 pr-2">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${isSelected ? 'bg-primary' : 'bg-muted-foreground/50'}`} />
+                                        <span className="font-semibold break-words line-clamp-2" title={les.title}>
+                                          {les.title}
+                                        </span>
+                                      </div>
+
+                                      {/* Trạng thái học liệu của bài học */}
+                                      <div className="flex items-center gap-2 mt-1.5 pl-3">
+                                        {hasTheory && (
+                                          <span className="text-[9px] font-bold text-green-600 dark:text-green-400 bg-green-500/10 px-1.5 py-0.2 rounded border border-green-500/20">
+                                            📝 Lý thuyết
+                                          </span>
+                                        )}
+                                        {matCount > 0 && (
+                                          <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/20">
+                                            📁 {matCount} tài liệu
+                                          </span>
+                                        )}
+                                        {examCount > 0 && (
+                                          <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                                            🎯 {examCount} bài tập
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity shrink-0">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingLessonModal({ chapterId: chap.id, id: les.id, title: les.title });
+                                        }}
+                                        className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                        title="Đổi tên bài học"
+                                      >
+                                        <Edit3 className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteLesson(chap.id, les.id);
+                                        }}
+                                        className="p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                                        title="Xóa bài học"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => setAddingLessonToChapterId(chap.id)}
-                            className="flex items-center gap-1 text-[10px] font-bold text-secondary hover:underline pt-1 pl-1"
-                          >
-                            <Plus className="h-3 w-3" /> Thêm Bài học
-                          </button>
                         )}
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
+
             </div>
 
-            {/* COLUMN 2: RIGHT DETAIL PANEL (ACTIVE LESSON / EXAM WORKSPACE) */}
-            <div className="md:col-span-8 space-y-4">
+            {/* ==================================================== */}
+            {/* CỘT PHẢI: KHÔNG GIAN BIÊN SOẠN BÀI HỌC (DETAIL WORKSPACE) */}
+            {/* ==================================================== */}
+            <div className="lg:col-span-8 space-y-4">
               {!selectedLessonId ? (
-                /* CHƯA CHỌN BÀI HỌC */
-                <div className="bg-card border border-border rounded-2xl p-12 text-center text-muted-foreground shadow-sm flex flex-col items-center justify-center space-y-3 min-h-[350px]">
-                  <Library className="h-12 w-12 text-primary/40 animate-pulse" />
-                  <h4 className="font-extrabold text-sm text-foreground">Không gian soạn thảo bài giảng</h4>
-                  <p className="text-xs text-muted-foreground max-w-sm">
-                    Chọn một bài học cụ thể bên cột bên trái để bắt đầu đăng tải học liệu, liên kết video bài giảng hoặc biên soạn bộ đề kiểm tra tương ứng.
-                  </p>
+                /* CHƯA CHỌN BÀI HỌC (Trạng thái rỗng khi chưa có bài nào) */
+                <div className="bg-card border border-border rounded-2xl p-12 text-center text-muted-foreground shadow-sm flex flex-col items-center justify-center space-y-4 min-h-[450px]">
+                  <div className="p-4 rounded-full bg-primary/10 text-primary">
+                    <Library className="h-10 w-10" />
+                  </div>
+                  <div className="space-y-1 max-w-md">
+                    <h4 className="font-black text-base text-foreground">Không gian soạn thảo bài giảng chuyên nghiệp</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Hãy chọn một bài học ở cột bên trái hoặc tạo chương và bài học mới để bắt đầu soạn thảo lý thuyết Markdown, gắn video bài giảng và bộ câu hỏi trắc nghiệm tương ứng.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 /* ĐÃ CHỌN BÀI HỌC CỤ THỂ HOẶC PHẦN LUYỆN TẬP CHUNG */
-                <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-5 min-h-[450px]">
+                <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm space-y-6 min-h-[550px]">
                   
-                  {/* TIÊU ĐỀ BÀI HỌC ĐANG CHỌN */}
-                  <div className="border-b border-border pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <h4 className="font-black text-lg text-foreground flex items-center gap-2">
-                        {selectedLessonId === 'general' ? 'Đề luyện tập chung môn học' : `Bài học: ${activeLesson?.title}`}
-                      </h4>
-                      {selectedLessonId !== 'general' && (
-                        <p className="text-[10px] text-muted-foreground font-semibold">Thuộc chương: {activeChapter?.title}</p>
-                      )}
-                    </div>
-
-                    {/* LỰA CHỌN SUB TAB CHO RIGHT PANEL */}
+                  {/* THANH HEADER TIÊU ĐỀ BÀI HỌC & BREADCRUMBS */}
+                  <div className="border-b border-border pb-4 space-y-3">
                     {selectedLessonId !== 'general' && (
-                      <div className="flex bg-muted/30 border border-border/80 rounded-lg p-1 shrink-0 self-start sm:self-center">
-                        <button
-                          onClick={() => setRightPanelTab('theory')}
-                          className={`px-3 py-1 rounded text-xs font-bold transition-all ${rightPanelTab === 'theory' ? 'bg-background border border-border shadow-xs text-primary font-black' : 'text-muted-foreground hover:text-foreground'}`}
-                        >
-                          Lý thuyết (Markdown)
-                        </button>
-                        <button
-                          onClick={() => setRightPanelTab('materials')}
-                          className={`px-3 py-1 rounded text-xs font-bold transition-all ${rightPanelTab === 'materials' ? 'bg-background border border-border shadow-xs text-primary font-black' : 'text-muted-foreground hover:text-foreground'}`}
-                        >
-                          Học liệu & Video
-                        </button>
-                        <button
-                          onClick={() => setRightPanelTab('exams')}
-                          className={`px-3 py-1 rounded text-xs font-bold transition-all ${rightPanelTab === 'exams' ? 'bg-background border border-border shadow-xs text-primary font-black' : 'text-muted-foreground hover:text-foreground'}`}
-                        >
-                          Đề thi & Luyện tập
-                        </button>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold flex-wrap">
+                        <span className="text-primary">{assignments.find(a => a.subject_id === selectedSubjectId)?.subjects?.name || 'Môn học'}</span>
+                        <ChevronRight className="h-3 w-3" />
+                        <span>{activeChapter?.title || 'Chương học'}</span>
+                        <ChevronRight className="h-3 w-3" />
+                        <span className="text-foreground font-bold">Bài học</span>
                       </div>
                     )}
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-lg sm:text-xl text-foreground">
+                          {selectedLessonId === 'general' ? 'Đề luyện tập chung toàn môn học' : activeLesson?.title}
+                        </h3>
+                        {selectedLessonId !== 'general' && activeLesson && activeChapter && (
+                          <button
+                            onClick={() => setEditingLessonModal({ chapterId: activeChapter.id, id: activeLesson.id, title: activeLesson.title })}
+                            className="p-1 text-muted-foreground hover:text-primary hover:bg-muted rounded-lg transition-colors"
+                            title="Đổi tên bài học"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* SUB TABS SEGMENTED CONTROL */}
+                      {selectedLessonId !== 'general' && (
+                        <div className="flex bg-muted/40 border border-border p-1 rounded-xl shrink-0 self-start sm:self-auto gap-1">
+                          <button
+                            onClick={() => setRightPanelTab('theory')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                              rightPanelTab === 'theory'
+                                ? 'bg-background text-primary shadow-xs font-black'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <BookOpen className="h-3.5 w-3.5" />
+                            <span>Lý thuyết</span>
+                          </button>
+                          
+                          <button
+                            onClick={() => setRightPanelTab('materials')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                              rightPanelTab === 'materials'
+                                ? 'bg-background text-primary shadow-xs font-black'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>Học liệu & Video ({((activeLesson?.lesson_materials || []).filter(m => m.title !== '__theory_markdown__')).length})</span>
+                          </button>
+
+                          <button
+                            onClick={() => setRightPanelTab('exams')}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                              rightPanelTab === 'exams'
+                                ? 'bg-background text-primary shadow-xs font-black'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <CheckSquare className="h-3.5 w-3.5" />
+                            <span>Đề thi & Luyện tập ({activeExams.length})</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* ---------------------------------------------------- */}
-                  {/* SUB TAB: LÝ THUYẾT MARKDOWN (THEORY) */}
+                  {/* SUB TAB 1: LÝ THUYẾT MARKDOWN & KATEX (THEORY) */}
                   {/* ---------------------------------------------------- */}
                   {selectedLessonId !== 'general' && rightPanelTab === 'theory' && (
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center border-b border-border pb-3">
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
                         <div>
-                          <h5 className="font-black text-sm text-foreground flex items-center gap-2">
-                            <BookOpen className="h-4.5 w-4.5 text-primary" /> Soạn thảo Lý thuyết Bài học (Markdown & KaTeX)
+                          <h5 className="font-extrabold text-sm text-foreground flex items-center gap-2">
+                            <BookOpen className="h-4 w-4 text-primary" /> Soạn thảo Lý thuyết Bài học (Markdown & Công thức Toán KaTeX)
                           </h5>
-                          <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">
-                            Soạn thảo nội dung lý thuyết, công thức Toán học, định lý và bảng biến thiên cho học sinh
+                          <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                            Trình soạn thảo trực quan hỗ trợ công thức Toán học chuẩn $LaTeX$, bảng biểu, định lý và ghi chú cho học sinh.
                           </p>
                         </div>
                       </div>
@@ -1272,169 +1760,190 @@ export default function TeacherDashboardClient({
                   )}
 
                   {/* ---------------------------------------------------- */}
-                  {/* SUB TAB: HỌC LIỆU / TÀI LIỆU (MATERIALS) */}
+                  {/* SUB TAB 2: HỌC LIỆU & VIDEO BÀI GIẢNG (MATERIALS) */}
                   {/* ---------------------------------------------------- */}
                   {selectedLessonId !== 'general' && rightPanelTab === 'materials' && (() => {
                     const visibleMaterials = (activeLesson?.lesson_materials || []).filter(m => m.title !== '__theory_markdown__');
 
                     return (
-                      <div className="space-y-4">
-                        {/* Header phần Học liệu */}
-                        <div className="flex justify-between items-center">
-                          <h5 className="font-extrabold text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                            <FileText className="h-4 w-4 text-primary" /> Học liệu được liên kết ({visibleMaterials.length})
-                          </h5>
+                      <div className="space-y-5 animate-fade-in">
+                        {/* Header Học liệu */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
+                          <div>
+                            <h5 className="font-extrabold text-sm text-foreground flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-primary" /> Danh sách Học liệu & Video bài giảng ({visibleMaterials.length})
+                            </h5>
+                            <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                              Liên kết các video bài giảng YouTube, Slide Google Presentation hoặc tệp tài liệu PDF Drive cho bài học này.
+                            </p>
+                          </div>
 
-                          {!addingMaterial && (
-                            <button
-                              onClick={() => setAddingMaterial(true)}
-                              className="flex items-center gap-1 text-[11px] font-bold bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:opacity-90"
-                            >
-                              <Plus className="h-3.5 w-3.5" /> Thêm học liệu mới
-                            </button>
-                          )}
+                          <button
+                            onClick={() => {
+                              setMaterialModal({
+                                mode: 'create',
+                                chapterId: selectedChapterId!,
+                                lessonId: selectedLessonId!,
+                                title: '',
+                                material_type: 'video',
+                                source_url: ''
+                              });
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs font-extrabold bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:opacity-90 transition-opacity shadow-xs shrink-0 self-start sm:self-auto"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Thêm học liệu mới
+                          </button>
                         </div>
 
-                        {/* Form Thêm học liệu mới */}
-                        {addingMaterial && (
-                          <div className="bg-muted/10 border border-border p-4 rounded-xl space-y-4 animate-fade-in">
-                            <div className="flex justify-between items-center border-b border-border pb-2">
-                              <h6 className="font-bold text-xs">Liên kết học liệu tự học mới</h6>
-                              <button onClick={() => setAddingMaterial(false)} className="text-muted-foreground hover:bg-muted p-1 rounded">
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                            
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên tài liệu / Video</label>
-                                <input
-                                  type="text"
-                                  placeholder="Ví dụ: Video bài giảng phần 1..."
-                                  value={newMaterialTitle}
-                                  onChange={(e) => setNewMaterialTitle(e.target.value)}
-                                  className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-muted-foreground uppercase">Loại học liệu</label>
-                                <select
-                                  value={newMaterialType}
-                                  onChange={(e) => setNewMaterialType(e.target.value as any)}
-                                  className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-primary"
-                                >
-                                  <option value="video">Video bài giảng (YouTube)</option>
-                                  <option value="slide">Slide trình chiếu (Google Slides)</option>
-                                  <option value="pdf">Tài liệu đọc (PDF Drive)</option>
-                                  <option value="attachment">Tài liệu đính kèm khác</option>
-                                </select>
-                              </div>
-                            </div>
-
+                        {/* Danh sách học liệu */}
+                        {visibleMaterials.length === 0 ? (
+                          <div className="text-center py-12 px-4 border border-dashed border-border rounded-2xl bg-muted/5 text-muted-foreground space-y-3">
+                            <FolderOpen className="h-10 w-10 text-muted-foreground/40 mx-auto" />
                             <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase">Đường dẫn tài liệu (Source URL)</label>
-                              <input
-                                type="text"
-                                placeholder="Dán link Youtube/Drive/Slide của bạn tại đây..."
-                                value={newMaterialUrl}
-                                onChange={(e) => setNewMaterialUrl(e.target.value)}
-                                className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
-                              />
+                              <p className="text-xs font-bold text-foreground">Bài học này chưa có học liệu hoặc video nào</p>
+                              <p className="text-[11px] text-muted-foreground">Thêm video bài giảng hoặc tài liệu để học sinh có thể ôn tập hiệu quả.</p>
                             </div>
-
-                            <div className="flex justify-end gap-2">
-                              <button
-                                onClick={() => handleAddMaterial(selectedChapterId!, selectedLessonId!)}
-                                className="flex items-center gap-1 rounded-lg bg-green-500 px-4 py-2 text-xs font-bold text-white hover:opacity-90"
-                              >
-                                Đăng tải
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => {
+                                setMaterialModal({
+                                  mode: 'create',
+                                  chapterId: selectedChapterId!,
+                                  lessonId: selectedLessonId!,
+                                  title: '',
+                                  material_type: 'video',
+                                  source_url: ''
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 px-3.5 py-1.5 rounded-xl transition-colors"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Thêm học liệu đầu tiên
+                            </button>
                           </div>
-                        )}
+                        ) : (
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            {visibleMaterials.map(mat => {
+                              const isYoutube = mat.material_type === 'video' && (mat.source_url.includes('youtube.com') || mat.source_url.includes('youtu.be'));
+                              const isEmbedVideo = isYoutube && mat.source_url.includes('embed');
 
-                        {/* Danh sách các tài liệu hiện tại */}
-                        <div className="space-y-3">
-                          {visibleMaterials.length === 0 ? (
-                            <div className="text-center py-10 border border-dashed border-border rounded-xl bg-card text-muted-foreground">
-                              <p className="text-xs italic">Bài giảng này hiện tại chưa được liên kết bất cứ học liệu nào.</p>
-                            </div>
-                          ) : (
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {visibleMaterials.map(mat => (
-                                <div key={mat.id} className="bg-muted/10 border border-border rounded-xl p-4 flex flex-col justify-between space-y-4 hover:shadow-sm transition-shadow">
-                                  <div className="space-y-1">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full inline-block mb-1">
-                                      {mat.material_type}
-                                    </span>
-                                    <h6 className="font-extrabold text-xs text-foreground line-clamp-1">{mat.title}</h6>
-                                    <p className="text-[10px] text-muted-foreground truncate">{mat.source_url}</p>
+                              return (
+                                <div
+                                  key={mat.id}
+                                  className="bg-card border border-border rounded-2xl p-4 flex flex-col justify-between space-y-3 hover:shadow-sm hover:border-primary/40 transition-all group"
+                                >
+                                  <div className="space-y-2">
+                                    {/* Type badge and actions */}
+                                    <div className="flex items-center justify-between">
+                                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                                        mat.material_type === 'video' ? 'bg-red-500/10 text-red-600 border border-red-500/20' :
+                                        mat.material_type === 'slide' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' :
+                                        mat.material_type === 'pdf' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+                                        'bg-purple-500/10 text-purple-600 border border-purple-500/20'
+                                      }`}>
+                                        {mat.material_type === 'video' && <Video className="h-3 w-3" />}
+                                        {mat.material_type === 'slide' && <Presentation className="h-3 w-3" />}
+                                        {mat.material_type === 'pdf' && <FileText className="h-3 w-3" />}
+                                        {mat.material_type === 'attachment' && <Paperclip className="h-3 w-3" />}
+                                        <span>
+                                          {mat.material_type === 'video' ? 'Video Bài Giảng' :
+                                           mat.material_type === 'slide' ? 'Slide Trình Chiếu' :
+                                           mat.material_type === 'pdf' ? 'Tài Liệu PDF' : 'Tài Liệu Khác'}
+                                        </span>
+                                      </span>
+
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => {
+                                            setMaterialModal({
+                                              mode: 'edit',
+                                              chapterId: selectedChapterId!,
+                                              lessonId: selectedLessonId!,
+                                              materialId: mat.id,
+                                              title: mat.title,
+                                              material_type: mat.material_type,
+                                              source_url: mat.source_url
+                                            });
+                                          }}
+                                          className="p-1 rounded-lg text-muted-foreground hover:text-primary hover:bg-muted border border-border"
+                                          title="Chỉnh sửa học liệu"
+                                        >
+                                          <Edit3 className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteMaterial(selectedChapterId!, selectedLessonId!, mat.id)}
+                                          className="p-1 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 border border-border"
+                                          title="Xóa học liệu"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Tiêu đề tài liệu */}
+                                    <h6 className="font-black text-sm text-foreground line-clamp-2 leading-snug">
+                                      {mat.title}
+                                    </h6>
+
+                                    {/* Video Player Preview nếu là link YouTube Embed */}
+                                    {isEmbedVideo && (
+                                      <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black/5 border border-border mt-2">
+                                        <iframe
+                                          src={mat.source_url}
+                                          title={mat.title}
+                                          className="w-full h-full"
+                                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                          allowFullScreen
+                                        />
+                                      </div>
+                                    )}
                                   </div>
 
-                                  <div className="flex justify-between items-center pt-2 border-t border-border/50">
+                                  {/* Link và Button mở xem */}
+                                  <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs">
+                                    <span className="text-[11px] text-muted-foreground truncate max-w-[200px]" title={mat.source_url}>
+                                      {mat.source_url}
+                                    </span>
                                     <a
                                       href={mat.source_url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-[10px] font-bold text-secondary flex items-center gap-1 hover:underline"
+                                      className="inline-flex items-center gap-1 font-bold text-primary hover:underline shrink-0 text-[11px]"
                                     >
-                                      Xem link <ExternalLink className="h-3 w-3" />
+                                      <span>Mở xem</span>
+                                      <ExternalLink className="h-3 w-3" />
                                     </a>
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        onClick={() => {
-                                          const newTitle = prompt('Nhập tên tài liệu mới:', mat.title);
-                                          if (newTitle) {
-                                            const newUrl = prompt('Nhập đường dẫn tài liệu mới:', mat.source_url);
-                                            if (newUrl) {
-                                              handleUpdateMaterial(selectedChapterId!, selectedLessonId!, mat.id, { title: newTitle, source_url: newUrl });
-                                            }
-                                          }
-                                        }}
-                                        className="text-primary hover:bg-primary/10 p-1.5 rounded"
-                                        title="Sửa tài liệu"
-                                      >
-                                        <Edit3 className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteMaterial(selectedChapterId!, selectedLessonId!, mat.id)}
-                                        className="text-red-500 hover:bg-red-500/10 p-1.5 rounded"
-                                        title="Xóa tài liệu"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
 
                   {/* ---------------------------------------------------- */}
-                  {/* SUB TAB: ĐỀ THI & CÂU HỎI (EXAMS) */}
+                  {/* SUB TAB 3: ĐỀ THI & BÀI TẬP TỰ LUYỆN (EXAMS) */}
                   {/* ---------------------------------------------------- */}
                   {(selectedLessonId === 'general' || rightPanelTab === 'exams') && (
-                    <div className="space-y-6">
+                    <div className="space-y-6 animate-fade-in">
                       
                       {/* Header Đề thi */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
                         <div>
-                          <h5 className="font-black text-sm text-foreground flex items-center gap-2">
-                            <CheckSquare className="h-4.5 w-4.5 text-primary" /> Bài tập tự luyện theo bài ({activeExams.length})
-                          </h5>
-                          <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">
+                          <h5 className="font-extrabold text-sm text-foreground flex items-center gap-2">
+                            <CheckSquare className="h-4 w-4 text-primary" />
                             {selectedLessonId === 'general' 
-                              ? 'Danh sách đề luyện thi chung của môn học' 
-                              : `Bài tập trắc nghiệm gắn liền với bài học: ${activeLesson?.title || ''}`}
+                              ? `Đề luyện thi chung toàn môn học (${activeExams.length})` 
+                              : `Bài tập tự luyện theo bài (${activeExams.length})`}
+                          </h5>
+                          <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                            {selectedLessonId === 'general' 
+                              ? 'Danh sách đề luyện thi chung, kiểm tra tổng hợp môn học' 
+                              : `Bộ câu hỏi trắc nghiệm tự luyện gắn liền với bài học: ${activeLesson?.title || ''}`}
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
                           <button
                             onClick={() => {
                               const isGeneral = selectedLessonId === 'general';
@@ -1442,23 +1951,23 @@ export default function TeacherDashboardClient({
                                 id: `new-${Date.now()}`,
                                 title: isGeneral ? 'Đề luyện thi thử' : `Bài tập tự luyện: ${activeLesson?.title || 'Bài học'}`,
                                 duration_minutes: 15,
-                                exam_type: 'lesson',
+                                exam_type: isGeneral ? 'test' : 'lesson',
                                 lesson_id: isGeneral ? null : selectedLessonId
                               });
                             }}
                             className="flex items-center gap-1.5 text-xs font-extrabold bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:opacity-90 transition-opacity shadow-xs"
                           >
-                            <Plus className="h-4 w-4" /> Tạo bài tập theo bài
+                            <Plus className="h-3.5 w-3.5" /> Tạo bài tập trắc nghiệm mới
                           </button>
                         </div>
                       </div>
 
-                      {/* Banner gợi ý chuyển sang trang soạn Đề thi định kỳ / THPTQG */}
-                      <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      {/* Banner gợi ý chuyển sang Ngân hàng Đề thi THPTQG */}
+                      <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                         <div className="flex items-center gap-2">
                           <ClipboardList className="h-4 w-4 text-primary shrink-0" />
                           <span className="text-muted-foreground font-medium">
-                            Cần soạn <strong>Đề kiểm tra 15p, 45p, Thi THPTQG</strong> hoặc <strong>Đánh giá năng lực</strong>?
+                            Cần quản lý <strong>Đề kiểm tra 15p, 45p, Đề thi THPTQG</strong> hoặc <strong>Đánh giá năng lực</strong> tập trung?
                           </span>
                         </div>
                         <a
@@ -1473,9 +1982,9 @@ export default function TeacherDashboardClient({
                       {/* Danh sách đề thi */}
                       <div className="space-y-3">
                         {activeExams.length === 0 ? (
-                          <div className="text-center py-12 border border-dashed border-border rounded-2xl bg-card text-muted-foreground space-y-3">
+                          <div className="text-center py-12 px-4 border border-dashed border-border rounded-2xl bg-card text-muted-foreground space-y-3">
                             <ClipboardList className="h-10 w-10 text-primary/30 mx-auto" />
-                            <p className="text-xs font-semibold">Chưa có bài tập trắc nghiệm hoặc đề luyện tập nào cho mục này.</p>
+                            <p className="text-xs font-bold text-foreground">Chưa có bài tập trắc nghiệm nào cho mục này.</p>
                             <button
                               onClick={() => {
                                 const isGeneral = selectedLessonId === 'general';
@@ -1487,7 +1996,7 @@ export default function TeacherDashboardClient({
                                   lesson_id: isGeneral ? null : selectedLessonId
                                 });
                               }}
-                              className="inline-flex items-center gap-1 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors"
+                              className="inline-flex items-center gap-1 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 px-3.5 py-1.5 rounded-xl transition-colors"
                             >
                               <Plus className="h-3.5 w-3.5" /> Bắt đầu tạo bài tập đầu tiên
                             </button>
@@ -1523,13 +2032,13 @@ export default function TeacherDashboardClient({
                                   <div className="flex items-center gap-2 shrink-0">
                                     <button
                                       onClick={() => setEditingExamModal(exam)}
-                                      className="text-xs font-bold bg-primary text-primary-foreground px-3.5 py-1.5 rounded-lg hover:opacity-90 flex items-center gap-1.5 shadow-xs"
+                                      className="text-xs font-bold bg-primary text-primary-foreground px-3.5 py-1.5 rounded-xl hover:opacity-90 flex items-center gap-1.5 shadow-xs"
                                     >
                                       <Edit3 className="h-3.5 w-3.5" /> Soạn câu hỏi & Sửa đề
                                     </button>
                                     <button
                                       onClick={() => handleDeleteExam(exam.id)}
-                                      className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-lg border border-border"
+                                      className="text-red-500 hover:bg-red-500/10 p-1.5 rounded-xl border border-border"
                                       title="Xóa đề thi"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -1571,7 +2080,194 @@ export default function TeacherDashboardClient({
         </div>
       )}
 
-      {/* MODAL SOẠN ĐỀ THI & CÂU HỎI CHUẨN FMATH 2025 */}
+      {/* ==================================================== */}
+      {/* 3. CÁC POPUP MODALS QUẢN TRỊ TRỰC QUAN (KHÔNG DÙNG PROMPT) */}
+      {/* ==================================================== */}
+
+      {/* MODAL SỬA TÊN CHƯƠNG */}
+      {editingChapterModal && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setEditingChapterModal(null)}
+        >
+          <div 
+            className="bg-card border border-border max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
+                <Edit3 className="h-4.5 w-4.5 text-primary" /> Đổi tên Chương học
+              </h3>
+              <button onClick={() => setEditingChapterModal(null)} className="p-1 hover:bg-muted rounded-lg text-muted-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Tên chương mới</label>
+              <input
+                type="text"
+                value={editingChapterModal.title}
+                onChange={(e) => setEditingChapterModal({ ...editingChapterModal, title: e.target.value })}
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Nhập tên chương..."
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveChapterModal(); }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <button
+                onClick={() => setEditingChapterModal(null)}
+                className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-xl"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleSaveChapterModal}
+                className="px-5 py-2 text-xs font-bold bg-primary text-primary-foreground rounded-xl shadow-xs hover:opacity-90"
+              >
+                Lưu cập nhật
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SỬA TÊN BÀI HỌC */}
+      {editingLessonModal && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setEditingLessonModal(null)}
+        >
+          <div 
+            className="bg-card border border-border max-w-md w-full rounded-2xl p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
+                <Edit3 className="h-4.5 w-4.5 text-primary" /> Đổi tên Bài học
+              </h3>
+              <button onClick={() => setEditingLessonModal(null)} className="p-1 hover:bg-muted rounded-lg text-muted-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Tên bài học mới</label>
+              <input
+                type="text"
+                value={editingLessonModal.title}
+                onChange={(e) => setEditingLessonModal({ ...editingLessonModal, title: e.target.value })}
+                className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="Nhập tên bài học..."
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveLessonModal(); }}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <button
+                onClick={() => setEditingLessonModal(null)}
+                className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-xl"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleSaveLessonModal}
+                className="px-5 py-2 text-xs font-bold bg-primary text-primary-foreground rounded-xl shadow-xs hover:opacity-90"
+              >
+                Lưu cập nhật
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL THÊM / SỬA HỌC LIỆU & VIDEO */}
+      {materialModal && (
+        <div 
+          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setMaterialModal(null)}
+        >
+          <div 
+            className="bg-card border border-border max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
+                <FileText className="h-4.5 w-4.5 text-primary" />
+                {materialModal.mode === 'create' ? 'Đăng tải học liệu mới' : 'Chỉnh sửa thông tin học liệu'}
+              </h3>
+              <button onClick={() => setMaterialModal(null)} className="p-1 hover:bg-muted rounded-lg text-muted-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase">Tên tài liệu / Video</label>
+                <input
+                  type="text"
+                  placeholder="Ví dụ: Video bài giảng phần 1 - Ứng dụng đạo hàm..."
+                  value={materialModal.title}
+                  onChange={(e) => setMaterialModal({ ...materialModal, title: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-medium"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase">Loại học liệu</label>
+                <select
+                  value={materialModal.material_type}
+                  onChange={(e) => setMaterialModal({ ...materialModal, material_type: e.target.value as any })}
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold text-primary"
+                >
+                  <option value="video">🎥 Video bài giảng (YouTube - Hỗ trợ xem trực tiếp)</option>
+                  <option value="slide">📊 Slide trình chiếu (Google Slides / Canva)</option>
+                  <option value="pdf">📄 Tài liệu đọc (Google Drive / PDF Online)</option>
+                  <option value="attachment">📎 File đính kèm / Khác</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase">Đường dẫn tài liệu (Source URL)</label>
+                <input
+                  type="text"
+                  placeholder="Dán đường link YouTube, Google Drive, Slide tại đây..."
+                  value={materialModal.source_url}
+                  onChange={(e) => setMaterialModal({ ...materialModal, source_url: e.target.value })}
+                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+                <p className="text-[10px] text-muted-foreground font-medium">
+                  {materialModal.material_type === 'video' 
+                    ? '💡 Hỗ trợ mọi link YouTube (hệ thống sẽ tự động chuyển thành video phát ngay trong ứng dụng).'
+                    : '💡 Hãy đảm bảo đường dẫn Google Drive/Slide đã được cài đặt quyền "Bất kỳ ai có đường liên kết đều có thể xem".'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              <button
+                onClick={() => setMaterialModal(null)}
+                className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-xl"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleSaveMaterialModal}
+                disabled={!materialModal.title.trim() || !materialModal.source_url.trim()}
+                className="px-5 py-2 text-xs font-bold bg-primary text-primary-foreground rounded-xl shadow-xs hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {materialModal.mode === 'create' ? 'Đăng tải học liệu' : 'Lưu cập nhật'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SOẠN ĐỀ THI & CÂU HỎI CHUẨN FMATH 2026 */}
       {editingExamModal && (
         <ExamEditorModal
           isOpen={!!editingExamModal}

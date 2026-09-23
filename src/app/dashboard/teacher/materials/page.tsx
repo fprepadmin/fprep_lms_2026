@@ -22,27 +22,42 @@ export default async function TeacherMaterialsPage() {
 
   const supabase = await getSupabaseServerClient();
 
-  // 1. Lấy danh sách lớp, môn học phân công và toàn bộ danh mục môn học
+  // 1. Lấy thông tin vai trò, danh sách lớp & môn học phân công, và toàn bộ danh mục môn học
   const [
+    profileRes,
     assignmentsRes,
     allSubjectsRes
   ] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', teacherId).single(),
     supabase.from('teacher_classes').select('*, classes(*), subjects(*)').eq('teacher_id', teacherId),
     supabase.from('subjects').select('*')
   ]);
 
+  const userRole = profileRes.data?.role || payload.role || 'teacher';
+  const isSystemAdmin = userRole === 'admin';
   const assignments = assignmentsRes.data || [];
   const allSubjects = allSubjectsRes.data || [];
 
-  let classIds = assignments.map((a: any) => a.class_id).filter(Boolean);
-  let subjectIds = assignments.map((a: any) => a.subject_id).filter(Boolean);
+  // Lấy các môn học mà giáo viên này ĐƯỢC PHÂN CÔNG GIẢNG DẠY
+  const assignedSubjectsMap = new Map<string, any>();
+  assignments.forEach((a: any) => {
+    if (a.subject_id && a.subjects) {
+      assignedSubjectsMap.set(a.subject_id, a.subjects);
+    }
+  });
 
-  // Fallback nếu giáo viên chưa được gán teacher_classes trực tiếp (như demo mode hoặc HOD)
-  if (subjectIds.length === 0 && allSubjects.length > 0) {
-    subjectIds = allSubjects.map((s: any) => s.id);
-  }
+  const assignedSubjects = Array.from(assignedSubjectsMap.values());
 
-  // 2. TỐI ƯU TRUY VẤN SONG SONG BẰNG PROMISE.ALL
+  // NGUYÊN TẮC QUAN TRỌNG: Giáo viên môn nào thì CHỈ ĐƯỢC soạn bài và xem học liệu môn đó!
+  // Chỉ tài khoản Quản trị viên (Admin) mới có quyền truy cập toàn bộ môn học.
+  const allowedSubjects = isSystemAdmin
+    ? allSubjects
+    : assignedSubjects;
+
+  const subjectIds = allowedSubjects.map((s: any) => s.id);
+  const classIds = assignments.map((a: any) => a.class_id).filter(Boolean);
+
+  // 2. TỐI ƯU TRUY VẤN SONG SONG BẰNG PROMISE.ALL - CHỈ LẤY DỮ LIỆU CỦA MÔN ĐƯỢC PHÂN CÔNG
   const [
     studentsRes,
     chaptersRes,
@@ -72,37 +87,79 @@ export default async function TeacherMaterialsPage() {
     supabase.from('questions').select('*').in('exam_id', examIds.length > 0 ? examIds : [crypto.randomUUID()])
   ]);
 
+  const totalLessons = chapters.reduce((acc: number, c: any) => acc + (c.lessons?.length || 0), 0);
+  let totalMaterials = 0;
+  chapters.forEach((chap: any) => {
+    chap.lessons?.forEach((les: any) => {
+      totalMaterials += (les.lesson_materials || []).filter((m: any) => m.title !== '__theory_markdown__').length;
+    });
+  });
+
   return (
-    <div className="space-y-6 w-full animate-fade-in">
-      {/* HEADER BIÊN SOẠN HỌC LIỆU (CHUẨN FMATH BANNER) */}
-      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
-        <div className="space-y-2 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
-            <BookOpen className="h-3.5 w-3.5" /> Biên soạn nội dung tự học & Đề thi
+    <div className="space-y-5 w-full animate-fade-in">
+      {/* HEADER BIÊN SOẠN HỌC LIỆU CHUẨN LMS */}
+      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 relative overflow-hidden bg-white dark:bg-card">
+        <div className="space-y-1 max-w-2xl">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-0.5 text-xs font-bold text-primary">
+            <BookOpen className="h-3.5 w-3.5" />
+            {allowedSubjects.length > 0 
+              ? `Kho Học Liệu & Bài Giảng: ${allowedSubjects.map(s => s.name).join(', ')}`
+              : 'Kho Học Liệu & Bài Giảng'}
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
-            Biên Soạn Bài Giảng & Đề Thi
+          <h1 className="text-xl sm:text-2xl font-black font-heading text-secondary dark:text-foreground tracking-tight m-0">
+            Biên Soạn Bài Giảng & Học Liệu
           </h1>
-          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
-            Tạo chương, bài học học liệu, biên soạn bộ câu hỏi trắc nghiệm tự luyện cho học sinh khối 12.
+          <p className="text-xs text-muted-foreground font-semibold m-0">
+            {allowedSubjects.length > 0
+              ? `Quản lý cấu trúc bài giảng, lý thuyết LaTeX, video và bài tập tự luyện cho môn: ${allowedSubjects.map(s => s.name).join(', ')}.`
+              : 'Quản lý cấu trúc chương hồi, soạn thảo lý thuyết chuẩn LaTeX, liên kết video bài giảng và bài tập tự luyện.'}
           </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center">
+          <div className="bg-muted/40 border border-border px-3 py-1.5 rounded-xl text-center min-w-[70px]">
+            <span className="block text-[10px] font-bold text-muted-foreground uppercase">Chương</span>
+            <span className="text-sm font-black text-foreground">{chapters.length}</span>
+          </div>
+          <div className="bg-muted/40 border border-border px-3 py-1.5 rounded-xl text-center min-w-[70px]">
+            <span className="block text-[10px] font-bold text-muted-foreground uppercase">Bài học</span>
+            <span className="text-sm font-black text-primary">{totalLessons}</span>
+          </div>
+          <div className="bg-muted/40 border border-border px-3 py-1.5 rounded-xl text-center min-w-[70px]">
+            <span className="block text-[10px] font-bold text-muted-foreground uppercase">Tài liệu</span>
+            <span className="text-sm font-black text-green-600">{totalMaterials}</span>
+          </div>
         </div>
       </div>
 
-      <TeacherDashboardClient
-        assignments={assignments || []}
-        students={students}
-        chapters={chapters}
-        progress={progressRes.data || []}
-        logs={logsRes.data || []}
-        examResults={examResultsRes.data || []}
-        exams={exams}
-        questions={questionsRes.data || []}
-        allSubjects={allSubjects}
-        token={token}
-        teacherId={teacherId}
-        viewMode="materials"
-      />
+      {allowedSubjects.length === 0 ? (
+        <div className="bg-card border border-amber-500/30 rounded-2xl p-8 text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <BookOpen className="h-6 w-6" />
+          </div>
+          <h2 className="text-base font-bold text-foreground">Chưa có phân công môn học</h2>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+            Tài khoản của Thầy/Cô chưa được phân công môn học giảng dạy nào trên hệ thống. 
+            Theo quy định, Thầy/Cô chỉ được biên soạn bài giảng cho môn học được phân công. 
+            Vui lòng liên hệ Quản trị viên để được gán môn học trước khi bắt đầu soạn bài.
+          </p>
+        </div>
+      ) : (
+        <TeacherDashboardClient
+          assignments={assignments || []}
+          students={students}
+          chapters={chapters}
+          progress={progressRes.data || []}
+          logs={logsRes.data || []}
+          examResults={examResultsRes.data || []}
+          exams={exams}
+          questions={questionsRes.data || []}
+          allSubjects={allowedSubjects}
+          token={token}
+          teacherId={teacherId}
+          viewMode="materials"
+        />
+      )}
     </div>
   );
 }

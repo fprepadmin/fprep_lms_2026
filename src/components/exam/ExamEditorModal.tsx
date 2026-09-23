@@ -13,7 +13,7 @@ import { uploadImageToCloudinary, getImageFromClipboardEvent } from '@/lib/cloud
 import { parseAndRepairJson } from '@/lib/jsonRepair';
 
 const AI_PROMPT_FPREP = `Bạn là một chuyên gia giáo dục và kỹ sư dữ liệu khảo thí của hệ thống FPREP. 
-Nhiệm vụ: Đọc đề thi dưới đây và chuyển đổi toàn bộ câu hỏi sang mảng JSON chuẩn 2025. 
+Nhiệm vụ: Đọc đề thi dưới đây và chuyển đổi toàn bộ câu hỏi sang mảng JSON chuẩn 2026. 
 ĐẶC BIỆT LƯU Ý: Giáo viên đã cung cấp sẵn đáp án đúng trong đề (bằng cách gạch chân, in đậm, bôi đỏ, có dấu * ở phương án đúng, hoặc để bảng đáp án ở cuối file). 
 Bạn PHẢI dò tìm và trích xuất chính xác đáp án này làm \`correct_answer\`. TUYỆT ĐỐI KHÔNG tự giải và chọn đáp án khác với ý đồ của giáo viên. 
 Sau khi lấy được đáp án của giáo viên, hãy tự động soạn phần \`explanation\` (lời giải chi tiết) sao cho logic và dẫn đến đúng đáp án đó.
@@ -22,7 +22,7 @@ QUY ƯỚC QUAN TRỌNG CẦN TUÂN THỦ:
 1. BẢNG BIỂU & CÔNG THỨC (LATEX): 
    - ĐƯỢC PHÉP dùng LaTeX để viết công thức toán học hoặc bảng biến thiên.
    - TUYỆT ĐỐI BẮT BUỘC PHẢI DÙNG DẤU $ CHO CÔNG THỨC NGẮN VÀ $$ CHO KHỐI CÔNG THỨC. (Ví dụ ĐÚNG: $y = x^2$, $\\frac{1}{2}$).
-2. CẤU TRÚC JSON CHUẨN 2025:
+2. CẤU TRÚC JSON CHUẨN 2026:
 [
   // 1. Trắc nghiệm 4 lựa chọn (type: "mcq")
   { 

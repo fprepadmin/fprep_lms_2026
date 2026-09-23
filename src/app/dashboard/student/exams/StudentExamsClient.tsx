@@ -7,6 +7,7 @@ import {
   FileCheck, Target, Layers, ArrowRight, RotateCcw
 } from 'lucide-react';
 import Link from 'next/link';
+import FMathNotice from '@/components/common/FMathNotice';
 
 interface Lesson {
   id: string;
@@ -225,19 +226,29 @@ export default function StudentExamsClient({
         {/* Lựa chọn môn học */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
           <span className="text-xs font-bold text-[#6c757d] uppercase shrink-0 mr-1">Môn học:</span>
-          {subjects.map((sub) => (
-            <button
-              key={sub.id}
-              onClick={() => setSelectedSubjectId(sub.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${
-                selectedSubjectId === sub.id
-                  ? 'bg-primary text-white border-primary shadow-sm'
-                  : 'bg-[#f8f9fa] dark:bg-muted/40 text-[#495057] dark:text-muted-foreground border-border hover:bg-[#e9ecef]'
-              }`}
-            >
-              {sub.name}
-            </button>
-          ))}
+          {subjects.map((sub) => {
+            const isMathSub = sub.name.toLowerCase().includes('toán');
+            return (
+              <button
+                key={sub.id}
+                onClick={() => setSelectedSubjectId(sub.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                  selectedSubjectId === sub.id
+                    ? 'bg-primary text-white border-primary shadow-sm'
+                    : 'bg-[#f8f9fa] dark:bg-muted/40 text-[#495057] dark:text-muted-foreground border-border hover:bg-[#e9ecef]'
+                }`}
+              >
+                <span>{sub.name}</span>
+                {isMathSub && (
+                  <span className={`text-[9px] px-1 rounded font-black ${
+                    selectedSubjectId === sub.id ? 'bg-white/20 text-white' : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                  }`}>
+                    FMATH
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Ô tìm kiếm đề */}
@@ -253,6 +264,11 @@ export default function StudentExamsClient({
         </div>
 
       </div>
+
+      {/* THÔNG BÁO FMATH NẾU CHỌN MÔN TOÁN */}
+      {selectedSubject?.name?.toLowerCase().includes('toán') && (
+        <FMathNotice className="my-2" />
+      )}
 
       {/* NỘI DUNG THEO TỪNG TAB */}
       

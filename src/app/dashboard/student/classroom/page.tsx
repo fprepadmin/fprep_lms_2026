@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { supabaseAdmin, getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import { Users } from 'lucide-react';
 import ClassroomClient from './ClassroomClient';
+import { getTeacherDisplayName } from '@/lib/schoolUtils';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,33 +69,43 @@ export default async function ClassroomPage() {
   const subjects = subjectsRes.data || [];
   const examResults = examResultsRes.data || [];
 
-  // Lấy email giáo viên phụ trách
+  // Lấy thông tin & hồ sơ giáo viên phụ trách
   const teacherIds = rawTeacherAssignments.map((t: any) => t.teacher_id).filter(Boolean);
   let teacherProfiles: any[] = [];
+  let auditLogs: any[] = [];
+
   if (teacherIds.length > 0) {
-    const { data: tp } = await supabase.from('profiles').select('id, email').in('id', teacherIds);
-    teacherProfiles = tp || [];
+    const [tpRes, auditRes] = await Promise.all([
+      supabase.from('profiles').select('id, email, role').in('id', teacherIds),
+      supabase.from('audit_logs').select('target_id, new_values').in('target_id', teacherIds).order('created_at', { ascending: false })
+    ]);
+    teacherProfiles = tpRes.data || [];
+    auditLogs = auditRes.data || [];
   }
 
-  const teacherAssignments = rawTeacherAssignments.map((ass: any) => ({
-    ...ass,
-    teacherProfile: teacherProfiles.find((tp: any) => tp.id === ass.teacher_id)
-  }));
+  const teacherAssignments = rawTeacherAssignments.map((ass: any) => {
+    const prof = teacherProfiles.find((tp: any) => tp.id === ass.teacher_id);
+    const teacherDisplay = getTeacherDisplayName(prof, auditLogs);
+    return {
+      ...ass,
+      teacherProfile: prof,
+      teacherFullName: teacherDisplay.fullName,
+      teacherFptName: teacherDisplay.fptName,
+      teacherEmail: teacherDisplay.email || prof?.email || ''
+    };
+  });
 
-  // Lấy đề thi thuộc các môn của lớp & đề thi được giao cho lớp
+  // Lấy danh sách đề thi thuộc các môn của ban học
   const subjectIds = subjects.map((s: any) => s.id);
   let exams: any[] = [];
-  let examAssignments: any[] = [];
-
-  const [examsRes, assignmentsRes] = await Promise.all([
-    subjectIds.length > 0 
-      ? supabase.from('exams').select('*, subjects(*)').in('subject_id', subjectIds)
-      : Promise.resolve({ data: [] }),
-    supabase.from('exam_assignments').select('*, exams(*, subjects(*))').eq('class_id', studentDetail.class_id)
-  ]);
-
-  exams = examsRes.data || [];
-  examAssignments = assignmentsRes.data || [];
+  if (subjectIds.length > 0) {
+    const { data: exData } = await supabase
+      .from('exams')
+      .select('*, subjects(*)')
+      .in('subject_id', subjectIds)
+      .order('created_at', { ascending: false });
+    exams = exData || [];
+  }
 
   return (
     <ClassroomClient
@@ -103,9 +114,10 @@ export default async function ClassroomPage() {
       teacherAssignments={teacherAssignments}
       announcements={announcements}
       exams={exams}
-      examAssignments={examAssignments}
+      examAssignments={[]}
       examResults={examResults}
       studentId={studentId}
+      subjects={subjects}
     />
   );
 }

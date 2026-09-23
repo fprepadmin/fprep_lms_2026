@@ -238,6 +238,21 @@ export default function DashboardLayout({
     return <MaintenanceScreen />;
   }
 
+  // Khi đang trong phòng thi trực tuyến: Ẩn thanh điều hướng chung và Footer để tránh đè giao diện
+  const isExamSession = Boolean(
+    pathname && 
+    pathname.startsWith('/dashboard/student/exams/') && 
+    pathname !== '/dashboard/student/exams'
+  );
+
+  if (isExamSession) {
+    return (
+      <div className="min-h-screen bg-background text-foreground w-full">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen bg-background text-foreground flex flex-col transition-colors duration-300 relative w-full overflow-hidden ${isMaintenance ? 'pt-8' : ''}`}>
       

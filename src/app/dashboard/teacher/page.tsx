@@ -102,9 +102,9 @@ export default async function TeacherDashboardPage() {
             Xin chào Thầy/Cô!
           </h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 text-xs font-semibold text-[#6c757d]">
-            <span>Môn phụ trách: <strong className="text-primary font-bold">{assignments[0]?.subjects?.name || 'Chưa phân công'}</strong></span>
+            <span>Môn phụ trách: <strong className="text-primary font-bold">{Array.from(new Set(assignments.map((a: any) => a.subjects?.name).filter(Boolean))).join(', ') || 'Chưa phân công'}</strong></span>
             <span>&bull;</span>
-            <span>Lớp giảng dạy: <strong className="text-[#212529] dark:text-foreground font-bold">{assignments.map((a: any) => a.classes?.name).join(', ') || 'Chưa phân lớp'}</strong></span>
+            <span>Lớp giảng dạy: <strong className="text-[#212529] dark:text-foreground font-bold">{Array.from(new Set(assignments.map((a: any) => a.classes?.name).filter(Boolean))).join(', ') || 'Chưa phân lớp'}</strong></span>
           </div>
         </div>
 

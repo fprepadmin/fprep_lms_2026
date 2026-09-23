@@ -5,10 +5,11 @@ import { createSupabaseClient } from '@/lib/supabase';
 import { 
   Shield, Users, Activity, Settings, Database, 
   CheckCircle, AlertCircle, RefreshCw, Terminal, Check,
-  ChevronRight, Calendar, Info, Building2, GraduationCap, BookOpen, Plus, Trash2, Edit3,
+  ChevronRight, Calendar, Info, Building2, GraduationCap, BookOpen, Plus, Trash2, Edit3, Loader2,
   FileSpreadsheet, AlertTriangle, CheckSquare, Square, X, Filter, UserX, FolderX
 } from 'lucide-react';
 import ExcelImportModal from '@/components/student/ExcelImportModal';
+import { sortClassesNaturally, getTeacherDisplayName, getSubjectColorTheme } from '@/lib/schoolUtils';
 
 interface Profile {
   id: string;
@@ -176,6 +177,7 @@ export default function AdminDashboardClient({
   const [newUserRole, setNewUserRole] = useState<'student' | 'teacher' | 'head_of_department' | 'admin'>('student');
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserFptName, setNewUserFptName] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [gasUrl, setGasUrl] = useState(() => {
     const defaultUrl = 'https://script.google.com/macros/s/AKfycbxcX76M0TLzCpdgz5RFtdo3a5A7Wkx7zRWuILtX8SYJ9fGj-BF129RpVb37GrJxcX6Hkw/exec';
     if (typeof window !== 'undefined') {
@@ -209,6 +211,13 @@ export default function AdminDashboardClient({
   const [userClassFilter, setUserClassFilter] = useState<string>('all');
   const [teacherSubjectFilter, setTeacherSubjectFilter] = useState<string>('all');
   const [adminSubTab, setAdminSubTab] = useState<'classes' | 'teachers' | 'students'>('classes');
+
+  // --- TRẠNG THÁI BỘ LỌC & PHÂN CÔNG GIÁO VIÊN THEO LỚP ---
+  const [classFilterGroup, setClassFilterGroup] = useState<'all' | 'T' | 'X' | 'K'>('all');
+  const [classSearchTerm, setClassSearchTerm] = useState('');
+  const [assigningClass, setAssigningClass] = useState<any | null>(null);
+  const [classAssignmentsDraft, setClassAssignmentsDraft] = useState<{ subjectId: string; teacherId: string }[]>([]);
+  const [isSavingAssignments, setIsSavingAssignments] = useState(false);
 
   // --- TRẠNG THÁI CHỌN NHIỀU ĐỂ XOÁ HÀNG LOẠT (BATCH SELECTION) ---
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
@@ -402,12 +411,62 @@ export default function AdminDashboardClient({
     }
   };
 
+  // Mở modal phân công giáo viên cho lớp học
+  const openAssignModal = (cls: any) => {
+    setAssigningClass(cls);
+    const applicableSubs = subjects.filter(s => {
+      if (cls.group_type === 'T') return s.group_type === 'T' || s.group_type === 'ENG';
+      if (cls.group_type === 'X') return s.group_type === 'X' || s.group_type === 'ENG';
+      return true;
+    });
+    const currentClassAssignments = localTeacherClasses.filter(tc => tc.class_id === cls.id);
+    const drafts = applicableSubs.map(s => {
+      const existing = currentClassAssignments.find(tc => tc.subject_id === s.id);
+      return {
+        subjectId: s.id,
+        teacherId: existing?.teacher_id || ''
+      };
+    });
+    setClassAssignmentsDraft(drafts);
+  };
+
+  // Lưu thay đổi phân công giáo viên cho lớp học
+  const handleSaveClassAssignments = async () => {
+    if (!assigningClass) return;
+    setIsSavingAssignments(true);
+    try {
+      const res = await fetch('/api/admin/classes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classId: assigningClass.id,
+          assignments: classAssignmentsDraft
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi lưu phân công');
+
+      setLocalTeacherClasses(prev => [
+        ...prev.filter(tc => tc.class_id !== assigningClass.id),
+        ...(data.data || [])
+      ]);
+      setAssigningClass(null);
+      alert(`Đã cập nhật thành công phân công giáo viên cho lớp ${assigningClass.name}!`);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu phân công:', err);
+      alert('Không thể lưu phân công giáo viên: ' + err.message);
+    } finally {
+      setIsSavingAssignments(false);
+    }
+  };
+
   const startEditUser = (profile: Profile) => {
     const details = localStudentDetails.find((s: any) => s.student_id === profile.id);
+    const teacherDisplay = getTeacherDisplayName(profile, auditLogs);
     setEditingUserId(profile.id);
     setEditingUserEmail(profile.email);
-    setEditingUserFullName(details?.full_name || '');
-    setEditingUserFptName(details?.mshs || '');
+    setEditingUserFullName(details?.full_name || teacherDisplay.fullName || '');
+    setEditingUserFptName(details?.mshs || teacherDisplay.fptName || '');
     setEditingUserRole(profile.role);
     setEditingUserClassId(details?.class_id || '');
 
@@ -415,6 +474,7 @@ export default function AdminDashboardClient({
     setEditingUserSubjectId(assignments[0]?.subject_id || '');
     setEditingUserClassIds(assignments.map(tc => tc.class_id).filter(Boolean));
   };
+
 
   const handleUpdateUser = async () => {
     if (!editingUserEmail.trim() || !editingUserEmail.includes('@')) {
@@ -535,36 +595,52 @@ export default function AdminDashboardClient({
   };
 
 
-  const handleCreateUser = async () => {
-    if (!newUserFullName.trim()) {
-      alert('Vui lòng nhập họ và tên.');
-      return;
-    }
-    if (!newUserFptName.trim()) {
-      alert('Vui lòng nhập tên FPT / Mã số (VD: TamTT48).');
-      return;
-    }
-    if (!newUserEmail.trim()) {
+  const handleCreateUser = async (overrideRole?: 'student' | 'teacher' | 'head_of_department') => {
+    const targetRole = overrideRole || newUserRole;
+    const email = newUserEmail.trim().toLowerCase();
+    let fptName = newUserFptName.trim();
+    let fullName = newUserFullName.trim();
+
+    if (!email) {
       alert('Vui lòng nhập email tài khoản.');
       return;
     }
-    if (!newUserEmail.includes('@')) {
+    if (!email.includes('@')) {
       alert('Email không hợp lệ.');
       return;
     }
 
+    if (!fptName && email.includes('@')) {
+      fptName = email.split('@')[0].toUpperCase();
+    }
+
+    if (!fullName) {
+      if (targetRole === 'student') {
+        alert('Vui lòng nhập họ và tên học sinh.');
+        return;
+      } else {
+        fullName = fptName || email.split('@')[0];
+      }
+    }
+
+    if (targetRole === 'student' && !fptName) {
+      alert('Vui lòng nhập tên FPT / Mã số học sinh (VD: NamNP12).');
+      return;
+    }
+
+    setIsCreatingUser(true);
     try {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: newUserEmail.trim().toLowerCase(),
-          role: newUserRole,
-          fullName: newUserFullName.trim(),
-          fptName: newUserFptName.trim(),
-          classId: newUserRole === 'student' ? newUserClassId : null,
-          subjectId: (newUserRole === 'teacher' || newUserRole === 'head_of_department') ? newUserSubjectId : null,
-          classIds: (newUserRole === 'teacher' || newUserRole === 'head_of_department') ? newUserClassIds : [],
+          email: email,
+          role: targetRole,
+          fullName: fullName,
+          fptName: fptName,
+          classId: targetRole === 'student' ? newUserClassId : null,
+          subjectId: (targetRole === 'teacher' || targetRole === 'head_of_department') ? newUserSubjectId : null,
+          classIds: (targetRole === 'teacher' || targetRole === 'head_of_department') ? newUserClassIds : [],
           gasUrl: gasUrl.trim()
         })
       });
@@ -645,8 +721,8 @@ export default function AdminDashboardClient({
       setNewUserEmail('');
       setNewUserFullName('');
       setNewUserFptName('');
-      setNewUserRole('student');
       setNewUserClassId('');
+      setNewUserRole(targetRole === 'head_of_department' ? 'head_of_department' : targetRole === 'teacher' ? 'teacher' : 'student');
       setNewUserSubjectId('');
       setNewUserClassIds([]);
       
@@ -658,6 +734,8 @@ export default function AdminDashboardClient({
     } catch (err: any) {
       console.error('Lỗi khi tạo tài khoản:', err);
       alert('Không thể thêm tài khoản: ' + err.message);
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -1024,7 +1102,7 @@ export default function AdminDashboardClient({
               <Building2 className="h-4 w-4" /> 1. Quản lý Lớp học & Phân công môn
             </button>
             <button
-              onClick={() => { setAdminSubTab('teachers'); setEditingUserId(null); }}
+              onClick={() => { setAdminSubTab('teachers'); setEditingUserId(null); setNewUserRole('teacher'); }}
               className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
                 adminSubTab === 'teachers' 
                   ? 'bg-primary text-primary-foreground border-primary shadow-xs' 
@@ -1034,7 +1112,7 @@ export default function AdminDashboardClient({
               <Users className="h-4 w-4" /> 2. Quản lý Giáo viên & HOD
             </button>
             <button
-              onClick={() => { setAdminSubTab('students'); setEditingUserId(null); }}
+              onClick={() => { setAdminSubTab('students'); setEditingUserId(null); setNewUserRole('student'); }}
               className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
                 adminSubTab === 'students' 
                   ? 'bg-primary text-primary-foreground border-primary shadow-xs' 
@@ -1052,13 +1130,13 @@ export default function AdminDashboardClient({
             <div className="grid gap-6 md:grid-cols-12 items-start">
               
               {/* BẢNG DANH SÁCH LỚP HỌC */}
-              <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+              <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm space-y-0">
                 <div className="p-4 border-b border-border bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="font-extrabold text-sm flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-primary" /> Danh sách Lớp học Khối 12 ({classes.length} lớp)
                     </h3>
-                    <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Quản lý các lớp học và môn học được phân công</p>
+                    <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Sắp xếp chuẩn Ban đào tạo & Phân công giáo viên bộ môn</p>
                   </div>
 
                   {/* THANH THAO TÁC HÀNG LOẠT LỚP HỌC */}
@@ -1086,6 +1164,63 @@ export default function AdminDashboardClient({
                       </button>
                     </div>
                   )}
+                </div>
+
+                {/* THANH BỘ LỌC BAN & TÌM KIẾM LỚP HỌC */}
+                <div className="p-3 border-b border-border bg-background flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase shrink-0 mr-1">Ban:</span>
+                    <button
+                      onClick={() => setClassFilterGroup('all')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                        classFilterGroup === 'all'
+                          ? 'bg-primary text-primary-foreground shadow-xs'
+                          : 'bg-muted/40 text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      Tất cả ({classes.length})
+                    </button>
+                    <button
+                      onClick={() => setClassFilterGroup('T')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                        classFilterGroup === 'T'
+                          ? 'bg-blue-500 text-white shadow-xs'
+                          : 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
+                      }`}
+                    >
+                      Ban Tự nhiên (T) ({classes.filter(c => c.group_type === 'T').length})
+                    </button>
+                    <button
+                      onClick={() => setClassFilterGroup('X')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                        classFilterGroup === 'X'
+                          ? 'bg-emerald-500 text-white shadow-xs'
+                          : 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                      }`}
+                    >
+                      Ban Xã hội (X) ({classes.filter(c => c.group_type === 'X').length})
+                    </button>
+                    <button
+                      onClick={() => setClassFilterGroup('K')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                        classFilterGroup === 'K'
+                          ? 'bg-purple-500 text-white shadow-xs'
+                          : 'bg-purple-500/10 text-purple-600 hover:bg-purple-500/20'
+                      }`}
+                    >
+                      Khai phóng (K) ({classes.filter(c => c.group_type === 'K').length})
+                    </button>
+                  </div>
+
+                  <div className="relative sm:w-48">
+                    <input
+                      type="text"
+                      placeholder="Tìm theo tên lớp..."
+                      value={classSearchTerm}
+                      onChange={(e) => setClassSearchTerm(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-1 text-xs font-semibold focus:outline-none focus:border-primary"
+                    />
+                  </div>
                 </div>
 
                 {editingClassId && (
@@ -1140,6 +1275,94 @@ export default function AdminDashboardClient({
                   </div>
                 )}
 
+                {/* MODAL PHÂN CÔNG GIÁO VIÊN BỘ MÔN CHO LỚP */}
+                {assigningClass && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+                    <div className="bg-card border border-border rounded-2xl max-w-xl w-full p-5 space-y-4 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                      <div className="flex items-center justify-between border-b border-border pb-3">
+                        <div>
+                          <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
+                            <BookOpen className="h-5 w-5 text-primary" />
+                            Phân công Giáo viên - Lớp {assigningClass.name}
+                          </h3>
+                          <p className="text-xs text-muted-foreground font-semibold mt-0.5">
+                            Ban {assigningClass.group_type === 'T' ? 'Tự nhiên (T)' : assigningClass.group_type === 'X' ? 'Xã hội (X)' : 'Khai phóng (K)'} &bull; Niên khóa {assigningClass.academic_year}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setAssigningClass(null)}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                        <p className="text-xs text-muted-foreground font-medium">
+                          Chọn giáo viên phụ trách từng môn học cho lớp <strong>{assigningClass.name}</strong>. Các thay đổi sẽ được cập nhật trực tiếp vào cơ sở dữ liệu:
+                        </p>
+
+                        <div className="space-y-3">
+                          {classAssignmentsDraft.map((draft, idx) => {
+                            const sub = subjects.find(s => s.id === draft.subjectId);
+                            const theme = getSubjectColorTheme(sub?.name || '');
+                            const teacherList = profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department');
+
+                            return (
+                              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-background border border-border">
+                                <div className="flex items-center gap-2 min-w-[140px]">
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold border ${theme.badgeBg} ${theme.badgeText} ${theme.badgeBorder}`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full ${theme.dotColor}`} />
+                                    {sub?.name || 'Môn học'}
+                                  </span>
+                                </div>
+
+                                <div className="flex-1 sm:max-w-xs">
+                                  <select
+                                    value={draft.teacherId}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setClassAssignmentsDraft(prev => prev.map((item, i) => i === idx ? { ...item, teacherId: val } : item));
+                                    }}
+                                    className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-primary text-foreground"
+                                  >
+                                    <option value="">-- Chưa phân công --</option>
+                                    {teacherList.map(t => {
+                                      const tDisplay = getTeacherDisplayName(t, auditLogs);
+                                      return (
+                                        <option key={t.id} value={t.id}>
+                                          {tDisplay.fullName} ({t.email.split('@')[0]})
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                        <button
+                          onClick={() => setAssigningClass(null)}
+                          className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-muted"
+                        >
+                          Hủy bỏ
+                        </button>
+                        <button
+                          onClick={handleSaveClassAssignments}
+                          disabled={isSavingAssignments}
+                          className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {isSavingAssignments && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                          {isSavingAssignments ? 'Đang lưu...' : 'Lưu phân công'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
@@ -1167,79 +1390,113 @@ export default function AdminDashboardClient({
                       </tr>
                     </thead>
                     <tbody>
-                      {classes.map(cls => {
-                        const classStudentsCount = localStudentDetails.filter(s => s.class_id === cls.id).length;
-                        const classAssignments = localTeacherClasses.filter(tc => tc.class_id === cls.id);
-                        const isSelected = selectedClassIds.includes(cls.id);
+                      {(() => {
+                        const sorted = sortClassesNaturally(classes).filter(cls => {
+                          if (classFilterGroup !== 'all' && cls.group_type !== classFilterGroup) return false;
+                          if (classSearchTerm.trim() && !cls.name.toLowerCase().includes(classSearchTerm.toLowerCase())) return false;
+                          return true;
+                        });
 
-                        return (
-                          <tr key={cls.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
-                            <td className="p-4 text-center">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedClassIds(prev => [...prev, cls.id]);
-                                  } else {
-                                    setSelectedClassIds(prev => prev.filter(id => id !== cls.id));
-                                  }
-                                }}
-                                className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
-                              />
-                            </td>
-                            <td className="p-4 font-black text-sm text-foreground">{cls.name}</td>
-                            <td className="p-4">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                cls.group_type === 'T' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
-                                cls.group_type === 'X' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                                'bg-purple-500/10 text-purple-500 border border-purple-500/20'
-                              }`}>
-                                {cls.group_type === 'T' ? 'Tự nhiên' : cls.group_type === 'X' ? 'Xã hội' : 'Khai phóng'}
-                              </span>
-                            </td>
-                            <td className="p-4 font-semibold text-muted-foreground">{cls.academic_year}</td>
-                            <td className="p-4 font-bold text-foreground">{classStudentsCount} học sinh</td>
-                            <td className="p-4 space-y-1">
-                              {classAssignments.length === 0 ? (
-                                <span className="text-[10px] text-muted-foreground italic">Chưa phân công giáo viên</span>
-                              ) : (
-                                <div className="space-y-0.5">
-                                  {classAssignments.map((ca: any, caIdx: number) => {
-                                    const sub = subjects.find(s => s.id === ca.subject_id);
-                                    const prof = profiles.find(p => p.id === ca.teacher_id);
-                                    return (
-                                      <div key={caIdx} className="text-[11px] font-semibold">
-                                        <span className="text-primary font-bold">{sub?.name || 'Môn'}:</span> {prof?.email ? prof.email.split('@')[0].toUpperCase() : 'GV'}
-                                      </div>
-                                    );
-                                  })}
+                        if (sorted.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={7} className="p-8 text-center text-xs text-muted-foreground italic">
+                                Không tìm thấy lớp học nào phù hợp với bộ lọc hiện tại.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return sorted.map(cls => {
+                          const classStudentsCount = localStudentDetails.filter(s => s.class_id === cls.id).length;
+                          const classAssignments = localTeacherClasses.filter(tc => tc.class_id === cls.id);
+                          const isSelected = selectedClassIds.includes(cls.id);
+
+                          return (
+                            <tr key={cls.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                              <td className="p-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedClassIds(prev => [...prev, cls.id]);
+                                    } else {
+                                      setSelectedClassIds(prev => prev.filter(id => id !== cls.id));
+                                    }
+                                  }}
+                                  className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                />
+                              </td>
+                              <td className="p-4 font-black text-sm text-foreground">{cls.name}</td>
+                              <td className="p-4">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  cls.group_type === 'T' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
+                                  cls.group_type === 'X' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
+                                  'bg-purple-500/10 text-purple-500 border border-purple-500/20'
+                                }`}>
+                                  {cls.group_type === 'T' ? 'Tự nhiên' : cls.group_type === 'X' ? 'Xã hội' : 'Khai phóng'}
+                                </span>
+                              </td>
+                              <td className="p-4 font-semibold text-muted-foreground">{cls.academic_year}</td>
+                              <td className="p-4 font-bold text-foreground">{classStudentsCount} học sinh</td>
+                              <td className="p-4">
+                                {classAssignments.length === 0 ? (
+                                  <span className="text-[10px] text-muted-foreground italic bg-muted/40 px-2 py-1 rounded">Chưa phân công giáo viên</span>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1 max-w-sm">
+                                    {classAssignments.map((ca: any, caIdx: number) => {
+                                      const sub = subjects.find(s => s.id === ca.subject_id);
+                                      const prof = profiles.find(p => p.id === ca.teacher_id);
+                                      const tDisplay = getTeacherDisplayName(prof, auditLogs);
+                                      const theme = getSubjectColorTheme(sub?.name || '');
+                                      return (
+                                        <span 
+                                          key={caIdx} 
+                                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${theme.badgeBg} ${theme.badgeText} ${theme.badgeBorder}`}
+                                          title={`${sub?.name || 'Môn'}: ${tDisplay.fullName} (${prof?.email || ''})`}
+                                        >
+                                          <span className={`h-1.5 w-1.5 rounded-full ${theme.dotColor}`} />
+                                          <span>{sub?.name || 'Môn'}:</span>
+                                          <span className="font-extrabold">{tDisplay.fptName || tDisplay.fullName.split(' ').slice(-1)[0]}</span>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => openAssignModal(cls)}
+                                    className="px-2 py-1 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 font-bold text-primary transition-all text-[10px] flex items-center gap-1"
+                                    title="Phân công giáo viên bộ môn cho lớp này"
+                                  >
+                                    <BookOpen className="h-3 w-3" /> Phân công
+                                  </button>
+                                  <button
+                                    onClick={() => startEditClass(cls)}
+                                    className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-foreground transition-all text-[10px]"
+                                  >
+                                    Sửa
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteClass(cls.id)}
+                                    className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
+                                  >
+                                    Xóa
+                                  </button>
                                 </div>
-                              )}
-                            </td>
-                            <td className="p-4 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
-                                <button
-                                  onClick={() => startEditClass(cls)}
-                                  className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
-                                >
-                                  Sửa
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteClass(cls.id)}
-                                  className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
-                                >
-                                  Xóa
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
               </div>
+
 
               {/* TẠO LỚP HỌC MỚI */}
               <div className="md:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
@@ -1405,14 +1662,34 @@ export default function AdminDashboardClient({
                 {editingUserId && (
                   <div className="p-5 border-b border-border bg-primary/5 space-y-4">
                     <h4 className="font-extrabold text-sm text-primary">Chỉnh sửa thông tin Giáo viên / Trưởng bộ môn</h4>
-                    <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                    <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên giáo viên</label>
+                        <input
+                          type="text"
+                          placeholder="VD: Thầy Nguyễn Thế Chinh..."
+                          value={editingUserFullName}
+                          onChange={(e) => setEditingUserFullName(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none font-semibold text-foreground"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / Mã GV</label>
+                        <input
+                          type="text"
+                          placeholder="VD: CHINH10"
+                          value={editingUserFptName}
+                          onChange={(e) => setEditingUserFptName(e.target.value)}
+                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none font-bold uppercase text-foreground"
+                        />
+                      </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
                         <input
                           type="email"
                           value={editingUserEmail}
                           onChange={(e) => setEditingUserEmail(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none"
+                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none font-semibold"
                         />
                       </div>
                       <div className="space-y-1">
@@ -1446,8 +1723,8 @@ export default function AdminDashboardClient({
 
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 border border-border rounded-xl p-3 bg-background max-h-[120px] overflow-y-auto">
-                          {classes.map((cls: any) => {
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 border border-border rounded-xl p-3 bg-background max-h-[140px] overflow-y-auto">
+                          {sortClassesNaturally(classes).map((cls: any) => {
                             const isChecked = editingUserClassIds.includes(cls.id);
                             return (
                               <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
@@ -1519,7 +1796,7 @@ export default function AdminDashboardClient({
                                 className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
                               />
                             </th>
-                            <th className="p-4">Email Giáo viên</th>
+                            <th className="p-4">Giáo viên & Mã FPT</th>
                             <th className="p-4">Vai trò chuyên môn</th>
                             <th className="p-4">Môn học phụ trách</th>
                             <th className="p-4">Lớp giảng dạy</th>
@@ -1530,9 +1807,13 @@ export default function AdminDashboardClient({
                           {filteredTeachers.map(p => {
                             const assignments = localTeacherClasses.filter(tc => tc.teacher_id === p.id);
                             const teacherSubject = assignments[0]?.subject_id ? subjects.find(s => s.id === assignments[0].subject_id)?.name : '';
-                            const teacherClassesNames = assignments.map(tc => classes.find(c => c.id === tc.class_id)?.name).filter(Boolean).join(', ');
+                            const teacherClassesNames = assignments
+                              .map(tc => classes.find(c => c.id === tc.class_id))
+                              .filter(Boolean);
+                            const sortedClassesNames = sortClassesNaturally(teacherClassesNames as any).map(c => c.name).join(', ');
                             const isSelected = selectedTeacherIds.includes(p.id);
                             const isProtected = p.id === currentUserId || p.email === 'fprep.fschool@gmail.com';
+                            const tDisplay = getTeacherDisplayName(p, auditLogs);
 
                             return (
                               <tr key={p.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
@@ -1552,12 +1833,15 @@ export default function AdminDashboardClient({
                                   />
                                 </td>
                                 <td className="p-4 font-bold text-foreground">
-                                  {p.email}
-                                  <span className="block text-[10px] text-muted-foreground font-semibold">Tên FPT: {p.email.split('@')[0].toUpperCase()}</span>
+                                  <div className="text-sm font-extrabold text-foreground">{tDisplay.fullName}</div>
+                                  <div className="text-xs text-muted-foreground font-normal">{p.email}</div>
+                                  <span className="inline-block text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-muted border border-border text-primary mt-1">
+                                    Mã GV: {tDisplay.fptName}
+                                  </span>
                                 </td>
                                 <td className="p-4">{getRoleBadge(p.role)}</td>
                                 <td className="p-4 font-bold text-primary">{teacherSubject || <span className="text-muted-foreground italic font-normal">Chưa gán môn</span>}</td>
-                                <td className="p-4 font-semibold text-xs text-foreground">{teacherClassesNames || <span className="text-muted-foreground italic font-normal">Chưa phân lớp</span>}</td>
+                                <td className="p-4 font-semibold text-xs text-foreground">{sortedClassesNames || <span className="text-muted-foreground italic font-normal">Chưa phân lớp</span>}</td>
                                 <td className="p-4 text-center">
                                   <div className="flex items-center justify-center gap-1.5">
                                     <button
@@ -1579,6 +1863,7 @@ export default function AdminDashboardClient({
                             );
                           })}
                         </tbody>
+
                       </table>
                     </div>
                   );
@@ -1593,12 +1878,40 @@ export default function AdminDashboardClient({
 
                 <div className="space-y-3 text-xs">
                   <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên</label>
+                    <input
+                      type="text"
+                      placeholder="VD: Thầy / Cô Nguyễn Văn A..."
+                      value={newUserFullName}
+                      onChange={(e) => setNewUserFullName(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / Mã GV</label>
+                    <input
+                      type="text"
+                      placeholder="VD: NhanV5..."
+                      value={newUserFptName}
+                      onChange={(e) => setNewUserFptName(e.target.value)}
+                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
                     <input
                       type="email"
                       placeholder="VD: giaovien.vatly@fpt.edu.vn..."
                       value={newUserEmail}
-                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      onChange={(e) => {
+                        const email = e.target.value;
+                        setNewUserEmail(email);
+                        if (!newUserFptName && email.includes('@')) {
+                          setNewUserFptName(email.split('@')[0].toUpperCase());
+                        }
+                      }}
                       className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
                     />
                   </div>
@@ -1606,7 +1919,7 @@ export default function AdminDashboardClient({
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted-foreground uppercase block">Vai trò khởi tạo</label>
                     <select
-                      value={newUserRole}
+                      value={newUserRole === 'head_of_department' ? 'head_of_department' : 'teacher'}
                       onChange={(e) => setNewUserRole(e.target.value as any)}
                       className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-semibold text-primary"
                     >
@@ -1656,10 +1969,22 @@ export default function AdminDashboardClient({
                   </div>
 
                   <button
-                    onClick={handleCreateUser}
-                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity"
+                    onClick={() => {
+                      const roleToUse = (newUserRole === 'head_of_department') ? 'head_of_department' : 'teacher';
+                      handleCreateUser(roleToUse);
+                    }}
+                    disabled={isCreatingUser}
+                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    <Users className="h-3.5 w-3.5" /> Tạo tài khoản Giáo viên
+                    {isCreatingUser ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tạo tài khoản...
+                      </>
+                    ) : (
+                      <>
+                        <Users className="h-3.5 w-3.5" /> Tạo tài khoản Giáo viên
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1726,7 +2051,7 @@ export default function AdminDashboardClient({
                       >
                         <option value="all">Tất cả lớp ({profiles.filter(p => p.role === 'student').length})</option>
                         <option value="unassigned">Chưa xếp lớp ({localStudentDetails.filter(s => !s.class_id).length})</option>
-                        {classes.map(cls => {
+                        {sortClassesNaturally(classes).map(cls => {
                           const count = localStudentDetails.filter(s => s.class_id === cls.id).length;
                           return <option key={cls.id} value={cls.id}>{cls.name} ({count} HS)</option>;
                         })}
@@ -1844,7 +2169,7 @@ export default function AdminDashboardClient({
                           className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
                         >
                           <option value="">-- Chưa xếp lớp --</option>
-                          {classes.map((cls: any) => (
+                          {sortClassesNaturally(classes).map((cls: any) => (
                             <option key={cls.id} value={cls.id}>{cls.name}</option>
                           ))}
                         </select>
@@ -2034,7 +2359,7 @@ export default function AdminDashboardClient({
                       className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
                     >
                       <option value="">-- Chưa xếp lớp --</option>
-                      {classes.map((cls: any) => (
+                      {sortClassesNaturally(classes).map((cls: any) => (
                         <option key={cls.id} value={cls.id}>{cls.name}</option>
                       ))}
                     </select>
@@ -2043,11 +2368,20 @@ export default function AdminDashboardClient({
                   <button
                     onClick={() => {
                       setNewUserRole('student');
-                      handleCreateUser();
+                      handleCreateUser('student');
                     }}
-                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity"
+                    disabled={isCreatingUser}
+                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    <GraduationCap className="h-3.5 w-3.5" /> Tạo tài khoản Học sinh
+                    {isCreatingUser ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tạo tài khoản...
+                      </>
+                    ) : (
+                      <>
+                        <GraduationCap className="h-3.5 w-3.5" /> Tạo tài khoản Học sinh
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

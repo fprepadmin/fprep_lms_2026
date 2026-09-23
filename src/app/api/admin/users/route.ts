@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { supabaseAdmin, verifySessionToken } from '@/lib/supabase';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
@@ -28,7 +28,10 @@ export async function POST(request: Request) {
 
     const { email, role, fullName, fptName, classId, subjectId, classIds, gasUrl } = await request.json();
 
-    if (!email || !role || !fullName || !fptName) {
+    const finalFullName = (fullName && fullName.trim()) || email?.split('@')[0] || '';
+    const finalFptName = (fptName && fptName.trim()) || email?.split('@')[0]?.toUpperCase() || '';
+
+    if (!email || !role || !finalFullName || !finalFptName) {
       return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 });
     }
 
@@ -71,8 +74,8 @@ export async function POST(request: Request) {
           .from('student_details')
           .upsert({
             student_id: targetUserId,
-            mshs: fptName.trim().toUpperCase(),
-            full_name: fullName.trim(),
+            mshs: finalFptName.toUpperCase(),
+            full_name: finalFullName,
             class_id: classId || null
           }, { onConflict: 'student_id' });
 
@@ -95,7 +98,7 @@ export async function POST(request: Request) {
           action: 'UPSERT_USER_PROFILE_UPDATE',
           target_table: 'profiles',
           target_id: targetUserId,
-          new_values: { email, role, fullName, fptName }
+          new_values: { email, role, fullName: finalFullName, fptName: finalFptName }
         });
       } catch (auditErr) {
         console.error('Lỗi ghi audit log:', auditErr);
@@ -129,8 +132,8 @@ export async function POST(request: Request) {
           .from('student_details')
           .insert({
             student_id: targetUserId,
-            mshs: fptName.trim().toUpperCase(),
-            full_name: fullName.trim(),
+            mshs: finalFptName.toUpperCase(),
+            full_name: finalFullName,
             class_id: classId || null
           });
 
@@ -151,7 +154,7 @@ export async function POST(request: Request) {
           action: 'CREATE_USER_PROFILE',
           target_table: 'profiles',
           target_id: targetUserId,
-          new_values: { email, role, fullName, fptName }
+          new_values: { email, role, fullName: finalFullName, fptName: finalFptName }
         });
       } catch (auditErr) {
         console.error('Lỗi ghi audit log:', auditErr);
@@ -187,27 +190,29 @@ export async function POST(request: Request) {
       // Xóa phân công giảng dạy nếu không phải là giáo viên/HOD
       await supabaseAdmin.from('teacher_classes').delete().eq('teacher_id', targetUserId);
     }
-    // Gửi email qua Google Apps Script (Thực hiện phía Server để tránh lỗi CORS và in log)
+    // Gửi email qua Google Apps Script trong background (after) để phản hồi ngay lập tức cho client
     if (gasUrl && gasUrl.trim()) {
-      try {
-        console.log('Server: Sending welcome email via Google Apps Script URL:', gasUrl);
-        const gasResponse = await fetch(gasUrl.trim(), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            email: email.trim().toLowerCase(),
-            fullName: fullName.trim(),
-            fptName: fptName.trim(),
-            role: role
-          })
-        });
-        const gasText = await gasResponse.text();
-        console.log('Server: Google Apps Script response status:', gasResponse.status, 'body:', gasText);
-      } catch (gasErr) {
-        console.error('Server: Lỗi khi gọi Google Apps Script gửi email:', gasErr);
-      }
+      after(async () => {
+        try {
+          console.log('Server (Background): Sending welcome email via Google Apps Script URL:', gasUrl);
+          const gasResponse = await fetch(gasUrl.trim(), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              email: email.trim().toLowerCase(),
+              fullName: finalFullName,
+              fptName: finalFptName,
+              role: role
+            })
+          });
+          const gasText = await gasResponse.text();
+          console.log('Server (Background): Google Apps Script response status:', gasResponse.status, 'body:', gasText);
+        } catch (gasErr) {
+          console.error('Server (Background): Lỗi khi gọi Google Apps Script gửi email:', gasErr);
+        }
+      });
     }
     return NextResponse.json({ success: true, data: finalProfile, isUpdate });
 
@@ -327,44 +332,46 @@ export async function PUT(request: Request) {
       console.error('Lỗi ghi audit log:', auditErr);
     }
 
-    // Gửi email qua Google Apps Script nếu có gasUrl khi cập nhật vai trò/thông tin
+    // Gửi email qua Google Apps Script trong background (after) khi cập nhật vai trò/thông tin
     if (gasUrl && gasUrl.trim()) {
-      try {
-        console.log('Server (PUT): Sending update email via Google Apps Script URL:', gasUrl);
-        const finalEmail = email ? email.trim().toLowerCase() : (oldProfile?.email || '');
-        
-        let finalFullName = fullName ? fullName.trim() : '';
-        let finalFptName = fptName ? fptName.trim() : '';
-        
-        if (!finalFullName || !finalFptName) {
-          const { data: std } = await supabaseAdmin
-            .from('student_details')
-            .select('full_name, mshs')
-            .eq('student_id', userId)
-            .maybeSingle();
-          if (std) {
-            if (!finalFullName) finalFullName = std.full_name;
-            if (!finalFptName) finalFptName = std.mshs;
+      after(async () => {
+        try {
+          console.log('Server (PUT Background): Sending update email via Google Apps Script URL:', gasUrl);
+          const finalEmail = email ? email.trim().toLowerCase() : (oldProfile?.email || '');
+          
+          let finalFullName = fullName ? fullName.trim() : '';
+          let finalFptName = fptName ? fptName.trim() : '';
+          
+          if ((!finalFullName || !finalFptName) && supabaseAdmin) {
+            const { data: std } = await supabaseAdmin
+              .from('student_details')
+              .select('full_name, mshs')
+              .eq('student_id', userId)
+              .maybeSingle();
+            if (std) {
+              if (!finalFullName) finalFullName = std.full_name;
+              if (!finalFptName) finalFptName = std.mshs;
+            }
           }
-        }
 
-        const gasResponse = await fetch(gasUrl.trim(), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            email: finalEmail,
-            fullName: finalFullName || finalEmail.split('@')[0],
-            fptName: finalFptName || finalEmail.split('@')[0],
-            role: role
-          })
-        });
-        const gasText = await gasResponse.text();
-        console.log('Server (PUT): Google Apps Script response status:', gasResponse.status, 'body:', gasText);
-      } catch (gasErr) {
-        console.error('Server (PUT): Lỗi khi gọi Google Apps Script gửi email:', gasErr);
-      }
+          const gasResponse = await fetch(gasUrl.trim(), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              email: finalEmail,
+              fullName: finalFullName || finalEmail.split('@')[0],
+              fptName: finalFptName || finalEmail.split('@')[0],
+              role: role
+            })
+          });
+          const gasText = await gasResponse.text();
+          console.log('Server (PUT Background): Google Apps Script response status:', gasResponse.status, 'body:', gasText);
+        } catch (gasErr) {
+          console.error('Server (PUT Background): Lỗi khi gọi Google Apps Script gửi email:', gasErr);
+        }
+      });
     }
 
     return NextResponse.json({ success: true });
