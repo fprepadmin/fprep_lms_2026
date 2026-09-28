@@ -177,13 +177,18 @@ CREATE TABLE public.exams (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 15. Bảng questions (Câu hỏi trắc nghiệm của đề thi)
+-- 15. Bảng questions (Câu hỏi trắc nghiệm của đề thi - Hỗ trợ chuẩn 2026 & Phân bổ điểm)
 CREATE TABLE public.questions (
     id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
     exam_id VARCHAR(255) NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    options TEXT[] NOT NULL,
-    correct_option_index INTEGER NOT NULL,
+    question_type VARCHAR(20) DEFAULT 'mcq', -- 'mcq', 'tf', 'saq'
+    options JSONB NOT NULL,
+    correct_option_index INTEGER DEFAULT 0,
+    correct_answer JSONB,
+    explanation TEXT,
+    level VARCHAR(50) DEFAULT 'Nhận biết',
+    points NUMERIC DEFAULT 0.25, -- Điểm số của câu hỏi (hỗ trợ phân bổ tự động / thủ công)
     order_index INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

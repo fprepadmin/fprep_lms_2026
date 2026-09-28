@@ -22,6 +22,7 @@ export interface QuestionDetail {
   correct_option_index?: number;
   explanation?: string;
   level?: string;
+  points?: number;
   order_index?: number;
 }
 
@@ -434,6 +435,31 @@ export default function StudentSubmissionDetailModal({
               const userAns = userAnswers[q.id];
               const opts = parseOptions(q.options);
               const isExplanationOpen = Boolean(expandedExplanations[q.id]);
+              const qPt = q.points !== undefined && q.points !== null && !isNaN(Number(q.points)) && Number(q.points) > 0
+                ? Number(q.points)
+                : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25);
+
+              let earnedScore = 0;
+              if (status === 'correct') {
+                earnedScore = qPt;
+              } else if (status === 'partial' && qType === 'tf') {
+                let match = 0;
+                let correctTarget: any = {};
+                if (typeof q.correct_answer === 'object' && q.correct_answer !== null) correctTarget = q.correct_answer;
+                else if (typeof q.correct_answer === 'string') {
+                  try { correctTarget = JSON.parse(q.correct_answer); } catch(e) {}
+                }
+                const subKeys = opts.length > 0 ? opts.map(o => o.id.toLowerCase()) : ['a', 'b', 'c', 'd'];
+                const userAnsObj = typeof userAns === 'object' && userAns !== null ? userAns : {};
+                subKeys.forEach(k => {
+                  if (userAnsObj[k] !== undefined && Boolean(userAnsObj[k]) === Boolean(correctTarget[k])) match++;
+                });
+                if (match === 4) earnedScore = qPt * 1.0;
+                else if (match === 3) earnedScore = qPt * 0.5;
+                else if (match === 2) earnedScore = qPt * 0.25;
+                else if (match === 1) earnedScore = qPt * 0.1;
+                earnedScore = Math.round(earnedScore * 100) / 100;
+              }
 
               return (
                 <div 
@@ -447,8 +473,8 @@ export default function StudentSubmissionDetailModal({
                   }`}
                 >
                   {/* Tiêu đề câu hỏi */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-extrabold text-sm text-foreground bg-background px-2.5 py-0.5 rounded-md border border-border">
                         Câu {q.order_index || idx + 1}
                       </span>
@@ -465,19 +491,19 @@ export default function StudentSubmissionDetailModal({
                     <div className="shrink-0">
                       {status === 'correct' ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-500/10 border border-green-500/30 px-2.5 py-0.5 rounded-full">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Đúng (+1.0)
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Đúng (+{qPt} đ)
                         </span>
                       ) : status === 'partial' ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-yellow-600 bg-yellow-500/10 border border-yellow-500/30 px-2.5 py-0.5 rounded-full">
-                          <AlertCircle className="h-3.5 w-3.5" /> Đúng một phần
+                          <AlertCircle className="h-3.5 w-3.5" /> Đúng một phần (+{earnedScore} / {qPt} đ)
                         </span>
                       ) : status === 'unanswered' ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-muted border border-border px-2.5 py-0.5 rounded-full">
-                          <XCircle className="h-3.5 w-3.5" /> Chưa trả lời
+                          <XCircle className="h-3.5 w-3.5" /> Chưa trả lời (0 / {qPt} đ)
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 bg-red-500/10 border border-red-500/30 px-2.5 py-0.5 rounded-full">
-                          <XCircle className="h-3.5 w-3.5" /> Sai (0.0)
+                          <XCircle className="h-3.5 w-3.5" /> Sai (0 / {qPt} đ)
                         </span>
                       )}
                     </div>

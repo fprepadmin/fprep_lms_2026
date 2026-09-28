@@ -43,6 +43,7 @@ interface Question {
   correct_option_index?: number;
   explanation?: string;
   level?: string;
+  points?: number;
   order_index?: number;
 }
 
@@ -374,15 +375,27 @@ export default function TeacherExamsClient({
           correct_answer: q.correct_answer,
           explanation: q.explanation,
           level: q.level || 'Nhận biết',
+          points: (q as any).points !== undefined ? Number((q as any).points) : ((q.question_type || q.type) === 'tf' ? 1.0 : (q.question_type || q.type) === 'saq' ? 0.5 : 0.25),
           order_index: idx + 1
         }));
 
-        const { data: insertedQs, error: qsErr } = await supabase
+        let insertedQs: any[] | null = null;
+        const { data: resData, error: qsErr } = await supabase
           .from('questions')
           .insert(clonedQuestions)
           .select();
 
-        if (qsErr) throw qsErr;
+        if (qsErr && (qsErr.message?.includes('column') || qsErr.message?.includes('schema cache'))) {
+          const fallbackCloned = clonedQuestions.map(({ points, ...rest }) => rest);
+          const fallbackRes = await supabase.from('questions').insert(fallbackCloned).select();
+          if (fallbackRes.error) throw fallbackRes.error;
+          insertedQs = fallbackRes.data;
+        } else if (qsErr) {
+          throw qsErr;
+        } else {
+          insertedQs = resData;
+        }
+
         setLocalQuestions(prev => [...prev, ...(insertedQs || [])]);
       }
 
@@ -440,6 +453,7 @@ export default function TeacherExamsClient({
           correct_answer: q.correct_answer,
           explanation: q.explanation,
           level: q.level,
+          points: q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : (q.type === 'tf' ? 1.0 : q.type === 'saq' ? 0.5 : 0.25),
           order_index: idx + 1
         }));
 
@@ -508,6 +522,7 @@ export default function TeacherExamsClient({
           correct_answer: q.correct_answer,
           explanation: q.explanation,
           level: q.level,
+          points: q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : (q.type === 'tf' ? 1.0 : q.type === 'saq' ? 0.5 : 0.25),
           order_index: idx + 1
         }));
 
@@ -1571,7 +1586,8 @@ export default function TeacherExamsClient({
               ? q.correct_answer 
               : (q.correct_option_index !== undefined ? ['A', 'B', 'C', 'D'][q.correct_option_index] : 'A'),
             explanation: q.explanation || '',
-            level: (q.level || 'Nhận biết') as any
+            level: (q.level || 'Nhận biết') as any,
+            points: (q as any).points !== undefined && (q as any).points !== null ? Number((q as any).points) : ((q.question_type || q.type) === 'tf' ? 1.0 : (q.question_type || q.type) === 'saq' ? 0.5 : 0.25)
           }))}
           onSave={handleSaveExamModal}
         />

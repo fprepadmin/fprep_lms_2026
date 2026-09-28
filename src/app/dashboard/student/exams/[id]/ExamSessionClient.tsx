@@ -24,6 +24,7 @@ interface Question {
   correct_answer?: any;
   explanation?: string;
   level?: string;
+  points?: number;
   order_index: number;
 }
 
@@ -360,10 +361,16 @@ export default function ExamSessionClient({
     let part1Score = 0;
     let part2Score = 0;
     let part3Score = 0;
+    let totalMaxScore = 0;
 
-    // Chấm điểm chuẩn Bộ GD&ĐT 2026
+    // Chấm điểm chuẩn Bộ GD&ĐT 2026 & Trọng số điểm câu hỏi
     questions.forEach(q => {
       const qType = getQuestionType(q);
+      const qPoints = q.points !== undefined && q.points !== null && !isNaN(Number(q.points)) && Number(q.points) > 0
+        ? Number(q.points)
+        : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25);
+
+      totalMaxScore += qPoints;
       const userAns = answers[q.id];
       if (userAns === undefined || userAns === null) return;
 
@@ -374,8 +381,8 @@ export default function ExamSessionClient({
         
         if (String(userAns).toUpperCase().trim() === correctOpt) {
           correctCount++;
-          earnedPoints += 1;
-          part1Score += 1;
+          earnedPoints += qPoints;
+          part1Score += qPoints;
         }
       } else if (qType === 'tf') {
         let correctTarget: Record<string, boolean> = {};
@@ -393,23 +400,29 @@ export default function ExamSessionClient({
           if (userAns[k] === correctTarget[k]) matchingSubs++;
         });
 
-        if (matchingSubs === 4) { earnedPoints += 1.0; correctCount++; part2Score += 1.0; }
-        else if (matchingSubs === 3) { earnedPoints += 0.5; part2Score += 0.5; }
-        else if (matchingSubs === 2) { earnedPoints += 0.25; part2Score += 0.25; }
-        else if (matchingSubs === 1) { earnedPoints += 0.1; part2Score += 0.1; }
+        let qEarned = 0;
+        if (matchingSubs === 4) { qEarned = qPoints * 1.0; correctCount++; }
+        else if (matchingSubs === 3) { qEarned = qPoints * 0.5; }
+        else if (matchingSubs === 2) { qEarned = qPoints * 0.25; }
+        else if (matchingSubs === 1) { qEarned = qPoints * 0.1; }
+
+        earnedPoints += qEarned;
+        part2Score += qEarned;
       } else if (qType === 'saq') {
         const cleanUser = String(userAns).trim().replace(/,/g, '.').toLowerCase();
         const cleanCorrect = String(q.correct_answer || '').trim().replace(/,/g, '.').toLowerCase();
         if (cleanUser === cleanCorrect) {
           correctCount++;
-          earnedPoints += 1;
-          part3Score += 1;
+          earnedPoints += qPoints;
+          part3Score += qPoints;
         }
       }
     });
 
     const totalCount = questions.length;
-    const score = totalCount > 0 ? Math.round((earnedPoints / totalCount) * 10 * 10) / 10 : 0;
+    const score = totalMaxScore > 0 
+      ? Math.round((earnedPoints / totalMaxScore) * 10 * 100) / 100 
+      : 0;
     const timeSpent = (exam.duration_minutes || 45) * 60 - timeLeft;
 
     try {
@@ -627,19 +640,61 @@ export default function ExamSessionClient({
               const userAns = answers[q.id];
               const opts = parseOptions(q.options, qType);
               const isExplanationOpen = Boolean(expandedExplanations[q.id]);
+              const qPoints = q.points !== undefined && q.points !== null && !isNaN(Number(q.points)) && Number(q.points) > 0
+                ? Number(q.points)
+                : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25);
+
+              let earnedForQ = 0;
+              if (userAns !== undefined && userAns !== null) {
+                if (qType === 'mcq') {
+                  const correctOpt = q.correct_answer 
+                    ? String(q.correct_answer).toUpperCase().trim() 
+                    : (q.correct_option_index !== undefined ? ['A', 'B', 'C', 'D'][q.correct_option_index] : 'A');
+                  if (String(userAns).toUpperCase().trim() === correctOpt) earnedForQ = qPoints;
+                } else if (qType === 'tf') {
+                  let correctTarget: Record<string, boolean> = {};
+                  if (typeof q.correct_answer === 'object' && q.correct_answer !== null) correctTarget = q.correct_answer;
+                  else if (typeof q.correct_answer === 'string') {
+                    try { correctTarget = JSON.parse(q.correct_answer); } catch (e) {}
+                  }
+                  const subKeys = opts.length > 0 ? opts.map(o => o.id.toLowerCase()) : ['a', 'b', 'c', 'd'];
+                  let match = 0;
+                  subKeys.forEach(k => {
+                    if (userAns[k] === correctTarget[k]) match++;
+                  });
+                  if (match === 4) earnedForQ = qPoints * 1.0;
+                  else if (match === 3) earnedForQ = qPoints * 0.5;
+                  else if (match === 2) earnedForQ = qPoints * 0.25;
+                  else if (match === 1) earnedForQ = qPoints * 0.1;
+                } else if (qType === 'saq') {
+                  const cleanUser = String(userAns).trim().replace(/,/g, '.').toLowerCase();
+                  const cleanCorrect = String(q.correct_answer || '').trim().replace(/,/g, '.').toLowerCase();
+                  if (cleanUser === cleanCorrect) earnedForQ = qPoints;
+                }
+              }
+              earnedForQ = Math.round(earnedForQ * 100) / 100;
 
               return (
                 <div 
                   key={q.id || qIndex}
                   className="rounded-2xl border border-border p-5 sm:p-6 bg-card space-y-4 shadow-xs relative overflow-hidden"
                 >
-                  <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-3 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-black text-xs text-primary bg-primary/10 px-2.5 py-0.5 rounded-lg border border-primary/20">
                         Câu {q.order_index || qIndex + 1}
                       </span>
                       <span className="text-[10px] font-bold text-muted-foreground uppercase bg-muted/40 px-2 py-0.5 rounded border border-border">
                         {qType === 'mcq' ? 'Phần I: 4 Lựa chọn' : qType === 'tf' ? 'Phần II: Đúng/Sai' : 'Phần III: Trả lời ngắn'}
+                      </span>
+                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
+                        earnedForQ === qPoints && qPoints > 0
+                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                          : earnedForQ > 0
+                          ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-600'
+                      }`}>
+                        +{earnedForQ} / {qPoints} đ
                       </span>
                     </div>
 
@@ -808,8 +863,8 @@ export default function ExamSessionClient({
         className="flat-card p-5 sm:p-7 space-y-5 relative scroll-mt-24 transition-all border border-border shadow-xs hover:border-primary/40 bg-card rounded-2xl"
       >
         {/* Header câu hỏi */}
-        <div className="flex items-center justify-between border-b border-border/70 pb-3.5">
-          <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between border-b border-border/70 pb-3.5 flex-wrap gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span className="font-black text-xs sm:text-sm text-primary bg-primary/10 px-3 py-1 rounded-xl border border-primary/20">
               Câu {q.order_index || qIndex + 1}
             </span>
@@ -821,6 +876,9 @@ export default function ExamSessionClient({
                 {q.level}
               </span>
             )}
+            <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20">
+              {q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25)} điểm
+            </span>
           </div>
 
           <div className="flex items-center gap-2">

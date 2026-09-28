@@ -507,6 +507,7 @@ export default function TeacherDashboardClient({
           correct_answer: q.correct_answer,
           explanation: q.explanation,
           level: q.level,
+          points: q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : (q.type === 'tf' ? 1.0 : q.type === 'saq' ? 0.5 : 0.25),
           order_index: idx + 1
         }));
 
@@ -576,6 +577,7 @@ export default function TeacherDashboardClient({
           correct_answer: q.correct_answer,
           explanation: q.explanation,
           level: q.level,
+          points: q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : (q.type === 'tf' ? 1.0 : q.type === 'saq' ? 0.5 : 0.25),
           order_index: idx + 1
         }));
 
