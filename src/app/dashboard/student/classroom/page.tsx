@@ -77,7 +77,7 @@ export default async function ClassroomPage() {
   if (teacherIds.length > 0) {
     const [tpRes, auditRes] = await Promise.all([
       supabase.from('profiles').select('id, email, role').in('id', teacherIds),
-      supabase.from('audit_logs').select('target_id, new_values').in('target_id', teacherIds).order('created_at', { ascending: false })
+      supabase.from('audit_logs').select('target_id, new_values, old_values').order('created_at', { ascending: false }).limit(200)
     ]);
     teacherProfiles = tpRes.data || [];
     auditLogs = auditRes.data || [];

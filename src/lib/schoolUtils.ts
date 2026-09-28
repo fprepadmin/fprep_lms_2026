@@ -8,25 +8,8 @@ export interface TeacherInfo {
   role?: string;
 }
 
-// Bảng ánh xạ giáo viên mẫu / chuẩn FPT School
-export const KNOWN_TEACHERS: Record<string, { fullName: string; fptName: string }> = {
-  'chinh10@fpt.edu.vn': { fullName: 'Thầy Nguyễn Thế Chinh', fptName: 'CHINH10' },
-  'muoint@fpt.edu.vn': { fullName: 'Cô Trần Thị Mười', fptName: 'MUOINT' },
-  'duybt5@fpt.edu.vn': { fullName: 'Thầy Bùi Tiến Duy', fptName: 'DUYBT5' },
-  'duynva3@fpt.edu.vn': { fullName: 'Thầy Nguyễn Văn Anh Duy', fptName: 'DUYNVA3' },
-  'tamtt48@fpt.edu.vn': { fullName: 'Cô Trương Thị Tâm', fptName: 'TAMTT48' },
-  'hieutt85@fpt.edu.vn': { fullName: 'Thầy Trần Trung Hiếu', fptName: 'HIEUTT85' },
-  'phuongtm30@fpt.edu.vn': { fullName: 'Cô Trần Mai Phương', fptName: 'PHUONGTM30' },
-  'haonv24@fpt.edu.vn': { fullName: 'Thầy Nguyễn Văn Hảo', fptName: 'HAONV24' },
-  'nhanv5@fpt.edu.vn': { fullName: 'Thầy Nguyễn Văn Nhã', fptName: 'NHANV5' },
-  'nhilu@fpt.edu.vn': { fullName: 'Cô Lư Uyển Nhi', fptName: 'NHILU' },
-  'bythongtran@gmail.com': { fullName: 'Thầy Trần Ngọc Minh Thông', fptName: 'BYTHONGTRAN' },
-  'giaoviendemo.bgk@gmail.com': { fullName: 'Giáo Viên Khảo Thí BGK', fptName: 'GV_DEMO' },
-  'fprep.fschool@gmail.com': { fullName: 'Quản Trị Viên FPREP', fptName: 'ADMIN' }
-};
-
 /**
- * Lấy tên hiển thị và mã FPT của giáo viên
+ * Lấy tên hiển thị và mã FPT của giáo viên trực tiếp từ tài khoản / hồ sơ do Admin & Giáo viên thiết lập
  */
 export function getTeacherDisplayName(
   profileOrEmail?: string | { id?: string; email?: string; fullName?: string; fptName?: string } | null,
@@ -50,37 +33,34 @@ export function getTeacherDisplayName(
     directFptName = profileOrEmail.fptName || '';
   }
 
-  // 1. Kiểm tra nếu có sẵn fullName từ profile
-  if (directFullName && directFptName) {
-    return { fullName: directFullName, fptName: directFptName, email };
+  // 1. Kiểm tra nếu có sẵn fullName từ profile trực tiếp
+  if (directFullName && directFullName.trim()) {
+    return {
+      fullName: directFullName.trim(),
+      fptName: directFptName ? directFptName.trim() : (email ? email.split('@')[0].toUpperCase() : ''),
+      email
+    };
   }
 
-  // 2. Tra cứu trong auditLogs (nếu có)
-  if (auditLogs && (id || email)) {
+  // 2. Tra cứu trong auditLogs (Lấy bản ghi mới nhất do Admin / Giáo viên thiết lập trong Database)
+  if (auditLogs && auditLogs.length > 0 && (id || email)) {
     const log = auditLogs.find(
       (l: any) =>
-        (id && l.target_id === id && l.new_values?.fullName) ||
-        (email && l.new_values?.email?.toLowerCase() === email && l.new_values?.fullName)
+        ((id && l.target_id === id) || (email && (l.new_values?.email?.toLowerCase() === email || l.old_values?.email?.toLowerCase() === email))) &&
+        l.new_values?.fullName &&
+        typeof l.new_values.fullName === 'string' &&
+        l.new_values.fullName.trim() !== ''
     );
     if (log && log.new_values?.fullName) {
       return {
-        fullName: log.new_values.fullName,
-        fptName: log.new_values.fptName || email.split('@')[0].toUpperCase(),
+        fullName: log.new_values.fullName.trim(),
+        fptName: (log.new_values.fptName && log.new_values.fptName.trim()) || (email ? email.split('@')[0].toUpperCase() : ''),
         email
       };
     }
   }
 
-  // 3. Tra cứu trong bảng ánh xạ KNOWN_TEACHERS
-  if (KNOWN_TEACHERS[email]) {
-    return {
-      fullName: KNOWN_TEACHERS[email].fullName,
-      fptName: KNOWN_TEACHERS[email].fptName,
-      email
-    };
-  }
-
-  // 4. Fallback tự sinh tên đẹp từ email prefix
+  // 3. Fallback tự sinh tên từ email prefix nếu tài khoản chưa từng được cập nhật họ tên
   const username = email ? email.split('@')[0] : 'GV';
   const cleanName = username
     .replace(/[0-9_]/g, ' ')
@@ -90,7 +70,7 @@ export function getTeacherDisplayName(
     .join(' ');
 
   return {
-    fullName: `Thầy/Cô ${cleanName || username}`,
+    fullName: cleanName || username,
     fptName: username.toUpperCase(),
     email
   };
