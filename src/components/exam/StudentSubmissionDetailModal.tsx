@@ -53,7 +53,7 @@ interface StudentSubmissionDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   submission: SubmissionData | null;
-  questions: QuestionDetail[];
+  questions?: QuestionDetail[];
 }
 
 export function cleanOptionText(raw: any): string {
@@ -167,7 +167,7 @@ export default function StudentSubmissionDetailModal({
   isOpen,
   onClose,
   submission,
-  questions
+  questions = []
 }: StudentSubmissionDetailModalProps) {
   const [filterType, setFilterType] = useState<'all' | 'correct' | 'wrong'>('all');
   const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>({});

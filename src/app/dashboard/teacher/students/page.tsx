@@ -54,18 +54,24 @@ export default async function TeacherStudentsPage() {
     assignmentsRes,
     allClassesRes,
     allTeachersRes,
-    chaptersRes
+    chaptersRes,
+    allExamsRes,
+    examAssignmentsRes
   ] = await Promise.all([
     assignmentQuery,
     supabase.from('classes').select('*').order('name'),
     supabase.from('profiles').select('*').in('role', ['teacher', 'head_of_department']),
-    supabase.from('chapters').select('*, lessons(*)')
+    supabase.from('chapters').select('*, lessons(*)'),
+    supabase.from('exams').select('*, subjects(*)').order('created_at', { ascending: false }),
+    supabase.from('exam_assignments').select('*, classes(*)')
   ]);
 
   const assignments = assignmentsRes.data || [];
   const allClasses = allClassesRes.data || [];
   const allTeachers = allTeachersRes.data || [];
   const chapters = chaptersRes.data || [];
+  const allExams = allExamsRes.data || [];
+  const examAssignments = examAssignmentsRes.data || [];
 
   const classIds = assignments.map((a: any) => a.class_id).filter(Boolean);
   studentQuery = studentQuery.in('class_id', classIds.length > 0 ? classIds : [crypto.randomUUID()]);
@@ -128,6 +134,8 @@ export default async function TeacherStudentsPage() {
         teacherId={teacherId}
         userRole={userRole}
         allTeachers={allTeachers}
+        allExams={allExams}
+        examAssignments={examAssignments}
       />
     </div>
   );

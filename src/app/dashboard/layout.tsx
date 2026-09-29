@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { createSupabaseClient } from '@/lib/supabase';
 import { 
   GraduationCap, LogOut, BookOpen, User, 
@@ -293,9 +294,9 @@ export default function DashboardLayout({
             {currentMenu.map((item, idx) => {
               const isActive = pathname === item.path;
               return (
-                <button
+                <Link
                   key={idx}
-                  onClick={() => router.push(item.path)}
+                  href={item.path}
                   className={`whitespace-nowrap flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] lg:text-[14px] font-bold transition-all ${
                     isActive 
                       ? 'bg-[#e7f1ff] dark:bg-primary/20 text-primary border border-[#b6d4fe] dark:border-primary/40 shadow-sm' 
@@ -303,7 +304,7 @@ export default function DashboardLayout({
                   }`}
                 >
                   {item.icon} {item.name}
-                </button>
+                </Link>
               );
             })}
           </nav>
@@ -408,13 +409,14 @@ export default function DashboardLayout({
 
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
             {currentMenu.map((item, idx) => (
-              <button
+              <Link
                 key={idx}
-                onClick={() => { router.push(item.path); setSidebarOpen(false); }}
+                href={item.path}
+                onClick={() => setSidebarOpen(false)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors ${pathname === item.path ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}
               >
                 {item.icon} {item.name}
-              </button>
+              </Link>
             ))}
             
             <button

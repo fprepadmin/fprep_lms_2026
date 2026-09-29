@@ -8,11 +8,12 @@ import {
   Trash2, Edit3, Copy, Award, CheckCircle2, 
   Filter, Layers, BookOpen, AlertCircle, X, Sparkles,
   Send, Users, BarChart2, CheckSquare, ArrowRight,
-  Download, Eye, Calendar, FileText, Check, AlertTriangle
+  Download, Eye, Calendar, FileText, Check, AlertTriangle, Trophy
 } from 'lucide-react';
 import ExamEditorModal, { QuestionData } from '@/components/exam/ExamEditorModal';
 import AssignExamModal, { AssignmentPayload, ClassItem } from '@/components/exam/AssignExamModal';
 import StudentSubmissionDetailModal, { SubmissionData } from '@/components/exam/StudentSubmissionDetailModal';
+import StudentAttemptsModal, { StudentAttemptItem } from '@/components/exam/StudentAttemptsModal';
 import MathRenderer from '@/components/MathRenderer';
 
 interface Subject {
@@ -144,9 +145,19 @@ export default function TeacherExamsClient({
   const [selectedExamFilterId, setSelectedExamFilterId] = useState<string>('all');
   const [submissionStatusFilter, setSubmissionStatusFilter] = useState<'all' | 'submitted' | 'unsubmitted'>('all');
   const [studentSearchKeyword, setStudentSearchKeyword] = useState<string>('');
+  const [scoreMode, setScoreMode] = useState<'best' | 'all'>('best');
   
   // Xem chi tiết bài thi học sinh
   const [inspectingSubmission, setInspectingSubmission] = useState<SubmissionData | null>(null);
+
+  // Modal xem lịch sử tất cả các lần nộp của học sinh
+  const [viewingAttemptsData, setViewingAttemptsData] = useState<{
+    studentName: string;
+    studentMshs: string;
+    className: string;
+    examTitle: string;
+    attempts: StudentAttemptItem[];
+  } | null>(null);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -589,68 +600,177 @@ export default function TeacherExamsClient({
 
     if (activeExamReport) {
       // Chế độ 1: Xem cụ thể 1 đề thi
-      return classStudents.map(student => {
-        const studentResults = localExamResults.filter(
-          r => r.student_id === student.student_id && r.exam_id === activeExamReport.id
-        );
-        const bestResult = studentResults.length > 0
-          ? studentResults.reduce((prev, curr) => (Number(curr.score) > Number(prev.score) ? curr : prev), studentResults[0])
-          : null;
+      if (scoreMode === 'best') {
+        return classStudents.map(student => {
+          const studentResults = localExamResults
+            .filter(r => r.student_id === student.student_id && r.exam_id === activeExamReport.id)
+            .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
 
-        const assignmentInfo = localExamAssignments.find(
-          a => a.exam_id === activeExamReport.id && a.class_id === student.class_id
-        );
+          const bestResult = studentResults.length > 0
+            ? studentResults.reduce((prev, curr) => (Number(curr.score) > Number(prev.score) ? curr : prev), studentResults[0])
+            : null;
 
-        return {
-          student,
-          exam: activeExamReport,
-          result: bestResult,
-          isSubmitted: Boolean(bestResult),
-          assignment: assignmentInfo
-        };
-      });
+          const assignmentInfo = localExamAssignments.find(
+            a => a.exam_id === activeExamReport.id && a.class_id === student.class_id
+          );
+
+          return {
+            student,
+            exam: activeExamReport,
+            result: bestResult,
+            allAttempts: studentResults,
+            attemptsCount: studentResults.length,
+            isSubmitted: Boolean(bestResult),
+            assignment: assignmentInfo
+          };
+        });
+      } else {
+        // Hiện tất cả các lần nộp của từng học sinh
+        const items: any[] = [];
+        classStudents.forEach(student => {
+          const studentResults = localExamResults
+            .filter(r => r.student_id === student.student_id && r.exam_id === activeExamReport.id)
+            .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+
+          const assignmentInfo = localExamAssignments.find(
+            a => a.exam_id === activeExamReport.id && a.class_id === student.class_id
+          );
+
+          if (studentResults.length > 0) {
+            studentResults.forEach((res, idx) => {
+              items.push({
+                student,
+                exam: activeExamReport,
+                result: res,
+                allAttempts: studentResults,
+                attemptsCount: studentResults.length,
+                attemptIndex: studentResults.length - idx,
+                isSubmitted: true,
+                assignment: assignmentInfo
+              });
+            });
+          } else {
+            items.push({
+              student,
+              exam: activeExamReport,
+              result: null,
+              allAttempts: [],
+              attemptsCount: 0,
+              isSubmitted: false,
+              assignment: assignmentInfo
+            });
+          }
+        });
+        return items;
+      }
     }
 
     // Chế độ 2: Xem tất cả đề thi (selectedExamFilterId === 'all')
-    // Lấy toàn bộ bài thi đã nộp của các học sinh thuộc lớp đang chọn
-    const resultsForClass = localExamResults
-      .filter(r => studentIds.has(r.student_id))
-      .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+    if (scoreMode === 'best') {
+      const resultsForClass = localExamResults.filter(r => studentIds.has(r.student_id));
+      const studentExamMap = new Map<string, any[]>();
 
-    const submittedItems = resultsForClass.map(r => {
-      const student = studentMap.get(r.student_id)!;
-      const exam = localExams.find(e => e.id === r.exam_id) || {
-        id: r.exam_id,
-        title: 'Đề kiểm tra',
-        duration_minutes: 45,
-        subjects: undefined
-      };
-      const assignmentInfo = localExamAssignments.find(
-        a => a.exam_id === r.exam_id && a.class_id === student.class_id
-      );
+      resultsForClass.forEach(r => {
+        const key = `${r.student_id}_${r.exam_id}`;
+        if (!studentExamMap.has(key)) {
+          studentExamMap.set(key, []);
+        }
+        studentExamMap.get(key)!.push(r);
+      });
 
-      return {
-        student,
-        exam,
-        result: r,
-        isSubmitted: true,
-        assignment: assignmentInfo
-      };
-    });
+      const submittedItems: any[] = [];
+      studentExamMap.forEach((attempts, key) => {
+        const [studentId, examId] = key.split('_');
+        const student = studentMap.get(studentId);
+        if (!student) return;
 
-    // Danh sách các học sinh chưa làm bài nào
-    const submittedStudentIds = new Set(resultsForClass.map(r => r.student_id));
-    const unsubmittedStudents = classStudents
-      .filter(s => !submittedStudentIds.has(s.student_id))
-      .map(student => ({
-        student,
-        exam: null as any,
-        result: null as any,
-        isSubmitted: false,
-        assignment: undefined
-      }));
+        const exam = localExams.find(e => e.id === examId) || {
+          id: examId,
+          title: 'Đề kiểm tra',
+          duration_minutes: 45,
+          subjects: undefined
+        };
 
-    return [...submittedItems, ...unsubmittedStudents];
+        const bestResult = attempts.reduce((prev, curr) => (Number(curr.score) > Number(prev.score) ? curr : prev), attempts[0]);
+        const assignmentInfo = localExamAssignments.find(
+          a => a.exam_id === examId && a.class_id === student.class_id
+        );
+
+        submittedItems.push({
+          student,
+          exam,
+          result: bestResult,
+          allAttempts: attempts,
+          attemptsCount: attempts.length,
+          isSubmitted: true,
+          assignment: assignmentInfo
+        });
+      });
+
+      // Sắp xếp bài nộp mới nhất lên đầu
+      submittedItems.sort((a, b) => new Date(b.result?.created_at || '').getTime() - new Date(a.result?.created_at || '').getTime());
+
+      // Thêm các học sinh chưa làm bài nào
+      const submittedStudentIds = new Set(resultsForClass.map(r => r.student_id));
+      const unsubmittedStudents = classStudents
+        .filter(s => !submittedStudentIds.has(s.student_id))
+        .map(student => ({
+          student,
+          exam: null as any,
+          result: null as any,
+          allAttempts: [],
+          attemptsCount: 0,
+          isSubmitted: false,
+          assignment: undefined
+        }));
+
+      return [...submittedItems, ...unsubmittedStudents];
+    } else {
+      // Hiện toàn bộ bài nộp rời rạc
+      const resultsForClass = localExamResults
+        .filter(r => studentIds.has(r.student_id))
+        .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+
+      const submittedItems = resultsForClass.map(r => {
+        const student = studentMap.get(r.student_id)!;
+        const exam = localExams.find(e => e.id === r.exam_id) || {
+          id: r.exam_id,
+          title: 'Đề kiểm tra',
+          duration_minutes: 45,
+          subjects: undefined
+        };
+        const assignmentInfo = localExamAssignments.find(
+          a => a.exam_id === r.exam_id && a.class_id === student.class_id
+        );
+
+        const studentExamResults = localExamResults.filter(res => res.student_id === r.student_id && res.exam_id === r.exam_id);
+
+        return {
+          student,
+          exam,
+          result: r,
+          allAttempts: studentExamResults,
+          attemptsCount: studentExamResults.length,
+          isSubmitted: true,
+          assignment: assignmentInfo
+        };
+      });
+
+      const submittedStudentIds = new Set(resultsForClass.map(r => r.student_id));
+      const unsubmittedStudents = classStudents
+        .filter(s => !submittedStudentIds.has(s.student_id))
+        .map(student => ({
+          student,
+          exam: null as any,
+          result: null as any,
+          allAttempts: [],
+          attemptsCount: 0,
+          isSubmitted: false,
+          assignment: undefined
+        }));
+
+      return [...submittedItems, ...unsubmittedStudents];
+    }
   })();
 
   // Lọc học sinh theo trạng thái & từ khóa
@@ -1243,39 +1363,67 @@ export default function TeacherExamsClient({
               </div>
 
               {/* Bộ lọc bảng điểm */}
-              <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5 overflow-x-auto">
-                  <span className="text-xs font-bold text-muted-foreground uppercase mr-1">Trạng thái:</span>
-                  <button
-                    onClick={() => setSubmissionStatusFilter('all')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      submissionStatusFilter === 'all'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'bg-muted/40 hover:bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    Tất cả ({totalClassStudents})
-                  </button>
-                  <button
-                    onClick={() => setSubmissionStatusFilter('submitted')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      submissionStatusFilter === 'submitted'
-                        ? 'bg-green-500 text-white shadow-sm'
-                        : 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
-                    }`}
-                  >
-                    Đã nộp bài ({submittedCount})
-                  </button>
-                  <button
-                    onClick={() => setSubmissionStatusFilter('unsubmitted')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      submissionStatusFilter === 'unsubmitted'
-                        ? 'bg-red-500 text-white shadow-sm'
-                        : 'bg-red-500/10 text-red-600 hover:bg-red-500/20'
-                    }`}
-                  >
-                    Chưa làm ({unsubmittedCount})
-                  </button>
+              <div className="flat-card flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                    <span className="text-xs font-bold text-muted-foreground uppercase mr-1">Trạng thái:</span>
+                    <button
+                      onClick={() => setSubmissionStatusFilter('all')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        submissionStatusFilter === 'all'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'bg-muted/40 hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      Tất cả ({totalClassStudents})
+                    </button>
+                    <button
+                      onClick={() => setSubmissionStatusFilter('submitted')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        submissionStatusFilter === 'submitted'
+                          ? 'bg-green-500 text-white shadow-sm'
+                          : 'bg-green-500/10 text-green-600 hover:bg-green-500/20'
+                      }`}
+                    >
+                      Đã nộp bài ({submittedCount})
+                    </button>
+                    <button
+                      onClick={() => setSubmissionStatusFilter('unsubmitted')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        submissionStatusFilter === 'unsubmitted'
+                          ? 'bg-red-500 text-white shadow-sm'
+                          : 'bg-red-500/10 text-red-600 hover:bg-red-500/20'
+                      }`}
+                    >
+                      Chưa làm ({unsubmittedCount})
+                    </button>
+                  </div>
+
+                  {/* Chế độ hiển thị điểm: Điểm cao nhất vs Tất cả lượt nộp */}
+                  <div className="flex items-center gap-1 p-0.5 bg-muted/60 rounded-xl border border-border">
+                    <button
+                      onClick={() => setScoreMode('best')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                        scoreMode === 'best'
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      title="Học sinh làm nhiều lần thì hiện điểm cao nhất và cho phép xem các lần nộp"
+                    >
+                      <Trophy className="h-3 w-3" /> Điểm cao nhất
+                    </button>
+                    <button
+                      onClick={() => setScoreMode('all')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                        scoreMode === 'all'
+                          ? 'bg-primary text-primary-foreground shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                      title="Hiển thị tất cả các lượt nộp bài rời rạc"
+                    >
+                      <Layers className="h-3 w-3" /> Tất cả lượt nộp
+                    </button>
+                  </div>
                 </div>
 
                 {/* Tìm kiếm học sinh */}
@@ -1286,7 +1434,7 @@ export default function TeacherExamsClient({
                     placeholder="Tìm tên hoặc MSHS..."
                     value={studentSearchKeyword}
                     onChange={(e) => setStudentSearchKeyword(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 rounded-lg border border-border bg-background text-xs font-semibold text-foreground focus:outline-none w-56"
+                    className="pl-8 pr-3 py-1.5 rounded-lg border border-border bg-background text-xs font-semibold text-foreground focus:outline-none w-full sm:w-56"
                   />
                 </div>
               </div>
@@ -1298,9 +1446,16 @@ export default function TeacherExamsClient({
                     <ClipboardList className="h-4 w-4 text-primary" /> 
                     Sổ Điểm Khảo Thí: <span className="text-primary">{activeExamReport ? activeExamReport.title : 'Tất cả đề thi đã giao'}</span> &bull; <span>{targetClass ? `Lớp ${targetClass.name}` : (selectedClassId === 'all' ? 'Tất cả các lớp' : 'Lớp đã chọn')}</span>
                   </h3>
-                  <span className="text-xs text-muted-foreground font-semibold">
-                    Đang hiển thị {filteredSubmissions.length} mục
-                  </span>
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <span className="text-muted-foreground">
+                      Đang hiển thị {filteredSubmissions.length} mục
+                    </span>
+                    {scoreMode === 'best' && (
+                      <span className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded-full text-[10px] font-black">
+                        Chế độ Điểm Cao Nhất
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -1333,6 +1488,7 @@ export default function TeacherExamsClient({
                           const score = item.result ? Number(item.result.score) : null;
                           const studentClass = item.student.classes?.name || availableClasses.find(c => c.id === item.student.class_id)?.name || targetClass?.name || '12';
                           const examTitle = item.exam?.title || activeExamReport?.title || 'Đề thi';
+                          const attemptsCount = item.attemptsCount || (item.allAttempts?.length || (item.result ? 1 : 0));
 
                           return (
                             <tr key={item.result ? item.result.id : `${item.student.student_id}_${idx}`} className="hover:bg-muted/10 transition-colors font-medium">
@@ -1349,9 +1505,16 @@ export default function TeacherExamsClient({
                               </td>
                               <td className="p-3.5">
                                 {hasSubmitted ? (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                                    <CheckCircle2 className="h-3 w-3" /> Đã hoàn thành
-                                  </span>
+                                  <div className="space-y-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                                      <CheckCircle2 className="h-3 w-3" /> Đã hoàn thành
+                                    </span>
+                                    {attemptsCount > 1 && (
+                                      <span className="block text-[10px] font-extrabold text-amber-700 dark:text-amber-300">
+                                        Đã làm {attemptsCount} lần
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-muted-foreground bg-muted border border-border px-2.5 py-0.5 rounded-full whitespace-nowrap">
                                     <Clock className="h-3 w-3" /> Chưa làm bài
@@ -1360,15 +1523,24 @@ export default function TeacherExamsClient({
                               </td>
                               <td className="p-3.5">
                                 {hasSubmitted && score !== null ? (
-                                  <span className={`text-sm font-black px-2 py-0.5 rounded whitespace-nowrap ${
-                                    score >= 8.0 
-                                      ? 'text-green-700 bg-green-500/10 dark:text-green-300' 
-                                      : score >= 5.0 
-                                      ? 'text-blue-700 bg-blue-500/10 dark:text-blue-300' 
-                                      : 'text-red-700 bg-red-500/10 dark:text-red-300'
-                                  }`}>
-                                    {score} / 10
-                                  </span>
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={`text-sm font-black px-2 py-0.5 rounded whitespace-nowrap ${
+                                        score >= 8.0 
+                                          ? 'text-green-700 bg-green-500/10 dark:text-green-300' 
+                                          : score >= 5.0 
+                                          ? 'text-blue-700 bg-blue-500/10 dark:text-blue-300' 
+                                          : 'text-red-700 bg-red-500/10 dark:text-red-300'
+                                      }`}>
+                                        {score} / 10
+                                      </span>
+                                      {scoreMode === 'best' && attemptsCount > 1 && (
+                                        <span className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[9px] font-black uppercase px-1.5 py-0.5 rounded flex items-center gap-0.5 whitespace-nowrap" title="Điểm cao nhất trong các lần nộp">
+                                          <Trophy className="h-2.5 w-2.5" /> Cao nhất
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 ) : (
                                   <span className="text-muted-foreground italic">—</span>
                                 )}
@@ -1402,12 +1574,37 @@ export default function TeacherExamsClient({
                               </td>
                               <td className="p-3.5 text-right whitespace-nowrap">
                                 {hasSubmitted ? (
-                                  <button
-                                    onClick={() => handleInspectStudentTest(item)}
-                                    className="btn-secondary text-[11px] py-1 px-2.5 font-bold inline-flex items-center gap-1 text-primary border-primary/20 hover:bg-primary/5"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" /> Xem bài làm
-                                  </button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => handleInspectStudentTest(item)}
+                                      className="btn-secondary text-[11px] py-1 px-2.5 font-bold inline-flex items-center gap-1 text-primary border-primary/20 hover:bg-primary/5"
+                                      title={scoreMode === 'best' && attemptsCount > 1 ? "Xem bài làm có điểm cao nhất" : "Xem bài làm chi tiết"}
+                                    >
+                                      <Eye className="h-3.5 w-3.5" /> Xem bài làm
+                                    </button>
+
+                                    {attemptsCount > 1 && (
+                                      <button
+                                        onClick={() => {
+                                          const examId = item.result?.exam_id || item.exam?.id || activeExamReport?.id;
+                                          const examObj = item.exam || localExams.find(e => e.id === examId) || activeExamReport;
+                                          const currentStudentClass = item.student.classes?.name || availableClasses.find(c => c.id === item.student.class_id)?.name || targetClass?.name || '12';
+                                          
+                                          setViewingAttemptsData({
+                                            studentName: item.student.full_name,
+                                            studentMshs: item.student.mshs,
+                                            className: currentStudentClass,
+                                            examTitle: examObj?.title || 'Đề thi',
+                                            attempts: item.allAttempts || []
+                                          });
+                                        }}
+                                        className="btn-secondary text-[11px] py-1 px-2.5 font-bold inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 shadow-2xs"
+                                        title="Xem tất cả các lần nộp của học sinh này"
+                                      >
+                                        <Trophy className="h-3.5 w-3.5" /> Xem các lần nộp ({attemptsCount})
+                                      </button>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="text-[11px] text-muted-foreground italic">Chưa có bài</span>
                                 )}
@@ -1602,6 +1799,52 @@ export default function TeacherExamsClient({
           onClose={() => setInspectingSubmission(null)}
           submission={inspectingSubmission}
           questions={localQuestions.filter(q => q.exam_id === inspectingSubmission.exam_id)}
+        />
+      )}
+
+      {/* ==================================================== */}
+      {/* MODAL 5: XEM LỊCH SỬ TẤT CẢ CÁC LẦN NỘP BÀI CỦA HỌC SINH */}
+      {/* ==================================================== */}
+      {mounted && viewingAttemptsData && (
+        <StudentAttemptsModal
+          isOpen={Boolean(viewingAttemptsData)}
+          onClose={() => setViewingAttemptsData(null)}
+          studentName={viewingAttemptsData.studentName}
+          studentMshs={viewingAttemptsData.studentMshs}
+          className={viewingAttemptsData.className}
+          examTitle={viewingAttemptsData.examTitle}
+          attempts={viewingAttemptsData.attempts}
+          onSelectAttemptToInspect={(attempt) => {
+            const examId = attempt.exam_id;
+            const examObj = localExams.find(e => e.id === examId) || {
+              id: examId,
+              title: viewingAttemptsData.examTitle,
+              duration_minutes: 45
+            };
+
+            const payload: SubmissionData = {
+              id: attempt.id,
+              student_id: attempt.student_id,
+              exam_id: examId,
+              score: Number(attempt.score),
+              correct_answers: Number(attempt.correct_answers),
+              total_questions: Number(attempt.total_questions || 0),
+              time_spent_seconds: Number(attempt.time_spent_seconds || 0),
+              created_at: attempt.created_at,
+              answers: attempt.answers,
+              student: {
+                full_name: viewingAttemptsData.studentName,
+                mshs: viewingAttemptsData.studentMshs,
+                classes: { name: viewingAttemptsData.className }
+              },
+              exams: {
+                title: examObj.title,
+                duration_minutes: examObj.duration_minutes || 45,
+                subjects: (examObj as any)?.subjects
+              }
+            };
+            setInspectingSubmission(payload);
+          }}
         />
       )}
 
