@@ -160,7 +160,7 @@ export default function ClassroomClient({
 
             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-muted-foreground">
               <span className="flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-primary" /> Niên khóa: <strong className="text-foreground">{classInfo.academic_year || '2026-2027'}</strong>
+                <Calendar className="h-4 w-4 text-primary" /> Niên khóa: <strong className="text-foreground">{classInfo.academic_year || '2024-2027'}</strong>
               </span>
               <span>&bull;</span>
               <span>
@@ -615,7 +615,7 @@ export default function ClassroomClient({
                 Sĩ số Lớp {classInfo.name}: {classmates.length} Học sinh
               </h3>
               <p className="text-[11px] text-muted-foreground font-semibold m-0 mt-0.5">
-                Danh sách học sinh chính thức được phân bổ vào lớp niên khóa {classInfo.academic_year || '2026-2027'}
+                Danh sách học sinh chính thức được phân bổ vào lớp niên khóa {classInfo.academic_year || '2024-2027'}
               </p>
             </div>
 

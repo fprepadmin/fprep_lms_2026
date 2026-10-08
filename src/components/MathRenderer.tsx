@@ -17,10 +17,10 @@ export default function MathRenderer({ content, className = '' }: MathRendererPr
 
   // Xử lý các khối cảnh báo GitHub Alert [!NOTE], [!IMPORTANT], [!WARNING], [!TIP]
   const cleanContent = String(content)
-    .replace(/^>\s*\[!NOTE\]/gim, '> **💡 Lưu ý:**')
-    .replace(/^>\s*\[!IMPORTANT\]/gim, '> **⭐ Quan trọng:**')
-    .replace(/^>\s*\[!WARNING\]/gim, '> **⚠️ Chú ý:**')
-    .replace(/^>\s*\[!TIP\]/gim, '> **💡 Mẹo:**');
+    .replace(/^>\s*\[!NOTE\]/gim, '> **Lưu ý:**')
+    .replace(/^>\s*\[!IMPORTANT\]/gim, '> **Quan trọng:**')
+    .replace(/^>\s*\[!WARNING\]/gim, '> **Chú ý:**')
+    .replace(/^>\s*\[!TIP\]/gim, '> **Mẹo:**');
 
   return (
     <div className={`markdown-body math-content font-sans leading-relaxed text-foreground break-words ${className}`}>

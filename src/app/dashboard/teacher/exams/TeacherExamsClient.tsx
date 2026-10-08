@@ -1691,7 +1691,7 @@ export default function TeacherExamsClient({
                   </div>
                 )}
                 <p className="text-[10px] text-muted-foreground font-medium">
-                  💡 Thầy/Cô chỉ có thể khởi tạo đề thi cho môn học được phân công giảng dạy.
+                  Thầy/Cô chỉ có thể khởi tạo đề thi cho môn học được phân công giảng dạy.
                 </p>
               </div>
 

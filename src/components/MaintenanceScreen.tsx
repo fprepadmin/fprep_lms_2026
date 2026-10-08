@@ -6,7 +6,7 @@ import {
   Wrench, Shield, Server, Database, 
   Clock, Mail, AlertTriangle, LogIn, 
   Sparkles, CheckCircle2, Lock, ChevronRight,
-  Layers, RefreshCw
+  Layers, RefreshCw, X
 } from 'lucide-react';
 import Footer from './Footer';
 
@@ -168,7 +168,7 @@ export default function MaintenanceScreen({ onAdminBypass }: MaintenanceScreenPr
               onClick={() => setShowAdminModal(false)}
               className="absolute top-4 right-4 text-muted-foreground hover:text-foreground text-sm font-bold p-2"
             >
-              ✕
+              <X className="h-4 w-4" />
             </button>
 
             <div className="text-center space-y-2">

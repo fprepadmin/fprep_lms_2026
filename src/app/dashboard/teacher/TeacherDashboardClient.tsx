@@ -1586,17 +1586,17 @@ export default function TeacherDashboardClient({
                                       <div className="flex items-center gap-2 mt-1.5 pl-3">
                                         {hasTheory && (
                                           <span className="text-[9px] font-bold text-green-600 dark:text-green-400 bg-green-500/10 px-1.5 py-0.2 rounded border border-green-500/20">
-                                            📝 Lý thuyết
+                                            Lý thuyết
                                           </span>
                                         )}
                                         {matCount > 0 && (
                                           <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/20">
-                                            📁 {matCount} tài liệu
+                                            {matCount} tài liệu
                                           </span>
                                         )}
                                         {examCount > 0 && (
                                           <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
-                                            🎯 {examCount} bài tập
+                                            {examCount} bài tập
                                           </span>
                                         )}
                                       </div>
@@ -2226,10 +2226,10 @@ export default function TeacherDashboardClient({
                   onChange={(e) => setMaterialModal({ ...materialModal, material_type: e.target.value as any })}
                   className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold text-primary"
                 >
-                  <option value="video">🎥 Video bài giảng (YouTube - Hỗ trợ xem trực tiếp)</option>
-                  <option value="slide">📊 Slide trình chiếu (Google Slides / Canva)</option>
-                  <option value="pdf">📄 Tài liệu đọc (Google Drive / PDF Online)</option>
-                  <option value="attachment">📎 File đính kèm / Khác</option>
+                  <option value="video">Video bài giảng (YouTube - Hỗ trợ xem trực tiếp)</option>
+                  <option value="slide">Slide trình chiếu (Google Slides / Canva)</option>
+                  <option value="pdf">Tài liệu đọc (Google Drive / PDF Online)</option>
+                  <option value="attachment">File đính kèm / Khác</option>
                 </select>
               </div>
 
@@ -2244,8 +2244,8 @@ export default function TeacherDashboardClient({
                 />
                 <p className="text-[10px] text-muted-foreground font-medium">
                   {materialModal.material_type === 'video' 
-                    ? '💡 Hỗ trợ mọi link YouTube (hệ thống sẽ tự động chuyển thành video phát ngay trong ứng dụng).'
-                    : '💡 Hãy đảm bảo đường dẫn Google Drive/Slide đã được cài đặt quyền "Bất kỳ ai có đường liên kết đều có thể xem".'}
+                    ? 'Hỗ trợ mọi link YouTube (hệ thống sẽ tự động chuyển thành video phát ngay trong ứng dụng).'
+                    : 'Hãy đảm bảo đường dẫn Google Drive/Slide đã được cài đặt quyền "Bất kỳ ai có đường liên kết đều có thể xem".'}
                 </p>
               </div>
             </div>

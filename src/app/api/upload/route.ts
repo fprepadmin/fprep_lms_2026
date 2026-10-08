@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       const cloudResult = await cloudRes.json();
 
       if (!cloudRes.ok) {
-        console.error('❌ Lỗi Cloudinary API:', cloudResult);
+        console.error('[Cloudinary API Error]:', cloudResult);
         return NextResponse.json(
           { error: cloudResult.error?.message || 'Lỗi từ dịch vụ Cloudinary' },
           { status: cloudRes.status }
@@ -83,13 +83,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. NẾU CHƯA CẤU HÌNH CLOUDINARY -> TẠM THỜI TRẢ VỀ BASE64 TỐI ƯU VÀ KÈM HƯỚNG DẪN
-    console.warn('⚠️ Chưa cấu hình biến môi trường CLOUDINARY_CLOUD_NAME/CLOUDINARY_API_KEY trong .env.local');
+    console.warn('[Cloudinary Warning] Chưa cấu hình biến môi trường CLOUDINARY_CLOUD_NAME/CLOUDINARY_API_KEY trong .env.local');
     return NextResponse.json({
       url: base64Data,
       warning: 'Chưa cấu hình Cloudinary credentials trong .env.local, đang lưu tạm định dạng Base64.',
     });
   } catch (error: any) {
-    console.error('❌ Lỗi xử lý upload:', error);
+    console.error('[Upload Error]:', error);
     return NextResponse.json(
       { error: error.message || 'Lỗi máy chủ trong quá trình tải ảnh' },
       { status: 500 }

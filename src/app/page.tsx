@@ -212,7 +212,7 @@ export default function LandingPage() {
     },
     {
       q: "Tôi cần hỗ trợ kỹ thuật hoặc đóng góp ý kiến thì liên hệ ai?",
-      a: "Bạn có thể gửi tin nhắn tại biểu mẫu hỗ trợ ở cuối trang hoặc gửi email trực tiếp cho đội ngũ kỹ thuật qua địa chỉ bythongtran@gmail.com để được giải đáp trong vòng 24 giờ."
+      a: "Bạn có thể gửi tin nhắn tại biểu mẫu hỗ trợ ở cuối trang hoặc liên hệ với Ban Quản trị qua cổng hỗ trợ học tập để được giải đáp trong vòng 24 giờ."
     }
   ];
 
@@ -461,7 +461,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Chuỗi học tập</div>
-                    <div className="text-xs font-black text-foreground">7 ngày liên tục 🔥</div>
+                    <div className="text-xs font-black text-foreground">7 ngày liên tục</div>
                   </div>
                 </div>
 
@@ -472,7 +472,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <div className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">Điểm TB Luyện Đề</div>
-                    <div className="text-xs font-black text-green-600 dark:text-green-400">9.4 / 10 Điểm ⭐</div>
+                    <div className="text-xs font-black text-green-600 dark:text-green-400">9.4 / 10 Điểm</div>
                   </div>
                 </div>
 
@@ -992,13 +992,9 @@ export default function LandingPage() {
                 </p>
 
                 <div className="pt-2 border-t border-border/60 flex items-center justify-center sm:justify-start gap-2">
-                  <Mail className="h-3.5 w-3.5 text-primary" />
-                  <a 
-                    href="mailto:bythongtran@gmail.com" 
-                    className="text-xs font-extrabold text-foreground hover:text-primary transition-colors"
-                  >
-                    bythongtran@gmail.com
-                  </a>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
+                    <GraduationCap className="h-3.5 w-3.5 text-primary" /> THPT FPT Cần Thơ
+                  </span>
                 </div>
               </div>
             </div>
@@ -1147,10 +1143,10 @@ export default function LandingPage() {
                     <Mail className="h-5 w-5" />
                   </div>
                   <div>
-                    <span className="block text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Email hỗ trợ kỹ thuật trực tiếp</span>
-                    <a href="mailto:bythongtran@gmail.com" className="font-extrabold text-sm text-foreground hover:text-primary transition-colors">
-                      bythongtran@gmail.com
-                    </a>
+                    <span className="block text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Kênh hỗ trợ trực tuyến</span>
+                    <span className="font-extrabold text-sm text-foreground">
+                      Cổng hỗ trợ học tập F-PREP
+                    </span>
                   </div>
                 </div>
                 
@@ -1170,10 +1166,10 @@ export default function LandingPage() {
             <div className="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-sm space-y-4">
               <h3 className="font-extrabold font-heading text-lg text-foreground m-0">Gửi Tin Nhắn Trực Tiếp</h3>
               <p className="text-xs text-muted-foreground font-semibold m-0">
-                Minh Thông và ban quản trị FPREP sẽ phản hồi thắc mắc qua email của bạn trong vòng 24 giờ.
+                Ban quản trị F-PREP sẽ tiếp nhận và phản hồi thắc mắc qua tài khoản học tập của bạn.
               </p>
 
-              <form onSubmit={(e) => { e.preventDefault(); alert('Cảm ơn bạn! Yêu cầu hỗ trợ đã được gửi đến ban quản trị F-PREP (bythongtran@gmail.com).'); }} className="space-y-3.5">
+              <form onSubmit={(e) => { e.preventDefault(); alert('Cảm ơn bạn! Yêu cầu hỗ trợ đã được gửi thành công đến ban quản trị F-PREP.'); }} className="space-y-3.5">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <label htmlFor="name" className="text-[11px] font-extrabold text-muted-foreground uppercase">Họ và tên</label>

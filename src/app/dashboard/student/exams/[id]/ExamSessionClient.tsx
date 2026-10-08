@@ -341,7 +341,7 @@ export default function ExamSessionClient({
 
   // Nộp bài tự động khi hết giờ
   const handleAutoSubmit = async () => {
-    alert('⏰ Đã hết thời gian làm bài! Hệ thống tự động nộp bài thi của bạn.');
+    alert('Đã hết thời gian làm bài! Hệ thống tự động nộp bài thi của bạn.');
     await submitTest(true);
   };
 
@@ -1524,8 +1524,8 @@ export default function ExamSessionClient({
             {/* Cảnh báo câu chưa làm nếu có */}
             {unansweredQuestions.length > 0 && (
               <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 space-y-2">
-                <span className="text-xs font-bold text-rose-600 dark:text-rose-400 block">
-                  ⚠️ Bạn còn {unansweredQuestions.length} câu chưa hoàn thành:
+                <span className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 shrink-0" /> Bạn còn {unansweredQuestions.length} câu chưa hoàn thành:
                 </span>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
                   {unansweredQuestions.map(q => {

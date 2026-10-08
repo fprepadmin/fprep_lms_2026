@@ -130,12 +130,12 @@ export default function TeacherStudentsClient({
   const [addingClass, setAddingClass] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newClassGroup, setNewClassGroup] = useState<'T' | 'X' | 'K'>('T');
-  const [newClassYear, setNewClassYear] = useState('2026-2027');
+  const [newClassYear, setNewClassYear] = useState('2024-2027');
 
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [editClassName, setEditClassName] = useState('');
   const [editClassGroup, setEditClassGroup] = useState<'T' | 'X' | 'K'>('T');
-  const [editClassYear, setEditClassYear] = useState('2026-2027');
+  const [editClassYear, setEditClassYear] = useState('2024-2027');
 
   // Form Thêm học sinh
   const [addingStudent, setAddingStudent] = useState(false);

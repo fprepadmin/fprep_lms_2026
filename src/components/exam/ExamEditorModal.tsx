@@ -958,7 +958,7 @@ export default function ExamEditorModal({
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-foreground">
-                        4 Phương án lựa chọn (Click chọn nút tròn để chỉ định đáp án đúng, click icon 🖼️ để tải ảnh):
+                        4 Phương án lựa chọn (Click chọn nút tròn để chỉ định đáp án đúng, click icon Ảnh để tải ảnh):
                       </label>
                       <input 
                         type="file" 
@@ -1014,7 +1014,7 @@ export default function ExamEditorModal({
                                     await handlePasteImageOption(optIdx, file);
                                   }
                                 }}
-                                placeholder={`Nhập nội dung phương án ${optId}... (hỗ trợ $công thức$, dán ảnh Ctrl+V hoặc bấm 🖼️)`}
+                                placeholder={`Nhập nội dung phương án ${optId}... (hỗ trợ $công thức$, dán ảnh Ctrl+V hoặc bấm icon ảnh)`}
                                 className="flex-1 rounded-xl border border-border bg-background px-3.5 py-2 font-sans text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
                               />
 
@@ -1045,7 +1045,7 @@ export default function ExamEditorModal({
                 {currentQ.type === 'tf' && (
                   <div className="space-y-3">
                     <label className="text-xs font-bold text-foreground">
-                      4 Mệnh đề Đúng / Sai (a, b, c, d) - Có thể bấm icon 🖼️ hoặc bấm Ctrl+V để dán ảnh:
+                      4 Mệnh đề Đúng / Sai (a, b, c, d) - Có thể bấm icon Ảnh hoặc bấm Ctrl+V để dán ảnh:
                     </label>
 
                     <div className="grid gap-3">
@@ -1076,7 +1076,7 @@ export default function ExamEditorModal({
                                     await handlePasteImageOption(subIdx, file);
                                   }
                                 }}
-                                placeholder={`Nội dung ý ${subId}... (hỗ trợ $công thức$, dán ảnh Ctrl+V hoặc bấm 🖼️)`}
+                                placeholder={`Nội dung ý ${subId}... (hỗ trợ $công thức$, dán ảnh Ctrl+V hoặc bấm icon ảnh)`}
                                 className="flex-1 rounded-xl border border-border bg-background px-3.5 py-2 font-sans text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 w-full"
                               />
 
@@ -1693,7 +1693,7 @@ export default function ExamEditorModal({
                   className="w-full rounded-xl border border-border bg-background p-3 font-mono text-xs focus:outline-none"
                 />
                 <p className="text-[11px] text-muted-foreground italic m-0">
-                  💡 Hệ thống FPREP tự động xử lý các lỗi thường gặp từ ChatGPT/Gemini: lỗi gạch chéo LaTeX (<code className="text-primary font-mono">\frac, \alpha, \sqrt</code>), dấu phẩy thừa, xuống dòng thô và markdown.
+                  Hệ thống FPREP tự động xử lý các lỗi thường gặp từ ChatGPT/Gemini: lỗi gạch chéo LaTeX (<code className="text-primary font-mono">\frac, \alpha, \sqrt</code>), dấu phẩy thừa, xuống dòng thô và markdown.
                 </p>
               </div>
             </div>

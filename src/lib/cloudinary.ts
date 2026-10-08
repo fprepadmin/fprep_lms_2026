@@ -127,7 +127,7 @@ export async function uploadImageToCloudinary(
 
     throw new Error('Không nhận được URL từ máy chủ Cloudinary');
   } catch (err: any) {
-    console.error('❌ Cloudinary upload error:', err.message);
+    console.error('[Cloudinary Upload Error]:', err.message);
     throw err;
   }
 }

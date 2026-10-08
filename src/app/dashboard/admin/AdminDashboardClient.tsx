@@ -133,7 +133,7 @@ export default function AdminDashboardClient({
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [newClassName, setNewClassName] = useState('');
   const [newClassGroup, setNewClassGroup] = useState<'T' | 'X' | 'K'>('T');
-  const [newClassYear, setNewClassYear] = useState('2026-2027');
+  const [newClassYear, setNewClassYear] = useState('2024-2027');
   const [creatingClass, setCreatingClass] = useState(false);
   const [createClassMessage, setCreateClassMessage] = useState<string | null>(null);
 
@@ -197,7 +197,7 @@ export default function AdminDashboardClient({
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
   const [editingClassName, setEditingClassName] = useState('');
   const [editingClassGroup, setEditingClassGroup] = useState<'T' | 'X' | 'K'>('T');
-  const [editingClassYear, setEditingClassYear] = useState('2026-2027');
+  const [editingClassYear, setEditingClassYear] = useState('2024-2027');
 
   // --- CRUD CHO TÀI KHOẢN (PROFILES) ---
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
