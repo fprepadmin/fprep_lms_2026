@@ -6,10 +6,11 @@ import {
   Shield, Users, Activity, Settings, Database, 
   CheckCircle, AlertCircle, RefreshCw, Terminal, Check,
   ChevronRight, Calendar, Info, Building2, GraduationCap, BookOpen, Plus, Trash2, Edit3, Loader2,
-  FileSpreadsheet, AlertTriangle, CheckSquare, Square, X, Filter, UserX, FolderX
+  FileSpreadsheet, AlertTriangle, CheckSquare, Square, X, Filter, UserX, FolderX,
+  Image as ImageIcon, UploadCloud, Sparkles
 } from 'lucide-react';
 import ExcelImportModal from '@/components/student/ExcelImportModal';
-import { sortClassesNaturally, getTeacherDisplayName, getSubjectColorTheme } from '@/lib/schoolUtils';
+import { sortClassesNaturally, getTeacherDisplayName, getSubjectColorTheme, CLASS_BACKGROUND_PRESETS, getClassBackgroundUrl } from '@/lib/schoolUtils';
 
 interface Profile {
   id: string;
@@ -219,6 +220,15 @@ export default function AdminDashboardClient({
   const [classAssignmentsDraft, setClassAssignmentsDraft] = useState<{ subjectId: string; teacherId: string }[]>([]);
   const [isSavingAssignments, setIsSavingAssignments] = useState(false);
 
+  // --- CÁ NHÂN HÓA ẢNH NỀN LỚP HỌC (CLASS BACKGROUND) ---
+  const [backgroundModalClass, setBackgroundModalClass] = useState<any | null>(null);
+  const [selectedBgUrl, setSelectedBgUrl] = useState('');
+  const [customBgInput, setCustomBgInput] = useState('');
+  const [isUploadingBg, setIsUploadingBg] = useState(false);
+  const [isSavingBg, setIsSavingBg] = useState(false);
+  const [bgMessage, setBgMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const bgFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
   // --- TRẠNG THÁI CHỌN NHIỀU ĐỂ XOÁ HÀNG LOẠT (BATCH SELECTION) ---
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
@@ -408,6 +418,135 @@ export default function AdminDashboardClient({
     } catch (err: any) {
       console.error('Lỗi khi cập nhật lớp học:', err);
       alert('Không thể cập nhật lớp học: ' + err.message);
+    }
+  };
+
+  // --- HÀM XỬ LÝ ẢNH NỀN LỚP HỌC ---
+  const openBackgroundModal = (cls: any) => {
+    const currentBg = getClassBackgroundUrl(cls, auditLogs);
+    setBackgroundModalClass(cls);
+    setSelectedBgUrl(currentBg);
+    setCustomBgInput(currentBg);
+    setBgMessage(null);
+  };
+
+  const handleUploadBgFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setBgMessage({ type: 'error', text: 'Vui lòng chọn file hình ảnh (JPG, PNG, WebP...)' });
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setBgMessage({ type: 'error', text: 'Kích thước ảnh tối đa 8MB' });
+      return;
+    }
+
+    setIsUploadingBg(true);
+    setBgMessage(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'fprep_class_backgrounds');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi khi tải ảnh lên');
+
+      setSelectedBgUrl(data.url);
+      setCustomBgInput(data.url);
+      setBgMessage({ type: 'success', text: 'Tải ảnh lên thành công! Hãy nhấn "Lưu ảnh nền" để hoàn tất.' });
+    } catch (err: any) {
+      console.error('Lỗi upload ảnh nền lớp:', err);
+      setBgMessage({ type: 'error', text: 'Không thể tải ảnh: ' + err.message });
+    } finally {
+      setIsUploadingBg(false);
+      if (bgFileInputRef.current) bgFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveClassBackground = async () => {
+    if (!backgroundModalClass) return;
+    setIsSavingBg(true);
+    setBgMessage(null);
+    try {
+      const finalUrl = selectedBgUrl.trim() || null;
+      const res = await fetch('/api/admin/classes/background', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classId: backgroundModalClass.id,
+          backgroundUrl: finalUrl
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi khi lưu ảnh nền');
+
+      setClasses(prev => prev.map(c => {
+        if (c.id === backgroundModalClass.id) {
+          return {
+            ...c,
+            background_url: finalUrl
+          };
+        }
+        return c;
+      }));
+
+      setBgMessage({ type: 'success', text: 'Cập nhật ảnh nền cho lớp thành công!' });
+      setTimeout(() => {
+        setBackgroundModalClass(null);
+      }, 900);
+    } catch (err: any) {
+      console.error('Lỗi lưu ảnh nền lớp:', err);
+      setBgMessage({ type: 'error', text: 'Không thể lưu ảnh nền: ' + err.message });
+    } finally {
+      setIsSavingBg(false);
+    }
+  };
+
+  const handleRemoveClassBackground = async () => {
+    if (!backgroundModalClass) return;
+    if (!confirm(`Xác nhận xóa ảnh nền của Lớp ${backgroundModalClass.name} và trở về giao diện mặc định?`)) return;
+
+    setIsSavingBg(true);
+    setBgMessage(null);
+    try {
+      const res = await fetch('/api/admin/classes/background', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          classId: backgroundModalClass.id,
+          backgroundUrl: null
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lỗi khi xóa ảnh nền');
+
+      setClasses(prev => prev.map(c => {
+        if (c.id === backgroundModalClass.id) {
+          return {
+            ...c,
+            background_url: null
+          };
+        }
+        return c;
+      }));
+      setSelectedBgUrl('');
+      setCustomBgInput('');
+      setBgMessage({ type: 'success', text: 'Đã xóa ảnh nền lớp!' });
+      setTimeout(() => {
+        setBackgroundModalClass(null);
+      }, 700);
+    } catch (err: any) {
+      console.error('Lỗi xóa ảnh nền lớp:', err);
+      setBgMessage({ type: 'error', text: 'Không thể xóa ảnh nền: ' + err.message });
+    } finally {
+      setIsSavingBg(false);
     }
   };
 
@@ -802,7 +941,7 @@ export default function AdminDashboardClient({
       {/* ==================================================== */}
       {activeTab === 'home' && (
         <div className="space-y-6">
-          {/* Widget chỉ số phẳng đồng bộ FMATH */}
+          {/* Widget chỉ số phẳng đồng bộ FPREP */}
           <div className="grid gap-3.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
             <div className="flat-card flex items-center gap-3 p-3.5">
               <div className="w-10 h-10 rounded-xl bg-[#e7f1ff] dark:bg-primary/20 text-primary flex items-center justify-center font-bold shrink-0 border border-[#b6d4fe]/40">
@@ -1382,6 +1521,7 @@ export default function AdminDashboardClient({
                           />
                         </th>
                         <th className="p-4">Tên Lớp học</th>
+                        <th className="p-4">Ảnh nền riêng</th>
                         <th className="p-4">Ban đào tạo</th>
                         <th className="p-4">Niên khóa</th>
                         <th className="p-4">Sĩ số</th>
@@ -1400,7 +1540,7 @@ export default function AdminDashboardClient({
                         if (sorted.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={7} className="p-8 text-center text-xs text-muted-foreground italic">
+                              <td colSpan={8} className="p-8 text-center text-xs text-muted-foreground italic">
                                 Không tìm thấy lớp học nào phù hợp với bộ lọc hiện tại.
                               </td>
                             </tr>
@@ -1411,6 +1551,7 @@ export default function AdminDashboardClient({
                           const classStudentsCount = localStudentDetails.filter(s => s.class_id === cls.id).length;
                           const classAssignments = localTeacherClasses.filter(tc => tc.class_id === cls.id);
                           const isSelected = selectedClassIds.includes(cls.id);
+                          const classBg = getClassBackgroundUrl(cls, auditLogs);
 
                           return (
                             <tr key={cls.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
@@ -1429,6 +1570,29 @@ export default function AdminDashboardClient({
                                 />
                               </td>
                               <td className="p-4 font-black text-sm text-foreground">{cls.name}</td>
+                              <td className="p-4">
+                                {classBg ? (
+                                  <div 
+                                    onClick={() => openBackgroundModal(cls)}
+                                    className="group relative h-10 w-20 rounded-xl overflow-hidden border border-border/80 cursor-pointer shadow-2xs hover:ring-2 hover:ring-primary hover:border-transparent transition-all"
+                                    title="Bấm để xem & đổi ảnh nền lớp"
+                                  >
+                                    <img src={classBg} alt={cls.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[9px] font-black">
+                                      Đổi ảnh
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => openBackgroundModal(cls)}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-dashed border-border/80 bg-muted/20 hover:bg-muted font-bold text-[10px] text-muted-foreground hover:text-primary hover:border-primary/50 transition-all cursor-pointer"
+                                    title="Tải ảnh nền cho lớp này"
+                                  >
+                                    <UploadCloud className="h-3.5 w-3.5 text-primary" />
+                                    <span>Tải ảnh</span>
+                                  </button>
+                                )}
+                              </td>
                               <td className="p-4">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                   cls.group_type === 'T' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
@@ -1467,6 +1631,13 @@ export default function AdminDashboardClient({
                               </td>
                               <td className="p-4 text-center">
                                 <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => openBackgroundModal(cls)}
+                                    className="px-2 py-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 font-bold text-indigo-600 dark:text-indigo-400 transition-all text-[10px] flex items-center gap-1"
+                                    title="Cá nhân hóa ảnh nền của riêng lớp này"
+                                  >
+                                    <ImageIcon className="h-3 w-3" /> Ảnh nền
+                                  </button>
                                   <button
                                     onClick={() => openAssignModal(cls)}
                                     className="px-2 py-1 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 font-bold text-primary transition-all text-[10px] flex items-center gap-1"
@@ -2525,6 +2696,259 @@ export default function AdminDashboardClient({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* MODAL CÁ NHÂN HÓA ẢNH NỀN RIÊNG CHO LỚP HỌC */}
+      {/* ==================================================== */}
+      {backgroundModalClass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-card border border-border rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-scale-in max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                  <ImageIcon className="h-6 w-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-extrabold text-foreground">
+                      Cá nhân hóa Ảnh nền - Lớp {backgroundModalClass.name}
+                    </h3>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                      {backgroundModalClass.academic_year || '2024-2027'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Đặt ảnh nền banner và không gian riêng biệt cho học sinh thuộc lớp này
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBackgroundModalClass(null)}
+                className="text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                title="Đóng modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Live Preview Banner */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-foreground flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" /> Xem trước hiển thị giao diện học sinh (Live Preview)
+                </span>
+                <span className="text-[11px] text-muted-foreground">Tỷ lệ rộng 16:9 banner</span>
+              </div>
+              <div className="relative h-44 rounded-xl overflow-hidden border border-border/80 shadow-md bg-muted/40 group">
+                <img
+                  src={selectedBgUrl || '/student-banner-bg.jpg'}
+                  alt={`Xem trước ảnh nền Lớp ${backgroundModalClass.name}`}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  onError={(e) => {
+                    // Fallback nếu link ảnh lỗi
+                    (e.target as HTMLImageElement).src = '/student-banner-bg.jpg';
+                  }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/20" />
+                
+                <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
+                  <div className="text-white space-y-1">
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/80 backdrop-blur-xs text-[10px] font-extrabold uppercase tracking-wide">
+                      <GraduationCap className="h-3 w-3" /> Không gian riêng của Lớp
+                    </div>
+                    <h4 className="text-lg font-black tracking-tight drop-shadow-md">
+                      LỚP {backgroundModalClass.name}
+                    </h4>
+                    <p className="text-[11px] text-white/80 font-medium">
+                      FPT School · Khối {backgroundModalClass.name.replace(/\D/g, '') || '10'} · Niên khóa {backgroundModalClass.academic_year || '2024-2027'}
+                    </p>
+                  </div>
+                  <div className="hidden sm:block text-right">
+                    <span className="text-[10px] px-2 py-1 rounded bg-black/50 backdrop-blur-xs text-white/90 font-mono border border-white/20">
+                      Giao diện cá nhân hóa
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Thông báo kết quả thao tác */}
+            {bgMessage && (
+              <div
+                className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                  bgMessage.type === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-destructive/10 border-destructive/30 text-destructive'
+                }`}
+              >
+                {bgMessage.type === 'success' ? (
+                  <CheckCircle className="h-4 w-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                )}
+                <span>{bgMessage.text}</span>
+              </div>
+            )}
+
+            {/* Các tùy chọn thiết lập ảnh */}
+            <div className="space-y-4 pt-1">
+              {/* Tùy chọn 1: Tải ảnh từ máy tính */}
+              <div className="bg-muted/20 border border-border rounded-xl p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-foreground flex items-center gap-1.5">
+                    <UploadCloud className="h-4 w-4 text-primary" /> Cách 1: Tải ảnh trực tiếp từ máy tính
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">Định dạng JPG, PNG, WebP (Tối đa 8MB)</span>
+                </div>
+
+                <input
+                  type="file"
+                  ref={bgFileInputRef}
+                  onChange={handleUploadBgFile}
+                  accept="image/png,image/jpeg,image/webp,image/jpg"
+                  className="hidden"
+                />
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => bgFileInputRef.current?.click()}
+                    disabled={isUploadingBg || isSavingBg}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isUploadingBg ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Đang tải lên đám mây...
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="h-4 w-4" /> Chọn tệp ảnh từ máy tính
+                      </>
+                    )}
+                  </button>
+                  <span className="text-[11px] text-muted-foreground italic">
+                    Tự động lưu trữ tối ưu trên đám mây CDN
+                  </span>
+                </div>
+              </div>
+
+              {/* Tùy chọn 2: Nhập URL ảnh */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground block">
+                  Cách 2: Nhập hoặc dán liên kết URL ảnh trực tiếp
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://example.com/banner-lop.jpg"
+                    value={customBgInput}
+                    onChange={(e) => {
+                      setCustomBgInput(e.target.value);
+                      setSelectedBgUrl(e.target.value);
+                    }}
+                    className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-primary"
+                  />
+                  {customBgInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomBgInput('');
+                        setSelectedBgUrl('');
+                      }}
+                      className="px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border rounded-xl hover:bg-muted"
+                    >
+                      Xóa
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Tùy chọn 3: Thư viện Preset FPT tuyển chọn */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-foreground block">
+                  Cách 3: Hoặc chọn nhanh ảnh mẫu chất lượng cao
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {CLASS_BACKGROUND_PRESETS.map((preset) => {
+                    const isSelected = selectedBgUrl === preset.url;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedBgUrl(preset.url);
+                          setCustomBgInput(preset.url);
+                        }}
+                        className={`group relative rounded-xl overflow-hidden border-2 text-left transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-primary ring-2 ring-primary/20 shadow-md'
+                            : 'border-border/70 hover:border-border hover:shadow-xs'
+                        }`}
+                      >
+                        <div className="h-18 w-full overflow-hidden bg-muted">
+                          <img
+                            src={preset.url}
+                            alt={preset.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          />
+                        </div>
+                        <div className="p-1.5 bg-card/90">
+                          <p className="text-[10px] font-bold text-foreground line-clamp-1">{preset.title}</p>
+                        </div>
+                        {isSelected && (
+                          <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] shadow">
+                            <Check className="h-2.5 w-2.5" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={handleRemoveClassBackground}
+                disabled={isSavingBg || isUploadingBg}
+                className="px-3 py-2 rounded-xl border border-destructive/30 text-destructive hover:bg-destructive/10 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Khôi phục mặc định
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingBg || isUploadingBg}
+                  onClick={() => setBackgroundModalClass(null)}
+                  className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingBg || isUploadingBg}
+                  onClick={handleSaveClassBackground}
+                  className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-extrabold transition-all shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                >
+                  {isSavingBg ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang lưu ảnh nền...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" /> Lưu ảnh nền lớp
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

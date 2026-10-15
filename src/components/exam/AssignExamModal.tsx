@@ -158,7 +158,7 @@ export default function AssignExamModal({
         <div className="flex justify-between items-start border-b border-border pb-4 shrink-0">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-0.5 text-xs font-bold text-primary mb-1">
-              <Send className="h-3.5 w-3.5" /> Chuẩn LMS Sư Phạm FMATH
+              <Send className="h-3.5 w-3.5" /> Hệ Thống LMS FPREP
             </div>
             <h3 className="font-extrabold text-lg sm:text-xl text-foreground">
               Giao Đề Thi / Bài Tập Cho Lớp

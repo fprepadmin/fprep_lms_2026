@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Bạn không có quyền truy cập quản trị hệ thống' }, { status: 403 });
     }
 
-    const { name, groupType, academicYear } = await request.json();
+    const { name, groupType, academicYear, backgroundUrl } = await request.json();
 
     if (!name || !groupType || !academicYear) {
       return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 });
@@ -37,22 +37,46 @@ export async function POST(request: Request) {
     }
 
     const newClassId = crypto.randomUUID();
+    const cleanBg = backgroundUrl && typeof backgroundUrl === 'string' ? backgroundUrl.trim() : null;
 
     // Thêm vào bảng classes
-    const { data: newClass, error: classError } = await supabaseAdmin
-      .from('classes')
-      .insert({
-        id: newClassId,
-        name: name.trim().toUpperCase(),
-        group_type: groupType,
-        academic_year: academicYear.trim()
-      })
-      .select()
-      .single();
+    let newClassData: any = null;
+    let insertWithBg = Boolean(cleanBg);
 
-    if (classError) {
-      console.error('Lỗi insert classes:', classError);
-      return NextResponse.json({ error: 'Không thể thêm lớp học. Lỗi cơ sở dữ liệu.' }, { status: 500 });
+    if (insertWithBg) {
+      const { data, error } = await supabaseAdmin
+        .from('classes')
+        .insert({
+          id: newClassId,
+          name: name.trim().toUpperCase(),
+          group_type: groupType,
+          academic_year: academicYear.trim(),
+          background_url: cleanBg
+        })
+        .select()
+        .single();
+      if (!error && data) {
+        newClassData = data;
+      }
+    }
+
+    if (!newClassData) {
+      const { data, error: classError } = await supabaseAdmin
+        .from('classes')
+        .insert({
+          id: newClassId,
+          name: name.trim().toUpperCase(),
+          group_type: groupType,
+          academic_year: academicYear.trim()
+        })
+        .select()
+        .single();
+
+      if (classError) {
+        console.error('Lỗi insert classes:', classError);
+        return NextResponse.json({ error: 'Không thể thêm lớp học. Lỗi cơ sở dữ liệu.' }, { status: 500 });
+      }
+      newClassData = data;
     }
 
     // Ghi nhận nhật ký audit logs
@@ -62,13 +86,19 @@ export async function POST(request: Request) {
         action: 'CREATE_CLASS',
         target_table: 'classes',
         target_id: newClassId,
-        new_values: { name, groupType, academicYear }
+        new_values: { name, groupType, academicYear, background_url: cleanBg }
       });
     } catch (auditErr) {
       console.error('Lỗi ghi audit log:', auditErr);
     }
 
-    return NextResponse.json({ success: true, data: newClass });
+    return NextResponse.json({ 
+      success: true, 
+      data: {
+        ...newClassData,
+        background_url: cleanBg || newClassData?.background_url || null
+      } 
+    });
 
   } catch (err: any) {
     console.error('Lỗi API create class:', err);
@@ -84,7 +114,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Bạn không có quyền truy cập quản trị hệ thống' }, { status: 403 });
     }
 
-    const { classId, name, groupType, academicYear } = await request.json();
+    const { classId, name, groupType, academicYear, backgroundUrl } = await request.json();
 
     if (!classId || !name || !groupType || !academicYear) {
       return NextResponse.json({ error: 'Thiếu thông tin bắt buộc' }, { status: 400 });
@@ -94,6 +124,10 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Database Admin Client chưa được cấu hình' }, { status: 500 });
     }
 
+    const cleanBg = backgroundUrl !== undefined 
+      ? (backgroundUrl && typeof backgroundUrl === 'string' ? backgroundUrl.trim() : null)
+      : undefined;
+
     // Lấy thông tin cũ để ghi audit log
     const { data: oldClass } = await supabaseAdmin
       .from('classes')
@@ -101,19 +135,39 @@ export async function PUT(request: Request) {
       .eq('id', classId)
       .single();
 
-    // Cập nhật lớp học
-    const { error: updateError } = await supabaseAdmin
-      .from('classes')
-      .update({
-        name: name.trim().toUpperCase(),
-        group_type: groupType,
-        academic_year: academicYear.trim()
-      })
-      .eq('id', classId);
+    // Cập nhật lớp học (thử cập nhật có background_url trước nếu có)
+    let updateSuccess = false;
+    if (cleanBg !== undefined) {
+      try {
+        const { error: directErr } = await supabaseAdmin
+          .from('classes')
+          .update({
+            name: name.trim().toUpperCase(),
+            group_type: groupType,
+            academic_year: academicYear.trim(),
+            background_url: cleanBg
+          })
+          .eq('id', classId);
+        if (!directErr) updateSuccess = true;
+      } catch (e) {
+        console.warn('Update with background_url failed, trying standard update:', e);
+      }
+    }
 
-    if (updateError) {
-      console.error('Lỗi cập nhật classes:', updateError);
-      return NextResponse.json({ error: 'Không thể cập nhật lớp học. Lỗi cơ sở dữ liệu.' }, { status: 500 });
+    if (!updateSuccess) {
+      const { error: updateError } = await supabaseAdmin
+        .from('classes')
+        .update({
+          name: name.trim().toUpperCase(),
+          group_type: groupType,
+          academic_year: academicYear.trim()
+        })
+        .eq('id', classId);
+
+      if (updateError) {
+        console.error('Lỗi cập nhật classes:', updateError);
+        return NextResponse.json({ error: 'Không thể cập nhật lớp học. Lỗi cơ sở dữ liệu.' }, { status: 500 });
+      }
     }
 
     // Ghi nhật ký audit logs
@@ -124,13 +178,13 @@ export async function PUT(request: Request) {
         target_table: 'classes',
         target_id: classId,
         old_values: oldClass,
-        new_values: { name, groupType, academicYear }
+        new_values: { name, groupType, academicYear, background_url: cleanBg }
       });
     } catch (auditErr) {
       console.error('Lỗi ghi audit log:', auditErr);
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, background_url: cleanBg });
 
   } catch (err: any) {
     console.error('Lỗi API update class:', err);

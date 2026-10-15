@@ -92,7 +92,7 @@ export default async function TeacherDashboardPage() {
   return (
     <div className="space-y-6 w-full animate-fade-in">
       
-      {/* 1. WELCOME BANNER CHUẨN FMATH */}
+      {/* 1. WELCOME BANNER CHUẨN FPREP */}
       <div className="flat-card flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
         <div className="space-y-2 max-w-2xl">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">

@@ -39,7 +39,7 @@ export default async function AdminLogsPage() {
 
   return (
     <div className="space-y-6 w-full animate-fade-in">
-      {/* HEADER AUDIT LOGS (CHUẨN FMATH BANNER) */}
+      {/* HEADER AUDIT LOGS (CHUẨN FPREP BANNER) */}
       <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
         <div className="space-y-2 max-w-2xl">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">

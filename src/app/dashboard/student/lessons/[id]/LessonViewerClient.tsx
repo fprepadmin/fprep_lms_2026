@@ -11,7 +11,6 @@ import {
   PanelLeft, Check, ClipboardList, Clock, ArrowUp, Sparkles
 } from 'lucide-react';
 import MathRenderer from '@/components/MathRenderer';
-import FMathNotice from '@/components/common/FMathNotice';
 
 interface Lesson {
   id: string;
@@ -267,16 +266,6 @@ export default function LessonViewerClient({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground leading-tight" title={`${lesson.chapters.subjects.name} • ${lesson.chapters.title}`}>
               <span className="text-primary shrink-0">{lesson.chapters.subjects.name}</span>
-              {lesson.chapters?.subjects?.name?.toLowerCase().includes('toán') && (
-                <a
-                  href="https://fmath12-fschool.web.app/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[10px] font-extrabold hover:underline inline-flex items-center gap-0.5"
-                >
-                  FMATH12 <ExternalLink className="h-2.5 w-2.5" />
-                </a>
-              )}
               <span>•</span>
               <span className="truncate">{lesson.chapters.title}</span>
             </div>
@@ -667,12 +656,6 @@ export default function LessonViewerClient({
             ===================================================================== */}
         <main className="flex-1 flex flex-col min-w-0 w-full max-w-full h-full overflow-hidden bg-card border border-border rounded-2xl shadow-xs">
           
-          {/* Thông báo FMATH nếu môn Toán */}
-          {lesson.chapters?.subjects?.name?.toLowerCase().includes('toán') && (
-            <div className="p-4 pb-0 shrink-0">
-              <FMathNotice variant="banner" />
-            </div>
-          )}
 
           {/* TAB 1: ĐỌC LÝ THUYẾT MARKDOWN & TOÁN HỌC */}
           {mainTab === 'theory' && (

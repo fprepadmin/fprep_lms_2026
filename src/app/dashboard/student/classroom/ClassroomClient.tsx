@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { getSubjectColorTheme } from '@/lib/schoolUtils';
-import FMathNotice from '@/components/common/FMathNotice';
 
 interface Classmate {
   student_id: string;
@@ -43,6 +42,7 @@ interface ClassroomClientProps {
     name: string;
     group_type: string;
     academic_year: string;
+    background_url?: string | null;
   };
   classmates: Classmate[];
   teacherAssignments: TeacherAssignment[];
@@ -133,71 +133,129 @@ export default function ClassroomClient({
     <div className="space-y-6 animate-fade-in">
       
       {/* ========================================================================= */}
-      {/* 1. HEADER BANNER LỚP HỌC (CHUẨN HIỆN ĐẠI & RÕ RÀNG) */}
+      {/* 1. HEADER BANNER LỚP HỌC (CÁ NHÂN HÓA THEO ẢNH NỀN LỚP DO ADMIN THIẾT LẬP) */}
       {/* ========================================================================= */}
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-primary/[0.04] p-6 shadow-sm">
+      <div className={`relative overflow-hidden rounded-3xl border shadow-sm transition-all duration-300 ${
+        classInfo.background_url 
+          ? 'border-border/80 min-h-[220px] sm:min-h-[250px] flex flex-col justify-end p-6 sm:p-8 text-white' 
+          : 'border-border bg-gradient-to-br from-card via-card to-primary/[0.04] p-6'
+      }`}>
+        {/* Ảnh nền cá nhân hóa của riêng lớp đó */}
+        {classInfo.background_url && (
+          <>
+            <img 
+              src={classInfo.background_url} 
+              alt={`Ảnh nền Lớp ${classInfo.name}`} 
+              className="absolute inset-0 w-full h-full object-cover object-center scale-100 hover:scale-105 transition-transform duration-700" 
+            />
+            {/* Gradient overlay nhiều lớp giúp đọc văn bản cực kỳ rõ nét */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-slate-900/40 dark:from-black/95 dark:via-black/75 dark:to-black/50" />
+            
+            {/* Huy hiệu Không gian riêng của lớp */}
+            <div className="absolute top-4 right-4 z-10 hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold">
+              <Sparkles className="h-3.5 w-3.5 text-amber-400" /> Không gian riêng Lớp {classInfo.name}
+            </div>
+          </>
+        )}
+
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           
           <div className="space-y-3 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary border border-primary/25">
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
+                classInfo.background_url
+                  ? 'bg-white/15 backdrop-blur-md border-white/25 text-white'
+                  : 'bg-primary/10 border-primary/25 text-primary'
+              }`}>
                 <GraduationCap className="h-3.5 w-3.5" /> Lớp học chính khóa FPT School
               </span>
               <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
-                classInfo.group_type === 'T'
-                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25'
-                  : classInfo.group_type === 'X'
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
-                    : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/25'
+                classInfo.background_url
+                  ? 'bg-white/15 backdrop-blur-md border-white/25 text-white'
+                  : classInfo.group_type === 'T'
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25'
+                    : classInfo.group_type === 'X'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                      : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/25'
               }`}>
                 {groupLabel}
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-extrabold font-heading text-foreground tracking-tight m-0">
+            <h1 className={`text-2xl sm:text-4xl font-extrabold font-heading tracking-tight m-0 ${
+              classInfo.background_url ? 'text-white drop-shadow-sm' : 'text-foreground'
+            }`}>
               Không gian Lớp {classInfo.name}
             </h1>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-muted-foreground">
+            <div className={`flex flex-wrap items-center gap-4 text-xs font-semibold ${
+              classInfo.background_url ? 'text-slate-200' : 'text-muted-foreground'
+            }`}>
               <span className="flex items-center gap-1.5">
-                <Calendar className="h-4 w-4 text-primary" /> Niên khóa: <strong className="text-foreground">{classInfo.academic_year || '2024-2027'}</strong>
+                <Calendar className={`h-4 w-4 ${classInfo.background_url ? 'text-orange-400' : 'text-primary'}`} /> Niên khóa: <strong className={classInfo.background_url ? 'text-white' : 'text-foreground'}>{classInfo.academic_year || '2024-2027'}</strong>
               </span>
               <span>&bull;</span>
               <span>
-                MSHS của bạn: <strong className="text-primary font-mono">{currentStudent?.mshs || 'N/A'}</strong>
+                MSHS của bạn: <strong className={`font-mono ${classInfo.background_url ? 'text-amber-300 font-bold' : 'text-primary'}`}>{currentStudent?.mshs || 'N/A'}</strong>
               </span>
               <span>&bull;</span>
               <span>
-                Học sinh: <strong className="text-foreground">{currentStudent?.full_name || 'Học sinh'}</strong>
+                Học sinh: <strong className={classInfo.background_url ? 'text-white' : 'text-foreground'}>{currentStudent?.full_name || 'Học sinh'}</strong>
               </span>
             </div>
           </div>
 
           {/* CHỈ SỐ NHANH (METRICS BADGES) */}
-          <div className="grid grid-cols-3 gap-3 sm:gap-4 border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 shrink-0">
-            <div className="p-3 sm:p-4 rounded-xl bg-background/60 border border-border/80 text-center min-w-[90px]">
-              <span className="block text-2xl sm:text-3xl font-black font-heading text-primary">
+          <div className={`grid grid-cols-3 gap-3 sm:gap-4 border-t lg:border-t-0 lg:border-l pt-4 lg:pt-0 lg:pl-6 shrink-0 ${
+            classInfo.background_url ? 'border-white/20' : 'border-border'
+          }`}>
+            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
+              classInfo.background_url 
+                ? 'bg-black/35 backdrop-blur-md border-white/20' 
+                : 'bg-background/60 border-border/80'
+            }`}>
+              <span className={`block text-2xl sm:text-3xl font-black font-heading ${
+                classInfo.background_url ? 'text-amber-400' : 'text-primary'
+              }`}>
                 {classmates.length}
               </span>
-              <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
+                classInfo.background_url ? 'text-slate-300' : 'text-muted-foreground'
+              }`}>
                 Học sinh
               </span>
             </div>
 
-            <div className="p-3 sm:p-4 rounded-xl bg-background/60 border border-border/80 text-center min-w-[90px]">
-              <span className="block text-2xl sm:text-3xl font-black font-heading text-foreground">
+            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
+              classInfo.background_url 
+                ? 'bg-black/35 backdrop-blur-md border-white/20' 
+                : 'bg-background/60 border-border/80'
+            }`}>
+              <span className={`block text-2xl sm:text-3xl font-black font-heading ${
+                classInfo.background_url ? 'text-white' : 'text-foreground'
+              }`}>
                 {teacherAssignments.length}
               </span>
-              <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
+                classInfo.background_url ? 'text-slate-300' : 'text-muted-foreground'
+              }`}>
                 Giáo viên
               </span>
             </div>
 
-            <div className="p-3 sm:p-4 rounded-xl bg-background/60 border border-border/80 text-center min-w-[90px]">
-              <span className="block text-2xl sm:text-3xl font-black font-heading text-green-600 dark:text-green-400">
+            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
+              classInfo.background_url 
+                ? 'bg-black/35 backdrop-blur-md border-white/20' 
+                : 'bg-background/60 border-border/80'
+            }`}>
+              <span className={`block text-2xl sm:text-3xl font-black font-heading ${
+                classInfo.background_url ? 'text-emerald-400' : 'text-green-600 dark:text-green-400'
+              }`}>
                 {completedCount}/{exams.length}
               </span>
-              <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
+                classInfo.background_url ? 'text-slate-300' : 'text-muted-foreground'
+              }`}>
                 Hoàn thành
               </span>
             </div>
@@ -416,20 +474,7 @@ export default function ClassroomClient({
                             Chưa có thông tin giáo viên phụ trách cho môn học này.
                           </p>
                         )}
-                        {subject.name.toLowerCase().includes('toán') && (
-                          <div className="pt-2 border-t border-border/60 flex items-center justify-between">
-                            <span className="text-[11px] text-muted-foreground font-semibold">Chuyên đề & Bài tập:</span>
-                            <a
-                              href="https://fmath12-fschool.web.app/"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-600 dark:text-blue-400 hover:underline"
-                            >
-                              <span>Truy cập FMATH12</span>
-                              <ArrowRight className="h-3 w-3" />
-                            </a>
-                          </div>
-                        )}
+
                       </div>
                     );
                   })}
@@ -475,11 +520,6 @@ export default function ClassroomClient({
                     }`}
                   >
                     <span>{sub.name} ({count})</span>
-                    {isMathSub && (
-                      <span className="text-[9px] px-1 rounded bg-blue-500/20 text-blue-600 dark:text-blue-400 font-black">
-                        FMATH
-                      </span>
-                    )}
                   </button>
                 );
               })}
@@ -497,13 +537,7 @@ export default function ClassroomClient({
             </div>
           </div>
 
-          {/* THÔNG BÁO FMATH NẾU CHỌN MÔN TOÁN */}
-          {(() => {
-            const activeSub = uniqueSubjects.find((s: any) => s.id === selectedSubjectFilter);
-            const isMath = activeSub?.name?.toLowerCase().includes('toán');
-            if (!isMath) return null;
-            return <FMathNotice variant="banner" className="my-2" />;
-          })()}
+
 
           {/* DANH SÁCH THẺ BÀI TẬP */}
           {filteredExams.length === 0 ? (

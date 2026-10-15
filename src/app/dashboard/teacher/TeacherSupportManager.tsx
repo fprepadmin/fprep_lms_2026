@@ -82,7 +82,7 @@ export default function TeacherSupportManager({
           <MessageSquare className="h-4.5 w-4.5 text-primary" /> Yêu Cầu Hỗ Trợ Chuyên Môn Của Học Sinh
         </h2>
         
-        {/* Bộ lọc trạng thái dạng Pill FMATH */}
+        {/* Bộ lọc trạng thái dạng Pill FPREP */}
         <div className="flex items-center gap-1.5 bg-[#f8f9fa] dark:bg-muted/40 border border-border p-1 rounded-xl">
           <button
             onClick={() => setFilter('pending')}

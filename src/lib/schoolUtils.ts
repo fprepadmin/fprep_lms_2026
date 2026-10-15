@@ -413,3 +413,63 @@ export function getSubjectColorTheme(subjectName: string): SubjectTheme {
     shortCode: 'MÔN'
   };
 }
+
+/**
+ * 4 bộ hình nền mẫu chuyên biệt cho lớp học THPT FPT
+ */
+export const CLASS_BACKGROUND_PRESETS = [
+  {
+    id: 'fpt-campus',
+    title: 'Khuôn viên FPT School',
+    url: 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=1920&q=80',
+    desc: 'Không gian sư phạm xanh mát & tràn đầy cảm hứng'
+  },
+  {
+    id: 'fpt-tech',
+    title: 'Công nghệ & Sáng tạo',
+    url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1920&q=80',
+    desc: 'Học tập tương tác, kỷ nguyên số 4.0'
+  },
+  {
+    id: 'fpt-library',
+    title: 'Thư viện Tri thức',
+    url: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=1920&q=80',
+    desc: 'Yên tĩnh, sâu lắng dành cho ôn thi khối 12'
+  },
+  {
+    id: 'fpt-youth',
+    title: 'Tuổi trẻ & Tinh thần Đồng đội',
+    url: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1920&q=80',
+    desc: 'Đoàn kết, nhiệt huyết của tuổi thanh xuân FPT'
+  }
+];
+
+/**
+ * Lấy ảnh nền cá nhân hóa của lớp học: ưu tiên background_url trực tiếp, dự phòng qua auditLogs
+ */
+export function getClassBackgroundUrl(classInfo?: any, auditLogs?: any[]): string {
+  if (!classInfo) return '';
+  
+  // 1. Kiểm tra trường background_url trực tiếp trên đối tượng class
+  if (classInfo.background_url && typeof classInfo.background_url === 'string' && classInfo.background_url.trim()) {
+    return classInfo.background_url.trim();
+  }
+
+  // 2. Tra cứu trong auditLogs (Lấy bản ghi SET_CLASS_BACKGROUND hoặc UPDATE_CLASS gần nhất)
+  if (auditLogs && auditLogs.length > 0 && classInfo.id) {
+    const log = auditLogs.find(
+      (l: any) =>
+        l.target_table === 'classes' &&
+        l.target_id === classInfo.id &&
+        (l.action === 'SET_CLASS_BACKGROUND' || l.action === 'UPDATE_CLASS') &&
+        l.new_values?.background_url &&
+        typeof l.new_values.background_url === 'string' &&
+        l.new_values.background_url.trim() !== ''
+    );
+    if (log && log.new_values?.background_url) {
+      return log.new_values.background_url.trim();
+    }
+  }
+
+  return '';
+}

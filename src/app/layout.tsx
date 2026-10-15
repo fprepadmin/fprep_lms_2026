@@ -48,6 +48,27 @@ export default function RootLayout({
       className={`${raleway.variable} ${inter.variable} ${beVietnam.variable} min-h-screen antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Bỏ qua cảnh báo hydration do tiện ích trình duyệt (Bitwarden bis_skin_checked) chèn vào DOM
+              (function() {
+                if (typeof window !== 'undefined') {
+                  var origError = console.error;
+                  console.error = function() {
+                    var msg = arguments[0];
+                    if (typeof msg === 'string' && (msg.indexOf('bis_skin_checked') !== -1 || msg.indexOf('hydration-mismatch') !== -1)) {
+                      return;
+                    }
+                    origError.apply(console, arguments);
+                  };
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-screen flex flex-col font-sans bg-background text-foreground" suppressHydrationWarning>
         <Suspense fallback={null}>
           <RouteProgressBar />

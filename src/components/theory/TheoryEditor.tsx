@@ -146,7 +146,7 @@ Cho hàm số $y = f(x)$ có đạo hàm trên khoảng $(a; b)$:
         className="hidden"
       />
 
-      {/* TOOLBAR THANH CÔNG CỤ SOẠN THẢO (CHUẨN FMATH) */}
+      {/* TOOLBAR THANH CÔNG CỤ SOẠN THẢO (CHUẨN FPREP) */}
       <div className="p-3 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1 text-xs">
           <button

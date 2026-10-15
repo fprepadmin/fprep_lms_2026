@@ -7,7 +7,6 @@ import {
   FileCheck, Target, Layers, ArrowRight, RotateCcw
 } from 'lucide-react';
 import Link from 'next/link';
-import FMathNotice from '@/components/common/FMathNotice';
 
 interface Lesson {
   id: string;
@@ -114,7 +113,7 @@ export default function StudentExamsClient({
     return true;
   });
 
-  // Render thẻ đề thi chuẩn FMATH
+  // Render thẻ đề thi chuẩn FPREP
   const renderExamCard = (exam: Exam) => {
     const bestRes = getBestResult(exam.id);
     const hasTaken = Boolean(bestRes);
@@ -185,7 +184,7 @@ export default function StudentExamsClient({
   return (
     <div className="space-y-6 animate-fade-in">
       
-      {/* THANH TAB 4 DANH MỤC LỚN CHUẨN FMATH */}
+      {/* THANH TAB 4 DANH MỤC LỚN CHUẨN FPREP */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {categories.map((cat) => {
           const isActive = activeCategory === cat.id;
@@ -239,13 +238,6 @@ export default function StudentExamsClient({
                 }`}
               >
                 <span>{sub.name}</span>
-                {isMathSub && (
-                  <span className={`text-[9px] px-1 rounded font-black ${
-                    selectedSubjectId === sub.id ? 'bg-white/20 text-white' : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
-                  }`}>
-                    FMATH
-                  </span>
-                )}
               </button>
             );
           })}
@@ -264,11 +256,6 @@ export default function StudentExamsClient({
         </div>
 
       </div>
-
-      {/* THÔNG BÁO FMATH NẾU CHỌN MÔN TOÁN */}
-      {selectedSubject?.name?.toLowerCase().includes('toán') && (
-        <FMathNotice className="my-2" />
-      )}
 
       {/* NỘI DUNG THEO TỪNG TAB */}
       

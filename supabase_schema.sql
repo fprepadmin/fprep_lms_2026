@@ -41,9 +41,12 @@ CREATE TABLE public.classes (
     id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
     name VARCHAR(20) UNIQUE NOT NULL, -- Ví dụ: 12T1, 12T2, 12X1, 12K...
     group_type VARCHAR(5) NOT NULL CHECK (group_type IN ('T', 'X', 'K')), -- T: Tự nhiên, X: Xã hội, K: Khai phóng
-    academic_year VARCHAR(20) NOT NULL DEFAULT '2026-2027',
+    academic_year VARCHAR(20) NOT NULL DEFAULT '2024-2027',
+    background_url TEXT, -- Ảnh nền cá nhân hóa riêng của từng lớp học do Admin tải lên
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+-- Lệnh bổ sung cột nếu bảng đã tồn tại:
+-- ALTER TABLE public.classes ADD COLUMN IF NOT EXISTS background_url TEXT;
 
 -- 3. Bảng student_details (Chi tiết học sinh - Tách biệt thông tin nhạy cảm khỏi profiles để cấm Admin xem)
 CREATE TABLE public.student_details (
@@ -206,7 +209,7 @@ CREATE TABLE public.exam_results (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 17. Bảng exam_assignments (Giao bài thi/bài tập cho lớp - Chuẩn LMS FMATH)
+-- 17. Bảng exam_assignments (Giao bài thi/bài tập cho lớp - Chuẩn LMS FPREP)
 CREATE TABLE public.exam_assignments (
     id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::varchar,
     exam_id VARCHAR(255) NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,

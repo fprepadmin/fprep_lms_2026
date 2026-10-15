@@ -108,10 +108,8 @@ export default function LandingPage() {
       name: 'Toán học',
       category: 'natural',
       icon: <Calculator className="h-6 w-6 text-blue-500" />,
-      badge: 'Cổng FMATH12',
-      isFMath: true,
+      badge: 'Cấu trúc 2026',
       desc: 'Hàm số, Hình học không gian Oxyz, Tích phân & Xác suất có điều kiện chuẩn cấu trúc 2026.',
-      link: 'https://fmath12-fschool.web.app/',
       accent: 'border-blue-500/30 bg-blue-500/5 hover:border-blue-500/60'
     },
     {
@@ -195,20 +193,20 @@ export default function LandingPage() {
 
   const faqs = [
     {
-      q: "Tài khoản nào có thể đăng nhập vào nền tảng F-PREP?",
+      q: "Tài khoản nào có thể đăng nhập vào nền tảng FPREP?",
       a: "Học sinh và Cán bộ Giáo viên chỉ cần bấm nút Đăng nhập qua Google và chọn tài khoản Email FPT (@fpt.edu.vn, @fe.edu.vn) hoặc Email cá nhân. Hệ thống tự động xác thực danh tính, nhận diện lớp học và phân quyền tương ứng."
     },
     {
-      q: "Cấu trúc đề thi mới 2026 trên F-PREP gồm những dạng thức nào?",
-      a: "F-PREP bám sát 100% hướng dẫn của Bộ GD&ĐT với 3 dạng thức trắc nghiệm mới: Dạng I (Nhiều lựa chọn - 0.25đ/câu), Dạng II (Trắc nghiệm Đúng/Sai 4 lệnh hỏi - tối đa 1.0đ/câu), và Dạng III (Trả lời ngắn / Điền số kết quả)."
+      q: "Cấu trúc đề thi mới 2026 trên FPREP gồm những dạng thức nào?",
+      a: "FPREP bám sát 100% hướng dẫn của Bộ GD&ĐT với 3 dạng thức trắc nghiệm mới: Dạng I (Nhiều lựa chọn - 0.25đ/câu), Dạng II (Trắc nghiệm Đúng/Sai 4 lệnh hỏi - tối đa 1.0đ/câu), và Dạng III (Trả lời ngắn / Điền số kết quả)."
     },
     {
       q: "Hệ thống ghi nhận và đồng bộ tiến độ học tập như thế nào?",
       a: "Mọi hoạt động từ xem video lý thuyết, đọc tài liệu số, làm bài kiểm tra và thời gian tự học đều được lưu trữ đám mây thời gian thực, đồng bộ ngay lập tức giữa tài khoản học sinh và Giáo viên bộ môn phụ trách."
     },
     {
-      q: "Cổng FMATH12 dành cho môn Toán học hoạt động như thế nào?",
-      a: "Môn Toán học Khối 12 được liên kết chuyên biệt với cổng FMATH12 (https://fmath12-fschool.web.app/), nơi cung cấp hệ thống lý thuyết mở rộng, phòng luyện đề KaTeX và ngân hàng câu hỏi phân hóa đỉnh cao."
+      q: "Hệ thống FPREP hỗ trợ học sinh ôn thi tốt nghiệp THPT như thế nào?",
+      a: "FPREP cung cấp lộ trình ôn luyện toàn diện từ hệ thống bài giảng lý thuyết, bài tập tương tác, đến các đề thi thử bám sát định dạng cấu trúc mới 2026 của Bộ GD&ĐT."
     },
     {
       q: "Tôi cần hỗ trợ kỹ thuật hoặc đóng góp ý kiến thì liên hệ ai?",
@@ -741,7 +739,7 @@ export default function LandingPage() {
               Chuẩn Hóa Ma Trận Đề Thi Tốt Nghiệp THPT 2026
             </h2>
             <p className="text-muted-foreground text-xs sm:text-sm font-semibold max-w-2xl mx-auto m-0">
-              F-PREP là nền tảng tiên phong hỗ trợ toàn diện cả 3 dạng thức trắc nghiệm mới của Bộ GD&ĐT, 
+              FPREP là nền tảng tiên phong hỗ trợ toàn diện cả 3 dạng thức trắc nghiệm mới của Bộ GD&ĐT, 
               giúp học sinh làm quen tuyệt đối với cấu trúc phân hóa năng lực thực tế.
             </p>
           </div>
@@ -801,7 +799,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 6. HỆ THỐNG MÔN HỌC & CỔNG FMATH12 */}
+      {/* 6. HỆ THỐNG MÔN HỌC */}
       <section id="curriculum" className="py-20 border-b border-border bg-muted/20">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           
@@ -860,11 +858,6 @@ export default function LandingPage() {
 
                   <h3 className="text-lg font-black font-heading text-foreground group-hover:text-primary transition-colors flex items-center gap-2 m-0">
                     {sub.name}
-                    {sub.isFMath && (
-                      <span className="text-[9px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-md shadow-xs">
-                        FMATH12
-                      </span>
-                    )}
                   </h3>
 
                   <p className="text-xs text-muted-foreground font-semibold leading-relaxed m-0">
@@ -873,25 +866,13 @@ export default function LandingPage() {
                 </div>
 
                 <div className="pt-3 border-t border-border/60">
-                  {sub.isFMath ? (
-                    <a 
-                      href={sub.link} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-between w-full text-xs font-extrabold text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      <span>Truy cập hệ thống FMATH12</span>
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  ) : (
-                    <button 
-                      onClick={handleAuthAction}
-                      className="inline-flex items-center justify-between w-full text-xs font-extrabold text-primary hover:underline cursor-pointer"
-                    >
-                      <span>Vào học chuyên đề</span>
-                      <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                  )}
+                  <button 
+                    onClick={handleAuthAction}
+                    className="inline-flex items-center justify-between w-full text-xs font-extrabold text-primary hover:underline cursor-pointer"
+                  >
+                    <span>Vào học chuyên đề</span>
+                    <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -1013,7 +994,7 @@ export default function LandingPage() {
               Quy Trình Học Tập
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold font-heading tracking-tight text-foreground m-0">
-              3 Bước Tự Học Hiệu Quả Cùng F-PREP
+              3 Bước Tự Học Hiệu Quả Cùng FPREP
             </h2>
             <p className="text-muted-foreground text-xs sm:text-sm font-semibold max-w-2xl mx-auto m-0">
               Bắt đầu hành trình bứt phá điểm thi chỉ trong vài thao tác đơn giản.
@@ -1145,7 +1126,7 @@ export default function LandingPage() {
                   <div>
                     <span className="block text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Kênh hỗ trợ trực tuyến</span>
                     <span className="font-extrabold text-sm text-foreground">
-                      Cổng hỗ trợ học tập F-PREP
+                      Cổng hỗ trợ học tập FPREP
                     </span>
                   </div>
                 </div>
@@ -1166,10 +1147,10 @@ export default function LandingPage() {
             <div className="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-sm space-y-4">
               <h3 className="font-extrabold font-heading text-lg text-foreground m-0">Gửi Tin Nhắn Trực Tiếp</h3>
               <p className="text-xs text-muted-foreground font-semibold m-0">
-                Ban quản trị F-PREP sẽ tiếp nhận và phản hồi thắc mắc qua tài khoản học tập của bạn.
+                Ban quản trị FPREP sẽ tiếp nhận và phản hồi thắc mắc qua tài khoản học tập của bạn.
               </p>
 
-              <form onSubmit={(e) => { e.preventDefault(); alert('Cảm ơn bạn! Yêu cầu hỗ trợ đã được gửi thành công đến ban quản trị F-PREP.'); }} className="space-y-3.5">
+              <form onSubmit={(e) => { e.preventDefault(); alert('Cảm ơn bạn! Yêu cầu hỗ trợ đã được gửi thành công đến ban quản trị FPREP.'); }} className="space-y-3.5">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <label htmlFor="name" className="text-[11px] font-extrabold text-muted-foreground uppercase">Họ và tên</label>
@@ -1232,7 +1213,7 @@ export default function LandingPage() {
               </div>
 
               <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black font-heading tracking-tight leading-tight m-0">
-                Sẵn Sàng Chinh Phục Điểm 9+ Cùng F-PREP?
+                Sẵn Sàng Chinh Phục Điểm 9+ Cùng FPREP?
               </h2>
 
               <p className="text-white/90 text-xs sm:text-base max-w-xl mx-auto font-semibold leading-relaxed m-0">

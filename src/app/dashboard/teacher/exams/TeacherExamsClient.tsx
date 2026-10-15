@@ -1756,7 +1756,7 @@ export default function TeacherExamsClient({
       )}
 
       {/* ==================================================== */}
-      {/* MODAL 3: SOẠN ĐỀ THI CHUẨN FMATH 2026 */}
+      {/* MODAL 3: SOẠN ĐỀ THI CHUẨN FPREP 2026 */}
       {/* ==================================================== */}
       {mounted && editingExamModal && (
         <ExamEditorModal

@@ -160,7 +160,7 @@ export default function TeacherDashboardClient({
     source_url: string;
   } | null>(null);
 
-  // Modal Soạn đề thi chuẩn FMATH 2026
+  // Modal Soạn đề thi chuẩn FPREP 2026
   const [editingExamModal, setEditingExamModal] = useState<any | null>(null);
 
   // Right Panel: Sub tabs ('materials' vs 'theory' vs 'exams')
@@ -368,7 +368,7 @@ export default function TeacherDashboardClient({
     }
   };
 
-  // 6.5. Lưu Lý thuyết Markdown của Bài học (Chuẩn FMATH - Dual Persistence)
+  // 6.5. Lưu Lý thuyết Markdown của Bài học (Chuẩn FPREP - Dual Persistence)
   const handleSaveTheory = async (chapterId: string, lessonId: string, theoryContent: string) => {
     try {
       // 1. Thử cập nhật trực tiếp vào bảng lessons
@@ -453,7 +453,7 @@ export default function TeacherDashboardClient({
     }
   };
 
-  // 7. Lưu Đề thi và Bộ câu hỏi từ ExamEditorModal (Chuẩn FMATH 2026)
+  // 7. Lưu Đề thi và Bộ câu hỏi từ ExamEditorModal (Chuẩn FPREP 2026)
   const handleSaveExamModal = async (examMeta: any, questionsData: QuestionData[]) => {
     try {
       const activeChapter = localChapters.find(c => c.id === selectedChapterId);
@@ -2269,7 +2269,7 @@ export default function TeacherDashboardClient({
         </div>
       )}
 
-      {/* MODAL SOẠN ĐỀ THI & CÂU HỎI CHUẨN FMATH 2026 */}
+      {/* MODAL SOẠN ĐỀ THI & CÂU HỎI CHUẨN FPREP 2026 */}
       {editingExamModal && (
         <ExamEditorModal
           isOpen={!!editingExamModal}

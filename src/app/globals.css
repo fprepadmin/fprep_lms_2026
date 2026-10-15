@@ -139,7 +139,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 /* =========================================================================
-   FMATH STANDARDIZED FLAT CARD & COMPONENT STYLES (EXACT CLONE)
+   FPREP STANDARDIZED FLAT CARD & COMPONENT STYLES
    ========================================================================= */
 .page-container {
   display: flex;
@@ -208,7 +208,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
   box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.35);
 }
 
-/* BUTTONS CHUẨN FMATH - KÍCH THƯỚC TO RÕ DỄ BẤM */
+/* BUTTONS CHUẨN FPREP - KÍCH THƯỚC TO RÕ DỄ BẤM */
 .btn-primary {
   font-family: 'Inter', sans-serif;
   background-color: #0d6efd;
@@ -341,7 +341,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
   border-radius: 0.5rem;
 }
 
-/* BADGES CHUẨN FMATH */
+/* BADGES CHUẨN FPREP */
 .badge-primary {
   font-family: 'Inter', sans-serif;
   background-color: #0d6efd;

@@ -107,9 +107,34 @@ export default async function ClassroomPage() {
     exams = exData || [];
   }
 
+  // Lấy ảnh nền cá nhân hóa của lớp học (từ classInfo hoặc audit_logs)
+  let classBackgroundUrl = classInfo.background_url || '';
+  if (!classBackgroundUrl) {
+    try {
+      const { data: bgLog } = await supabase
+        .from('audit_logs')
+        .select('new_values')
+        .eq('target_table', 'classes')
+        .eq('target_id', studentDetail.class_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (bgLog?.new_values?.background_url) {
+        classBackgroundUrl = bgLog.new_values.background_url;
+      }
+    } catch (e) {
+      console.error('Error fetching class background for student:', e);
+    }
+  }
+
+  const enrichedClassInfo = {
+    ...classInfo,
+    background_url: classBackgroundUrl
+  };
+
   return (
     <ClassroomClient
-      classInfo={classInfo}
+      classInfo={enrichedClassInfo}
       classmates={classmates}
       teacherAssignments={teacherAssignments}
       announcements={announcements}

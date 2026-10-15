@@ -12,6 +12,8 @@ import { redirect } from 'next/navigation';
 import AnnouncementManager from '../teacher/AnnouncementManager';
 import SubjectIcon from '@/components/student/SubjectIcon';
 import DailyQuote from '@/components/student/DailyQuote';
+import GamificationHub from '@/components/student/GamificationHub';
+import { calculateGamification } from '@/lib/gamification';
 import { getSubjectColorTheme } from '@/lib/schoolUtils';
 
 export const dynamic = 'force-dynamic';
@@ -73,7 +75,7 @@ export default async function StudentDashboardPage() {
   const studentMshs = studentDetail?.mshs || (studentEmail ? studentEmail.split('@')[0].toUpperCase() : 'Chưa cập nhật');
   const className = studentDetail?.classes?.name || 'Chưa xếp lớp';
   const groupType = studentDetail?.classes?.group_type || 'T';
-  const academicYear = studentDetail?.classes?.academic_year || '2024-2027';
+  const academicYear = '2024-2027';
 
   // 3. TỐI ƯU HÓA TRUY VẤN SONG SONG BẰNG PROMISE.ALL
   const [
@@ -138,10 +140,12 @@ export default async function StudentDashboardPage() {
     ? (myScores.reduce((a: number, b: number) => a + b, 0) / myScores.length).toFixed(1)
     : '---';
 
-  // Cấp độ và Kinh nghiệm
-  const level = Math.max(1, Math.floor(progress.length / 3) + 1);
-  const xp = progress.length * 100 + totalStudyMinutes * 2 + examResults.length * 50;
-  const nextLevelProgress = Math.round(((progress.length % 3) / 3) * 100);
+  // Cấp độ, Kinh nghiệm & Thành tựu thực tế từ Gamification Engine
+  const gamification = calculateGamification(progress, logs, examResults);
+  const level = gamification.level;
+  const levelTitle = gamification.levelTitle;
+  const xp = gamification.totalXp;
+  const nextLevelProgress = gamification.progressPercent;
 
   // Tính toán số liệu từng môn học
   const subjectsWithStats = subjects.map((sub: any) => {
@@ -206,12 +210,14 @@ export default async function StudentDashboardPage() {
   const greetingText = hour < 12 ? 'Chào buổi sáng' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
 
   return (
-    <div className="space-y-6 sm:space-y-8 w-full animate-fade-in pb-10">
+    <div className="space-y-6 sm:space-y-8 w-full animate-fade-in pb-10" suppressHydrationWarning>
       
       {/* =========================================================================
-          1. HERO GREETING BANNER & LEVEL CAPSULE (NỀN XANH CHUẨN FMATH & FPT)
+          1. HERO GREETING BANNER & LEVEL CAPSULE (NỀN XANH CHUẨN FPREP & FPT)
           ========================================================================= */}
       <div className="relative overflow-hidden rounded-3xl border-2 border-[#b6d4fe] dark:border-blue-900/60 bg-gradient-to-br from-[#d9ebff] via-[#e7f1ff] to-[#f0f7ff] dark:from-[#0c224a] dark:via-[#081836] dark:to-[#040e21] p-6 sm:p-8 shadow-sm transition-all">
+        
+
         {/* Glow hiệu ứng nền */}
         <div className="absolute -right-20 -top-20 w-80 h-80 bg-blue-500/20 dark:bg-blue-500/25 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -left-20 -bottom-20 w-80 h-80 bg-sky-400/20 dark:bg-sky-500/15 rounded-full blur-3xl pointer-events-none" />
@@ -234,7 +240,7 @@ export default async function StudentDashboardPage() {
             </h1>
             
             <p className="text-[#084298] dark:text-blue-100 font-semibold text-xs sm:text-sm max-w-xl leading-relaxed m-0">
-              Chào mừng bạn đến với hệ thống tự học trực tuyến F-PREP. Hãy hoàn thành các mục tiêu hôm nay để bứt phá điểm số nhé!
+              Chào mừng bạn đến với hệ thống tự học trực tuyến FPREP. Hãy hoàn thành các mục tiêu hôm nay để bứt phá điểm số nhé!
             </p>
             
             {/* Badges thông tin lớp */}
@@ -262,7 +268,7 @@ export default async function StudentDashboardPage() {
                   {level}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[10px] font-extrabold text-[#084298] dark:text-blue-300 uppercase tracking-wider">Cấp Độ</div>
+                  <div className="text-[10px] font-extrabold text-[#084298] dark:text-blue-300 uppercase tracking-wider">Cấp Độ &bull; {levelTitle}</div>
                   <div className="text-sm font-black text-[#052c65] dark:text-white font-heading truncate">Cấp {level}</div>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <div className="w-14 bg-[#e2eeff] dark:bg-blue-950 rounded-full h-1.5 overflow-hidden border border-[#b6d4fe]/60">
@@ -273,17 +279,19 @@ export default async function StudentDashboardPage() {
                 </div>
               </div>
 
-              {/* Pillar 2: Tổng Kinh Nghiệm */}
+              {/* Pillar 2: Tổng Kinh Nghiệm & Chuỗi Streak */}
               <div className="flex items-center gap-3 sm:pr-3.5 border-b sm:border-b-0 sm:border-r border-[#b6d4fe]/70 dark:border-blue-800/60 pb-3 sm:pb-0">
                 <div className="w-11 h-11 rounded-2xl bg-orange-500/15 text-orange-600 dark:text-orange-400 flex items-center justify-center border border-orange-400/40 shrink-0">
-                  <Sparkles className="h-5 w-5" />
+                  <Flame className="h-5 w-5 fill-orange-500 text-orange-500" />
                 </div>
                 <div className="min-w-0">
                   <div className="text-[10px] font-extrabold text-[#084298] dark:text-blue-300 uppercase tracking-wider">Kinh Nghiệm</div>
                   <div className="text-sm font-black text-[#052c65] dark:text-white font-heading truncate flex items-baseline gap-1">
                     {xp.toLocaleString()} <span className="text-[11px] font-black text-orange-500">XP</span>
                   </div>
-                  <span className="text-[10px] font-bold text-[#084298]/80 dark:text-blue-300/80">Tích lũy học</span>
+                  <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 flex items-center gap-1">
+                    Chuỗi {gamification.streakDays} ngày
+                  </span>
                 </div>
               </div>
 
@@ -388,6 +396,11 @@ export default async function StudentDashboardPage() {
           </p>
         </Link>
       </div>
+
+      {/* =========================================================================
+          GAMIFICATION & THÀNH TỰU HOẠT ĐỘNG THỰC TẾ
+          ========================================================================= */}
+      <GamificationHub stats={gamification} />
 
       {/* =========================================================================
           3. METRICS CARDS (4 CHỈ SỐ HỌC TẬP TỔNG QUAN)
@@ -516,11 +529,6 @@ export default async function StudentDashboardPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {isMath && (
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-600 text-white shadow-xs">
-                          FMATH12
-                        </span>
-                      )}
                       <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${theme.badgeBg} ${theme.badgeText} ${theme.badgeBorder}`}>
                         {theme.shortCode}
                       </span>

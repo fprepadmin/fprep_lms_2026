@@ -9,7 +9,6 @@ import {
   ClipboardList, ArrowUpRight, Check
 } from 'lucide-react';
 import Link from 'next/link';
-import FMathNotice from '@/components/common/FMathNotice';
 import SubjectIcon from '@/components/student/SubjectIcon';
 import { getSubjectColorTheme } from '@/lib/schoolUtils';
 
@@ -158,11 +157,6 @@ export default function StudentDashboardClient({
                     <h2 className="font-black font-heading text-2xl sm:text-3xl text-foreground tracking-tight m-0">
                       Môn {sub.name}
                     </h2>
-                    {isMath && (
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-600 text-white shadow-xs">
-                        FMATH12
-                      </span>
-                    )}
                     {getGroupBadge(sub.group_type)}
                   </div>
                   <p className="text-xs text-muted-foreground font-semibold flex flex-wrap items-center gap-3 m-0 mt-1">
@@ -232,11 +226,6 @@ export default function StudentDashboardClient({
             </button>
           </div>
         </div>
-
-        {/* THÔNG BÁO FMATH KHI CHỌN MÔN TOÁN */}
-        {sub.name.toLowerCase().includes('toán') && (
-          <FMathNotice className="my-2" />
-        )}
 
         {/* NỘI DUNG THEO TAB ĐÃ CHỌN */}
         
@@ -479,7 +468,7 @@ export default function StudentDashboardClient({
   return (
     <div className="space-y-6 animate-fade-in w-full pb-10">
       
-      {/* HEADER MÔN HỌC (NỀN XANH CHUẨN FMATH & FPT) */}
+      {/* HEADER MÔN HỌC (NỀN XANH CHUẨN FPREP & FPT) */}
       <div className="rounded-3xl border-2 border-[#b6d4fe] dark:border-blue-900/60 bg-gradient-to-br from-[#d9ebff] via-[#e7f1ff] to-[#f0f7ff] dark:from-[#0c224a] dark:via-[#081836] dark:to-[#040e21] p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden shadow-sm">
         <div className="space-y-2 max-w-2xl relative z-10">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-white/95 dark:bg-[#071735]/90 px-3.5 py-1 text-xs font-black text-[#0d6efd] dark:text-blue-400 border border-[#b6d4fe] dark:border-blue-700/50 shadow-2xs backdrop-blur-md">
@@ -563,11 +552,6 @@ export default function StudentDashboardClient({
                     <SubjectIcon name={sub.name} className="h-6 w-6" />
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {isMath && (
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-blue-600 text-white shadow-xs">
-                        FMATH12
-                      </span>
-                    )}
                     <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${theme.badgeBg} ${theme.badgeText} ${theme.badgeBorder}`}>
                       {theme.shortCode}
                     </span>
@@ -586,13 +570,6 @@ export default function StudentDashboardClient({
                     <span>{stats.totalExams} Đề thi</span>
                   </p>
                 </div>
-
-                {isMath && (
-                  <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-600 dark:text-blue-400 font-bold flex items-center justify-between">
-                    <span>Học trên FMATH12</span>
-                    <ArrowUpRight className="h-3.5 w-3.5" />
-                  </div>
-                )}
               </div>
 
               {/* Tiến độ hoàn thành */}
