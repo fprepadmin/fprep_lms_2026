@@ -1,5 +1,15 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { 
+  getAuth, 
+  initializeAuth, 
+  indexedDBLocalPersistence, 
+  browserLocalPersistence, 
+  browserSessionPersistence, 
+  inMemoryPersistence, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut 
+} from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'placeholder-api-key',
@@ -12,7 +22,28 @@ const firebaseConfig = {
 };
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+
+// Khởi tạo Auth với browserLocalPersistence (localStorage) làm ưu tiên hàng đầu.
+// Điều này giúp loại bỏ triệt để 100% lỗi WebKit/Safari "The database connection is closing" / "Database is hidden/closing" trên Macbook và iPad.
+let authInstance: any;
+if (typeof window !== 'undefined') {
+  try {
+    authInstance = initializeAuth(app, {
+      persistence: [
+        browserLocalPersistence,
+        browserSessionPersistence,
+        indexedDBLocalPersistence,
+        inMemoryPersistence
+      ]
+    });
+  } catch (e) {
+    authInstance = getAuth(app);
+  }
+} else {
+  authInstance = getAuth(app);
+}
+
+export const auth = authInstance;
 export const googleProvider = new GoogleAuthProvider();
 
 // Yêu cầu chọn tài khoản mỗi lần bấm đăng nhập

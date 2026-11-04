@@ -16,7 +16,7 @@ import GamificationHub from '@/components/student/GamificationHub';
 import Grade12Leaderboard from '@/components/student/Grade12Leaderboard';
 import ExamScheduleGK1Widget from '@/components/student/ExamScheduleGK1Widget';
 import { calculateGamification } from '@/lib/gamification';
-import { getSubjectColorTheme } from '@/lib/schoolUtils';
+import { getSubjectColorTheme, filterAccessibleSubjectsForStudent } from '@/lib/schoolUtils';
 import { fetchLeaderboardFromPython, LeaderboardItem } from '@/lib/pythonBackend';
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +70,7 @@ export default async function StudentDashboardPage() {
   const studentName = studentDetail?.full_name || (studentEmail ? studentEmail.split('@')[0] : 'Học sinh');
   const studentMshs = studentDetail?.mshs || (studentEmail ? studentEmail.split('@')[0].toUpperCase() : 'Chưa cập nhật');
   const className = studentDetail?.classes?.name || 'Chưa xếp lớp';
+  const classId = studentDetail?.class_id;
   const groupType = studentDetail?.classes?.group_type || 'T';
 
   // 3. Tối ưu truy vấn: Lấy leaderboard từ Python Server (FastAPI cache)
@@ -82,7 +83,8 @@ export default async function StudentDashboardPage() {
     announcementsRes,
     recentProgressRes,
     examResultsRes,
-    subjectsRes,
+    allSubjectsRes,
+    teacherClassesRes,
     chaptersRes,
     examsRes,
     pythonLeaderboard
@@ -93,7 +95,10 @@ export default async function StudentDashboardPage() {
     supabase.from('announcements').select('*').or(`target_type.eq.all,and(target_type.eq.individual,target_user_id.eq.${studentId}),target_type.is.null`).order('created_at', { ascending: false }).limit(10),
     supabase.from('study_progress').select('*, lessons(*, chapters(*, subjects(*)))').eq('student_id', studentId).eq('completed', true).order('completed_at', { ascending: false }).limit(4),
     supabase.from('exam_results').select('*').eq('student_id', studentId),
-    supabase.from('subjects').select('*').in('group_type', groupType === 'X' ? ['X', 'ENG'] : ['T', 'ENG']).order('name'),
+    supabase.from('subjects').select('*').order('name'),
+    classId
+      ? supabase.from('teacher_classes').select('subject_id').eq('class_id', classId)
+      : Promise.resolve({ data: [] }),
     supabase.from('chapters').select('id, subject_id, lessons(id)').order('order_index', { ascending: true }),
     supabase.from('exams').select('id, subject_id'),
     pythonLeaderboardPromise
@@ -101,11 +106,13 @@ export default async function StudentDashboardPage() {
 
   const progress = progressRes.data || [];
   const logs = logsRes.data || [];
-  const lastAccessed = lastAccessedRes.data;
+  const lastAccessed = lastAccessedRes.data || null;
   const announcements = announcementsRes.data || [];
   const recentProgress = recentProgressRes.data || [];
   const examResults = examResultsRes.data || [];
-  const subjects = subjectsRes.data || [];
+
+  const assignedSubjectIds = (teacherClassesRes.data || []).map((t: any) => t.subject_id).filter(Boolean);
+  const subjects = filterAccessibleSubjectsForStudent(allSubjectsRes.data || [], groupType, assignedSubjectIds);
   const chapters = chaptersRes.data || [];
   const exams = examsRes.data || [];
 

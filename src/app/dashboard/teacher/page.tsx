@@ -29,20 +29,37 @@ export default async function TeacherDashboardPage() {
 
   const supabase = await getSupabaseServerClient();
 
+  // Xác định ID hồ sơ chuẩn trong CSDL (hỗ trợ cả UID và UUID tạo từ admin)
+  let effectiveTeacherId = teacherId;
+  let profileRole = payload.role || 'teacher';
+
+  if (teacherEmail) {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('email', teacherEmail.trim().toLowerCase())
+      .maybeSingle();
+    if (prof) {
+      effectiveTeacherId = prof.id;
+      profileRole = prof.role || profileRole;
+    }
+  }
+
   // 1. TỐI ƯU TRUY VẤN SONG SONG BẰNG PROMISE.ALL
   const [
-    profileRes,
     assignmentsRes,
     supportRequestsRes,
     announcementsRes
   ] = await Promise.all([
-    supabase.from('profiles').select('role').eq('id', teacherId).single(),
-    supabase.from('teacher_classes').select('*, classes(*), subjects(*)').eq('teacher_id', teacherId),
+    supabase
+      .from('teacher_classes')
+      .select('*, classes(*), subjects(*)')
+      .or(`teacher_id.eq.${teacherId},teacher_id.eq.${effectiveTeacherId}`),
     supabase.from('support_requests').select('*').order('created_at', { ascending: false }),
-    supabase.from('announcements').select('*').or(`target_type.eq.all,target_type.eq.teachers,and(target_type.eq.individual,target_user_id.eq.${teacherId}),target_type.is.null`).order('created_at', { ascending: false })
+    supabase.from('announcements').select('*').or(`target_type.eq.all,target_type.eq.teachers,and(target_type.eq.individual,target_user_id.eq.${effectiveTeacherId}),target_type.is.null`).order('created_at', { ascending: false })
   ]);
 
-  const userRole = profileRes.data?.role || 'teacher';
+  const userRole = profileRole;
   const assignments = assignmentsRes.data || [];
   const announcements = announcementsRes.data || [];
 
@@ -106,7 +123,7 @@ export default async function TeacherDashboardPage() {
     <div className="space-y-4 sm:space-y-5 w-full animate-fade-in pb-10">
       
       {/* 1. HERO BANNER SƯ PHẠM SỐ HIỆN ĐẠI (PREMIUM TEACHER BANNER) */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0e1a38] via-[#14234b] to-[#1e1b4b] dark:from-[#090e1f] dark:via-[#0c1530] dark:to-[#13112c] text-white p-5 sm:p-6 lg:p-7 shadow-lg border border-blue-900/30">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-indigo-700 to-slate-900 dark:from-[#090e1f] dark:via-[#0c1530] dark:to-[#13112c] text-white p-5 sm:p-6 lg:p-7 shadow-lg border border-blue-600/30 dark:border-blue-900/30">
         
         {/* Họa tiết ánh sáng trang trí nền */}
         <div className="absolute -right-20 -top-20 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />

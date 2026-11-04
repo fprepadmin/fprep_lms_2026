@@ -16,28 +16,19 @@ interface ParsedItem {
   text: string;
 }
 
-export function parseExplanationContent(rawContent: string): ParsedItem[] {
-  if (!rawContent || typeof rawContent !== 'string') return [];
-  const trimmed = rawContent.trim();
-  if (!trimmed) return [];
+export function parseExplanationContent(rawContent: any): ParsedItem[] {
+  if (!rawContent) return [];
 
-  // 1. Kiểm tra xem có cấu trúc phân chia các ý a., b., c., d. / A), B)... không
-  // Split theo ranh giới các mệnh đề a., b., c., d., 1., 2., hoặc Ý a:, Ý b:
-  const parts = trimmed
-    .split(/(?:^|\n|\r|\s{2,}|(?<=[.!?])\s+)(?=(?:[a-dA-D1-4]|Ý\s*[a-dA-D1-4])[\.\:\)])/)
-    .map(p => p.trim())
-    .filter(Boolean);
-
-  if (parts.length > 1) {
-    return parts.map((part, index) => {
-      // Regex trích xuất tiền tố như: "a.", "B)", "Ý c:", "1."
-      const match = part.match(/^((?:[a-dA-D1-4]|Ý\s*[a-dA-D1-4])[\.\:\)])\s*([\s\S]*)/);
-      if (match) {
-        const rawLabel = match[1].replace(/[\.\:\)]/g, '').trim();
-        let body = match[2].trim();
+  // 1. Xử lý nếu rawContent là Object hoặc Array trực tiếp (từ JSON nạp vào)
+  if (typeof rawContent === 'object' && rawContent !== null) {
+    if (Array.isArray(rawContent)) {
+      return rawContent.map((item, idx) => {
+        const id = item.id || item.label || String.fromCharCode(97 + idx);
+        const rawText = item.text || item.content || item.explanation || String(item);
+        const cleanLetter = String(id).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        let body = String(rawText).trim();
         let status: 'CORRECT' | 'INCORRECT' | null = null;
 
-        // Nhận diện trạng thái Đúng / Sai ở đầu câu giải thích
         if (/^(Đúng|Chính xác)\b/i.test(body)) {
           status = 'CORRECT';
           body = body.replace(/^(Đúng|Chính xác)[\,\.\:\-]?\s*/i, '');
@@ -46,13 +37,100 @@ export function parseExplanationContent(rawContent: string): ParsedItem[] {
           body = body.replace(/^(Sai|Không đúng|Không chính xác)[\,\.\:\-]?\s*/i, '');
         }
 
-        // Chuẩn hóa tên nhãn: "Ý a" -> "Ý A", "1" -> "Ý 1"
-        const cleanLetter = rawLabel.replace(/^Ý\s*/i, '').toUpperCase();
-        const displayLabel = `Ý ${cleanLetter}`;
+        return {
+          id: `item-${idx}`,
+          label: cleanLetter ? `Ý ${cleanLetter}` : null,
+          status,
+          text: body
+        };
+      });
+    }
 
+    // Object dạng { a: "...", b: "..." }
+    return Object.entries(rawContent).map(([key, val], idx) => {
+      const cleanLetter = String(key).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      let body = String(val).trim();
+      let status: 'CORRECT' | 'INCORRECT' | null = null;
+
+      if (/^(Đúng|Chính xác)\b/i.test(body)) {
+        status = 'CORRECT';
+        body = body.replace(/^(Đúng|Chính xác)[\,\.\:\-]?\s*/i, '');
+      } else if (/^(Sai|Không đúng|Không chính xác)\b/i.test(body)) {
+        status = 'INCORRECT';
+        body = body.replace(/^(Sai|Không đúng|Không chính xác)[\,\.\:\-]?\s*/i, '');
+      }
+
+      return {
+        id: `item-${idx}`,
+        label: cleanLetter ? `Ý ${cleanLetter}` : `Ý ${idx + 1}`,
+        status,
+        text: body
+      };
+    });
+  }
+
+  let text = String(rawContent).trim();
+  if (!text) return [];
+
+  // 2. Nếu là chuỗi JSON: giải mã JSON an toàn
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parseExplanationContent(parsed);
+      }
+    } catch (e) {
+      // Tiếp tục xử lý như text thường nếu không parse được
+    }
+  }
+
+  // 3. Chuẩn hóa các ký tự xuống dòng escaped
+  text = text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
+
+  // 4. Kiểm tra xem có cấu trúc phân chia các ý a., b., c., d. / a), b), c), d. / Ý a:, Ý b: / a đúng, b sai...
+  const pattern = /(?:^|\r?\n|\s{2,}|(?<=[.!?])\s+|(?<=;)\s*)(?=(?:(?:\b[a-dA-D]\b|Ý\s*[a-dA-D])[\.\:\)]|(?<!(?:đáp án|phương án|chọn|mệnh đề)\s+)(?:\b[a-dA-D]\s+(?:đúng|sai|chính xác|không đúng)\b)))/gi;
+
+  const parts = text.split(pattern).map(p => p.trim()).filter(Boolean);
+
+  if (parts.length > 1) {
+    return parts.map((part, index) => {
+      // Regex trích xuất tiền tố như: "a.", "B)", "Ý c:", hoặc "a đúng", "b sai"
+      let match = part.match(/^((?:[a-dA-D]|Ý\s*[a-dA-D])[\.\:\)])\s*([\s\S]*)/i);
+      let rawLabel = '';
+      let body = '';
+      let status: 'CORRECT' | 'INCORRECT' | null = null;
+
+      if (match) {
+        rawLabel = match[1].replace(/[\.\:\)]/g, '').trim();
+        body = match[2].trim();
+      } else {
+        // Kiểm tra dạng "a đúng...", "b sai..."
+        const matchAlt = part.match(/^([a-dA-D])\s+(đúng|sai|chính xác|không đúng)\b[\,\.\:\-]?\s*([\s\S]*)/i);
+        if (matchAlt) {
+          rawLabel = matchAlt[1].trim();
+          const stStr = matchAlt[2].toLowerCase();
+          status = (stStr === 'đúng' || stStr === 'chính xác') ? 'CORRECT' : 'INCORRECT';
+          body = matchAlt[3].trim();
+        } else {
+          body = part;
+        }
+      }
+
+      if (rawLabel) {
+        if (!status) {
+          if (/^(Đúng|Chính xác)\b/i.test(body)) {
+            status = 'CORRECT';
+            body = body.replace(/^(Đúng|Chính xác)[\,\.\:\-]?\s*/i, '');
+          } else if (/^(Sai|Không đúng|Không chính xác)\b/i.test(body)) {
+            status = 'INCORRECT';
+            body = body.replace(/^(Sai|Không đúng|Không chính xác)[\,\.\:\-]?\s*/i, '');
+          }
+        }
+
+        const cleanLetter = rawLabel.replace(/^Ý\s*/i, '').toUpperCase();
         return {
           id: `item-${index}`,
-          label: displayLabel,
+          label: `Ý ${cleanLetter}`,
           status,
           text: body
         };
@@ -67,8 +145,8 @@ export function parseExplanationContent(rawContent: string): ParsedItem[] {
     });
   }
 
-  // 2. Nếu không có ký tự a, b, c, d nhưng có ngắt dòng (newline)
-  const lines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // 5. Nếu không có ký tự a, b, c, d nhưng có ngắt dòng (newline)
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length > 1) {
     return lines.map((line, index) => {
       // Kiểm tra gạch đầu dòng hoặc số
@@ -90,13 +168,13 @@ export function parseExplanationContent(rawContent: string): ParsedItem[] {
     });
   }
 
-  // 3. Đoạn văn đơn lẻ thông thường
+  // 6. Đoạn văn đơn lẻ thông thường
   return [
     {
       id: 'single',
       label: null,
       status: null,
-      text: trimmed
+      text
     }
   ];
 }

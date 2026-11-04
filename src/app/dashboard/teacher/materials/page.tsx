@@ -19,21 +19,39 @@ export default async function TeacherMaterialsPage() {
     redirect('/');
   }
   const teacherId = payload.sub;
+  const teacherEmail = payload.email || '';
 
   const supabase = await getSupabaseServerClient();
 
+  // Xác định ID hồ sơ chuẩn trong CSDL (hỗ trợ cả UID và UUID tạo từ admin)
+  let effectiveTeacherId = teacherId;
+  let profileRole = payload.role || 'teacher';
+
+  if (teacherEmail) {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('email', teacherEmail.trim().toLowerCase())
+      .maybeSingle();
+    if (prof) {
+      effectiveTeacherId = prof.id;
+      profileRole = prof.role || profileRole;
+    }
+  }
+
   // 1. Lấy thông tin vai trò, danh sách lớp & môn học phân công, và toàn bộ danh mục môn học
   const [
-    profileRes,
     assignmentsRes,
     allSubjectsRes
   ] = await Promise.all([
-    supabase.from('profiles').select('role').eq('id', teacherId).single(),
-    supabase.from('teacher_classes').select('*, classes(*), subjects(*)').eq('teacher_id', teacherId),
+    supabase
+      .from('teacher_classes')
+      .select('*, classes(*), subjects(*)')
+      .or(`teacher_id.eq.${teacherId},teacher_id.eq.${effectiveTeacherId}`),
     supabase.from('subjects').select('*')
   ]);
 
-  const userRole = profileRes.data?.role || payload.role || 'teacher';
+  const userRole = profileRole;
   const isSystemAdmin = userRole === 'admin';
   const assignments = assignmentsRes.data || [];
   const allSubjects = allSubjectsRes.data || [];

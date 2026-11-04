@@ -10,6 +10,7 @@ import {
 import MathRenderer from '@/components/MathRenderer';
 import StructuredExplanation from '@/components/StructuredExplanation';
 import { parseAndRepairJson } from '@/lib/jsonRepair';
+import { cleanOptionText, parseOptions } from '@/lib/questionUtils';
 import { createSupabaseClient } from '@/lib/supabase';
 
 export interface QuestionDetail {
@@ -55,29 +56,6 @@ interface StudentSubmissionDetailModalProps {
   onClose: () => void;
   submission: SubmissionData | null;
   questions?: QuestionDetail[];
-}
-
-export function cleanOptionText(raw: any): string {
-  if (raw === null || raw === undefined) return '';
-  if (typeof raw === 'object') {
-    if (raw.text !== undefined) return cleanOptionText(raw.text);
-    if (raw.content !== undefined) return cleanOptionText(raw.content);
-    return JSON.stringify(raw);
-  }
-  let str = String(raw).trim();
-  if (
-    (str.startsWith('{') && str.endsWith('}')) ||
-    (str.startsWith('[') && str.endsWith(']'))
-  ) {
-    try {
-      const parsed = JSON.parse(str);
-      if (parsed && typeof parsed === 'object') {
-        if (parsed.text !== undefined) return cleanOptionText(parsed.text);
-        if (parsed.content !== undefined) return cleanOptionText(parsed.content);
-      }
-    } catch (e) {}
-  }
-  return str;
 }
 
 // Helpers
@@ -127,41 +105,6 @@ const getQuestionType = (q: QuestionDetail): 'mcq' | 'tf' | 'saq' => {
   if (opts.length === 0) return 'saq';
 
   return 'mcq';
-};
-
-const parseOptions = (rawOptions: any, type?: 'mcq' | 'tf' | 'saq'): { id: string; text: string }[] => {
-  if (!rawOptions) return [];
-  let list: any[] = [];
-  if (Array.isArray(rawOptions)) {
-    list = rawOptions;
-  } else if (typeof rawOptions === 'string') {
-    try {
-      const parsed = parseAndRepairJson(rawOptions);
-      if (Array.isArray(parsed)) list = parsed;
-      else if (typeof parsed === 'object' && parsed !== null) {
-        list = Object.entries(parsed).map(([key, val]) => ({ id: key, text: val }));
-      }
-    } catch (e) {}
-  }
-
-  if (list.length === 0) return [];
-
-  const isTf = type === 'tf';
-  const defaultKeys = isTf ? ['a', 'b', 'c', 'd'] : ['A', 'B', 'C', 'D'];
-
-  return list.map((opt, idx) => {
-    if (typeof opt === 'object' && opt !== null) {
-      const rawId = opt.id || defaultKeys[idx] || String(idx + 1);
-      return {
-        id: isTf ? String(rawId).toLowerCase() : String(rawId).toUpperCase(),
-        text: cleanOptionText(opt.text ?? opt.content ?? opt)
-      };
-    }
-    return {
-      id: defaultKeys[idx] || String(idx + 1),
-      text: cleanOptionText(opt)
-    };
-  });
 };
 
 export default function StudentSubmissionDetailModal({

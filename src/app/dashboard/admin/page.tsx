@@ -54,7 +54,7 @@ export default async function AdminDashboardPage() {
     <div className="space-y-4 sm:space-y-5 w-full animate-fade-in pb-10">
       
       {/* 1. HERO BANNER QUẢN TRỊ HỆ THỐNG CAO CẤP (LUXURY ADMIN COMMAND CENTER) */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1a0f28] via-[#1e1338] to-[#0f172a] text-white p-5 sm:p-6 lg:p-7 shadow-lg border border-purple-900/30">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-purple-800 via-indigo-900 to-slate-900 dark:from-[#1a0f28] dark:via-[#1e1338] dark:to-[#0f172a] text-white p-5 sm:p-6 lg:p-7 shadow-lg border border-purple-600/30 dark:border-purple-900/30">
         
         {/* Họa tiết ánh sáng trang trí nền */}
         <div className="absolute -right-20 -top-20 w-96 h-96 bg-rose-500/15 rounded-full blur-3xl pointer-events-none" />

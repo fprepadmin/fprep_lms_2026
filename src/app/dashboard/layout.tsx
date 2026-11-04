@@ -103,10 +103,23 @@ export default function DashboardLayout({
         let subjectName = 'Chưa phân công';
         try {
           const supabaseClient = createSupabaseClient();
+          let targetTeacherId = user.id;
+          
+          if (user.email) {
+            const { data: prof } = await supabaseClient
+              .from('profiles')
+              .select('id')
+              .eq('email', user.email.trim().toLowerCase())
+              .maybeSingle();
+            if (prof?.id) {
+              targetTeacherId = prof.id;
+            }
+          }
+
           const { data } = await supabaseClient
             .from('teacher_classes')
             .select('subjects(name)')
-            .eq('teacher_id', user.id)
+            .or(`teacher_id.eq.${user.id},teacher_id.eq.${targetTeacherId}`)
             .limit(1);
 
           if (data && data.length > 0) {
@@ -155,9 +168,15 @@ export default function DashboardLayout({
   }, [user]);
 
   useEffect(() => {
-    // Tự động kiểm tra Dark Mode của hệ thống
-    const isDark = document.documentElement.classList.contains('dark');
+    // Tự động kiểm tra Dark Mode của hệ thống và bộ nhớ trình duyệt
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+    const isDark = saved === 'dark' || (!saved && document.documentElement.classList.contains('dark'));
     setDarkMode(isDark);
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   }, []);
 
   // Tự động kéo lên đầu trang khi thay đổi tuyến đường (Scroll to top on navigation)
@@ -180,6 +199,8 @@ export default function DashboardLayout({
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
+    // Phát sự kiện đồng bộ theme trên toàn bộ ứng dụng
+    window.dispatchEvent(new CustomEvent('fprep_theme_changed', { detail: { isDark: nextDark } }));
   };
 
   const handleLogout = async () => {
@@ -486,9 +507,9 @@ export default function DashboardLayout({
         </div>
       )}
 
-      {/* 4. MAIN CONTENT CONTAINER (Stretched to 1400px widescreen layout) */}
+      {/* 4. MAIN CONTENT CONTAINER (Bung rộng 100% chuẩn công thái học cho Giáo viên, HOD và Admin) */}
       <div className="flex-1 flex flex-col min-w-0 pt-16 md:pt-[70px] w-full max-w-full relative z-10">
-        <main ref={mainRef} className="w-full max-w-[1400px] mx-auto min-w-0 p-3.5 sm:p-5 lg:p-6 flex-1">
+        <main ref={mainRef} className={`w-full ${user?.role === 'student' ? 'max-w-[1440px]' : 'max-w-[1680px]'} mx-auto min-w-0 p-3.5 sm:p-5 lg:p-6 flex-1 transition-all`}>
           <div className="w-full max-w-full min-w-0">
             {children}
           </div>

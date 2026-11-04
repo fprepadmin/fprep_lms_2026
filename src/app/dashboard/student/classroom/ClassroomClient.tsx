@@ -121,10 +121,17 @@ export default function ClassroomClient({
 
   const progressPercent = exams.length > 0 ? Math.round((completedCount / exams.length) * 100) : 0;
 
-  // Gom nhóm giáo viên phụ trách theo môn học thuộc ban
-  const relevantSubjects = subjects.length > 0 ? subjects : Array.from(
-    new Map(teacherAssignments.map(a => [a.subject_id, a.subjects])).values()
-  ).filter(Boolean);
+  // Gom nhóm giáo viên phụ trách: kết hợp môn thuộc ban và môn có giáo viên được phân quyền
+  const subjectMap = new Map<string, any>();
+  (subjects || []).forEach((s: any) => {
+    if (s && s.id) subjectMap.set(s.id, s);
+  });
+  (teacherAssignments || []).forEach((a: any) => {
+    if (a && a.subject_id && a.subjects) {
+      subjectMap.set(a.subject_id, a.subjects);
+    }
+  });
+  const relevantSubjects = Array.from(subjectMap.values());
 
   const assignmentsBySubject = relevantSubjects.map((sub: any) => {
     const teachers = teacherAssignments.filter(t => t.subject_id === sub.id);

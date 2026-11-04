@@ -553,10 +553,12 @@ export default function AdminDashboardClient({
   // Mở modal phân công giáo viên cho lớp học
   const openAssignModal = (cls: any) => {
     setAssigningClass(cls);
-    const applicableSubs = subjects.filter(s => {
-      if (cls.group_type === 'T') return s.group_type === 'T' || s.group_type === 'ENG';
-      if (cls.group_type === 'X') return s.group_type === 'X' || s.group_type === 'ENG';
-      return true;
+    // Ưu tiên hiển thị các môn thuộc ban của lớp lên trước, nhưng hiển thị đầy đủ tất cả các môn để Admin có thể phân công môn Toán, Lý, Tin cho các lớp Ban X và Ban K
+    const applicableSubs = [...subjects].sort((a, b) => {
+      const aMatch = a.group_type === cls.group_type || a.group_type === 'ENG' ? 0 : 1;
+      const bMatch = b.group_type === cls.group_type || b.group_type === 'ENG' ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+      return a.name.localeCompare(b.name, 'vi');
     });
     const currentClassAssignments = localTeacherClasses.filter(tc => tc.class_id === cls.id);
     const drafts = applicableSubs.map(s => {

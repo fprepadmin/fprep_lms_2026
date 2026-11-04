@@ -68,6 +68,10 @@ export default function StudentDashboardClient({
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
   const [searchKeyword, setSearchKeyword] = useState<string>('');
 
+  const tCount = useMemo(() => subjects.filter(s => s.group_type === 'T').length, [subjects]);
+  const xCount = useMemo(() => subjects.filter(s => s.group_type === 'X').length, [subjects]);
+  const engCount = useMemo(() => subjects.filter(s => s.group_type === 'ENG').length, [subjects]);
+
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.scrollTop = 0;
@@ -548,36 +552,42 @@ export default function StudentDashboardClient({
         >
           Tất cả môn ({subjects.length})
         </button>
-        <button
-          onClick={() => setActiveGroupTab('T')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            activeGroupTab === 'T' 
-              ? 'bg-blue-600 text-white shadow-xs' 
-              : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Tổ Tự Nhiên
-        </button>
-        <button
-          onClick={() => setActiveGroupTab('X')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            activeGroupTab === 'X' 
-              ? 'bg-emerald-600 text-white shadow-xs' 
-              : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Tổ Xã Hội
-        </button>
-        <button
-          onClick={() => setActiveGroupTab('ENG')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            activeGroupTab === 'ENG' 
-              ? 'bg-purple-600 text-white shadow-xs' 
-              : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          Ngoại Ngữ
-        </button>
+        {tCount > 0 && (
+          <button
+            onClick={() => setActiveGroupTab('T')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              activeGroupTab === 'T' 
+                ? 'bg-blue-600 text-white shadow-xs' 
+                : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Tổ Tự Nhiên ({tCount})
+          </button>
+        )}
+        {xCount > 0 && (
+          <button
+            onClick={() => setActiveGroupTab('X')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              activeGroupTab === 'X' 
+                ? 'bg-emerald-600 text-white shadow-xs' 
+                : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Tổ Xã Hội ({xCount})
+          </button>
+        )}
+        {engCount > 0 && (
+          <button
+            onClick={() => setActiveGroupTab('ENG')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              activeGroupTab === 'ENG' 
+                ? 'bg-purple-600 text-white shadow-xs' 
+                : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Ngoại Ngữ ({engCount})
+          </button>
+        )}
       </div>
 
       {/* LƯỚI THẺ MÔN HỌC */}

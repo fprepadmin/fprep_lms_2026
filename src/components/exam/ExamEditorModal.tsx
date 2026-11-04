@@ -11,8 +11,10 @@ import {
   RefreshCw, CheckSquare, TrendingUp
 } from 'lucide-react';
 import MathRenderer from '@/components/MathRenderer';
+import StructuredExplanation from '@/components/StructuredExplanation';
 import { uploadImageToCloudinary, getImageFromClipboardEvent } from '@/lib/cloudinary';
 import { parseAndRepairJson } from '@/lib/jsonRepair';
+import { cleanOptionText, parseOptions, formatExplanationWithLineBreaks, normalizeQuestionTypeAndAnswer } from '@/lib/questionUtils';
 
 const AI_PROMPT_FPREP = `Bạn là một chuyên gia giáo dục và kỹ sư dữ liệu khảo thí của hệ thống FPREP. 
 Nhiệm vụ: Đọc đề thi dưới đây và chuyển đổi toàn bộ câu hỏi sang mảng JSON chuẩn 2026. 
@@ -106,71 +108,27 @@ export default function ExamEditorModal({
   const [questions, setQuestions] = useState<QuestionData[]>(() => {
     if (initialQuestions && initialQuestions.length > 0) {
       return initialQuestions.map((q, idx) => {
-        let qType: 'mcq' | 'tf' | 'saq' = q.question_type || q.type || 'mcq';
-        let parsedOptions = Array.isArray(q.options) ? q.options : [];
-        if (typeof q.options === 'string') {
-          try { parsedOptions = JSON.parse(q.options); } catch (e) {}
-        }
-
-        // Tự động suy luận dạng câu hỏi nếu chưa rõ
-        const contentLower = (q.content || '').toLowerCase();
-        if (
-          contentLower.includes('đúng hoặc sai') || 
-          contentLower.includes('đúng sai') || 
-          contentLower.includes('tính đúng/sai') || 
-          contentLower.includes('tính đúng sai') || 
-          contentLower.includes('xét tính đúng') ||
-          contentLower.includes('mệnh đề sau')
-        ) {
-          qType = 'tf';
-        } else if (typeof q.correct_answer === 'object' && q.correct_answer !== null && !Array.isArray(q.correct_answer)) {
-          qType = 'tf';
-        } else if (parsedOptions.length === 0 && qType !== 'tf') {
-          qType = 'saq';
-        }
-
+        const parsedOptions = parseOptions(q.options, (q.question_type || q.type) as any);
+        const norm = normalizeQuestionTypeAndAnswer(q, parsedOptions);
+        const qType = norm.type;
+        const ca = norm.correct_answer;
         const isTf = qType === 'tf';
-        const defaultKeys = isTf ? ['a', 'b', 'c', 'd'] : ['A', 'B', 'C', 'D'];
-
-        if (parsedOptions.length > 0) {
-          parsedOptions = parsedOptions.map((opt: any, optIdx: number) => {
-            if (typeof opt === 'object' && opt !== null) {
-              return {
-                id: isTf ? String(opt.id || defaultKeys[optIdx] || String(optIdx + 1)).toLowerCase() : String(opt.id || defaultKeys[optIdx] || String(optIdx + 1)).toUpperCase(),
-                text: String(opt.text || opt.content || '')
-              };
-            }
-            return {
-              id: defaultKeys[optIdx] || String(optIdx + 1),
-              text: String(opt)
-            };
-          });
-        }
-
-        let ca = q.correct_answer;
-        if (qType === 'mcq') {
-          if (q.correct_option_index !== undefined && q.correct_option_index !== null) {
-            ca = ['A', 'B', 'C', 'D'][q.correct_option_index] || 'A';
-          }
-          if (!ca || typeof ca !== 'string') ca = 'A';
-        } else if (qType === 'tf') {
-          if (!ca || typeof ca !== 'object' || Array.isArray(ca)) {
-            ca = { a: true, b: false, c: true, d: false };
-          }
-        } else if (qType === 'saq') {
-          if (ca === undefined || ca === null) ca = '';
-          else ca = String(ca);
-        }
 
         const rawPt = q.points !== undefined && q.points !== null && !isNaN(Number(q.points))
           ? Number(q.points)
           : (q.point !== undefined ? Number(q.point) : (q.score !== undefined ? Number(q.score) : getDefaultQuestionPoints(qType)));
 
+        let finalContent = (q.content || '').trim();
+        const imgUrl = (q as any).image || (q as any).image_url || (q as any).imageUrl || (q as any).img;
+        if (imgUrl && typeof imgUrl === 'string' && !finalContent.includes(imgUrl)) {
+          finalContent = finalContent + `\n\n![Hình minh họa](${imgUrl})\n`;
+        }
+
         return {
           id: q.id || `temp-${idx}`,
           type: qType,
           level: q.level || (qType === 'saq' ? 'Vận dụng' : qType === 'tf' ? 'Thông hiểu' : 'Nhận biết'),
-          content: q.content || '',
+          content: finalContent,
           points: rawPt,
           options: qType === 'saq' ? [] : (parsedOptions.length > 0 ? parsedOptions : isTf ? [
             { id: 'a', text: '' },
@@ -490,65 +448,35 @@ export default function ExamEditorModal({
       }
 
       const formattedQuestions: QuestionData[] = parsed.map((item: any, idx: number) => {
-        let qType: 'mcq' | 'tf' | 'saq' = item.type || item.question_type || 'mcq';
-        let opts = Array.isArray(item.options) ? item.options : [];
-        
-        // Tự động suy luận dạng câu hỏi
-        const contentLower = (item.content || '').toLowerCase();
-        if (
-          contentLower.includes('đúng hoặc sai') || 
-          contentLower.includes('đúng sai') || 
-          contentLower.includes('tính đúng/sai') || 
-          contentLower.includes('tính đúng sai') || 
-          contentLower.includes('xét tính đúng') ||
-          contentLower.includes('mệnh đề sau')
-        ) {
-          qType = 'tf';
-        } else if (typeof item.correct_answer === 'object' && item.correct_answer !== null && !Array.isArray(item.correct_answer)) {
-          qType = 'tf';
-        } else if (opts.length === 0 && qType !== 'tf') {
-          qType = 'saq';
-        }
-
+        const parsedOpts = parseOptions(item.options, (item.type || item.question_type) as any);
+        const norm = normalizeQuestionTypeAndAnswer(item, parsedOpts);
+        const qType = norm.type;
         const isTf = qType === 'tf';
-        const defaultKeys = isTf ? ['a', 'b', 'c', 'd'] : ['A', 'B', 'C', 'D'];
-
-        if (opts.length > 0) {
-          opts = opts.map((t: any, i: number) => {
-            if (typeof t === 'object' && t !== null) {
-              return {
-                id: isTf ? String(t.id || defaultKeys[i] || String(i + 1)).toLowerCase() : String(t.id || defaultKeys[i] || String(i + 1)).toUpperCase(),
-                text: String(t.text || t.content || '')
-              };
-            }
-            return { id: defaultKeys[i] || String(i + 1), text: String(t) };
-          });
-        }
-
-        let ca = item.correct_answer;
-        if (qType === 'mcq') {
-          if (!ca || typeof ca !== 'string') ca = 'A';
-          else ca = String(ca).toUpperCase();
-        } else if (qType === 'tf') {
-          if (!ca || typeof ca !== 'object' || Array.isArray(ca)) {
-            ca = { a: true, b: false, c: true, d: false };
-          }
-        } else if (qType === 'saq') {
-          if (ca === undefined || ca === null) ca = '';
-          else ca = String(ca);
-        }
+        const ca = norm.correct_answer;
 
         const parsedPt = item.points !== undefined && item.points !== null && !isNaN(Number(item.points))
           ? Number(item.points)
           : (item.point !== undefined ? Number(item.point) : (item.score !== undefined ? Number(item.score) : getDefaultQuestionPoints(qType)));
 
+        let finalContent = (item.content || '').trim();
+        const imgUrl = item.image || item.image_url || item.imageUrl || item.img;
+        if (imgUrl && typeof imgUrl === 'string' && !finalContent.includes(imgUrl)) {
+          finalContent = finalContent + `\n\n![Hình minh họa](${imgUrl})\n`;
+        }
+
+        let finalExplanation = formatExplanationWithLineBreaks(item.explanation, qType);
+        const expImg = item.explanation_image || item.explanation_img;
+        if (expImg && typeof expImg === 'string' && !finalExplanation.includes(expImg)) {
+          finalExplanation = finalExplanation + `\n\n![Hình lời giải](${expImg})\n`;
+        }
+
         return {
           id: `imported-${idx}`,
           type: qType,
           level: item.level || (qType === 'saq' ? 'Vận dụng' : qType === 'tf' ? 'Thông hiểu' : 'Nhận biết'),
-          content: item.content || '',
+          content: finalContent,
           points: parsedPt,
-          options: qType === 'saq' ? [] : (opts.length > 0 ? opts : isTf ? [
+          options: qType === 'saq' ? [] : (parsedOpts.length > 0 ? parsedOpts : isTf ? [
             { id: 'a', text: '' },
             { id: 'b', text: '' },
             { id: 'c', text: '' },
@@ -560,7 +488,7 @@ export default function ExamEditorModal({
             { id: 'D', text: '' }
           ]),
           correct_answer: ca,
-          explanation: item.explanation || ''
+          explanation: finalExplanation
         };
       });
 
@@ -590,6 +518,10 @@ export default function ExamEditorModal({
         },
         questions.map(q => ({
           ...q,
+          options: (q.options || []).map((opt, optIdx) => ({
+            id: opt.id || (q.type === 'tf' ? ['a', 'b', 'c', 'd'][optIdx] : ['A', 'B', 'C', 'D'][optIdx]) || String(optIdx + 1),
+            text: cleanOptionText(opt.text ?? (opt as any).content ?? opt)
+          })),
           points: q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : getDefaultQuestionPoints(q.type)
         }))
       );
@@ -1188,11 +1120,9 @@ export default function ExamEditorModal({
                     className="w-full rounded-xl border border-border bg-card p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-sans text-sm leading-relaxed text-foreground"
                   />
                   {currentQ.explanation && (
-                    <div className="p-4 bg-muted/20 border border-border rounded-xl space-y-1">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Xem trước lời giải:</span>
-                      <div className="text-sm font-medium text-foreground">
-                        <MathRenderer content={currentQ.explanation} />
-                      </div>
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Xem trước lời giải trực quan:</span>
+                      <StructuredExplanation content={currentQ.explanation} />
                     </div>
                   )}
                 </div>

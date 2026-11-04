@@ -81,7 +81,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (firebaseUser) {
           await syncSession(firebaseUser);
         } else {
-          setUser(null);
+          // Bảo vệ phiên làm việc trên Safari/Macbook:
+          // Nếu IndexedDB của Safari bị đóng hoặc đưa về chế độ ngủ (hidden), kiểm tra lại cookie trước khi hủy phiên
+          const res = await fetch('/api/auth/sync').catch(() => null);
+          if (res && res.ok) {
+            const data = await res.json();
+            if (data.user && isMounted) {
+              setUser(data.user);
+              return;
+            }
+          }
+          if (isMounted) {
+            setUser(null);
+          }
         }
       } catch (err) {
         console.warn('onAuthStateChanged error:', err);
@@ -106,7 +118,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await syncSession(result.user);
       }
     } catch (err: any) {
-      console.error('Lỗi khi mở popup Google OAuth:', err);
+      console.warn('Lỗi khi mở popup Google OAuth:', err);
+
+      // Xử lý dứt điểm lỗi WebKit/Safari "The database connection is closing" / "database hidden/closing" trên Macbook
+      const errMsg = String(err?.message || '').toLowerCase();
+      if (errMsg.includes('closing') || errMsg.includes('hidden') || errMsg.includes('database')) {
+        console.info('[AUTH] Phát hiện WebKit IndexedDB closing/hidden, tự động khôi phục phiên từ Cookie...');
+        try {
+          const cookieRes = await fetch('/api/auth/sync');
+          if (cookieRes.ok) {
+            const data = await cookieRes.json();
+            if (data.user) {
+              setUser(data.user);
+              return;
+            }
+          }
+        } catch (e2) {}
+      }
+
       if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
         alert('Không thể hoàn tất đăng nhập Google: ' + (err.message || 'Lỗi kết nối'));
       }

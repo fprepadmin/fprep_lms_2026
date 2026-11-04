@@ -15,6 +15,7 @@ import AssignExamModal, { AssignmentPayload, ClassItem } from '@/components/exam
 import StudentSubmissionDetailModal, { SubmissionData } from '@/components/exam/StudentSubmissionDetailModal';
 import StudentAttemptsModal, { StudentAttemptItem } from '@/components/exam/StudentAttemptsModal';
 import MathRenderer from '@/components/MathRenderer';
+import { cleanOptionText, parseOptions, formatQuestionOptionsForDb } from '@/lib/questionUtils';
 
 interface Subject {
   id: string;
@@ -381,7 +382,7 @@ export default function TeacherExamsClient({
           exam_id: clonedExam.id,
           content: q.content,
           question_type: q.question_type || q.type || 'mcq',
-          options: q.options,
+          options: formatQuestionOptionsForDb(q.options, q.question_type || q.type || 'mcq'),
           correct_option_index: q.correct_option_index,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
@@ -459,7 +460,7 @@ export default function TeacherExamsClient({
           exam_id: savedExamId,
           content: q.content,
           question_type: q.type,
-          options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options,
+          options: formatQuestionOptionsForDb(q.options, q.type),
           correct_option_index: q.type === 'mcq' ? (['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0) : 0,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
@@ -477,7 +478,7 @@ export default function TeacherExamsClient({
           const fallbackQs = questionsData.map((q, idx) => ({
             exam_id: savedExamId,
             content: q.content,
-            options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options.map((o: any) => o.text || o),
+            options: formatQuestionOptionsForDb(q.options, q.type),
             correct_option_index: ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0,
             order_index: idx + 1
           }));
@@ -528,7 +529,7 @@ export default function TeacherExamsClient({
           exam_id: savedExamId,
           content: q.content,
           question_type: q.type,
-          options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options,
+          options: formatQuestionOptionsForDb(q.options, q.type),
           correct_option_index: q.type === 'mcq' ? (['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0) : 0,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
@@ -546,7 +547,7 @@ export default function TeacherExamsClient({
           const fallbackQs = questionsData.map((q, idx) => ({
             exam_id: savedExamId,
             content: q.content,
-            options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options.map((o: any) => o.text || o),
+            options: formatQuestionOptionsForDb(q.options, q.type),
             correct_option_index: ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0,
             order_index: idx + 1
           }));
@@ -1007,7 +1008,7 @@ export default function TeacherExamsClient({
           </div>
 
           {/* THANH CÔNG CỤ & TẠO ĐỀ NHANH */}
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-4 sm:p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Lọc theo môn phụ trách */}
               {allSubjects.length > 1 ? (
@@ -1074,7 +1075,7 @@ export default function TeacherExamsClient({
                 return (
                   <div 
                     key={exam.id}
-                    className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs flex flex-col justify-between gap-4 hover:border-primary/50 transition-all group"
+                    className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-4 sm:p-5 shadow-2xs flex flex-col justify-between gap-4 hover:border-primary/50 transition-all group"
                   >
                     <div className="space-y-3">
                       
@@ -1193,7 +1194,7 @@ export default function TeacherExamsClient({
         <div className="space-y-6">
 
           {/* THANH CHUYỂN ĐỔI CHẾ ĐỘ: TOÀN KHỐI 12 vs THEO TỪNG LỚP */}
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-3 sm:p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSelectedGradeView('class')}
@@ -1397,7 +1398,7 @@ export default function TeacherExamsClient({
               </div>
 
               {/* Bộ lọc bảng điểm */}
-              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-4 sm:p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-1.5 overflow-x-auto">
                     <span className="text-xs font-bold text-muted-foreground uppercase mr-1">Trạng thái:</span>
@@ -1803,23 +1804,21 @@ export default function TeacherExamsClient({
             exam_type: editingExamModal.exam_type || 'test',
             subject_id: editingExamModal.subject_id
           }}
-          initialQuestions={localQuestions.filter(q => q.exam_id === editingExamModal.id).map(q => ({
-            id: q.id,
-            content: q.content,
-            type: (q.question_type || q.type || 'mcq') as any,
-            options: Array.isArray(q.options) 
-              ? q.options.map((opt: any, idx: number) => ({
-                  id: opt.id || ['A', 'B', 'C', 'D'][idx] || String(idx),
-                  text: typeof opt === 'object' && opt !== null ? opt.text : String(opt)
-                }))
-              : [],
-            correct_answer: q.correct_answer !== undefined 
-              ? q.correct_answer 
-              : (q.correct_option_index !== undefined ? ['A', 'B', 'C', 'D'][q.correct_option_index] : 'A'),
-            explanation: q.explanation || '',
-            level: (q.level || 'Nhận biết') as any,
-            points: (q as any).points !== undefined && (q as any).points !== null ? Number((q as any).points) : ((q.question_type || q.type) === 'tf' ? 1.0 : (q.question_type || q.type) === 'saq' ? 0.5 : 0.25)
-          }))}
+          initialQuestions={localQuestions.filter(q => q.exam_id === editingExamModal.id).map(q => {
+            const qType = (q.question_type || q.type || 'mcq') as any;
+            return {
+              id: q.id,
+              content: q.content,
+              type: qType,
+              options: parseOptions(q.options, qType),
+              correct_answer: q.correct_answer !== undefined 
+                ? q.correct_answer 
+                : (q.correct_option_index !== undefined ? ['A', 'B', 'C', 'D'][q.correct_option_index] : 'A'),
+              explanation: q.explanation || '',
+              level: (q.level || 'Nhận biết') as any,
+              points: (q as any).points !== undefined && (q as any).points !== null ? Number((q as any).points) : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25)
+            };
+          })}
           onSave={handleSaveExamModal}
         />
       )}

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { supabaseAdmin, getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import { Users } from 'lucide-react';
 import ClassroomClient from './ClassroomClient';
-import { getTeacherDisplayName } from '@/lib/schoolUtils';
+import { getTeacherDisplayName, filterAccessibleSubjectsForStudent } from '@/lib/schoolUtils';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,15 +20,39 @@ export default async function ClassroomPage() {
     redirect('/');
   }
   const studentId = payload.sub;
+  const studentEmail = payload.email || '';
 
   const supabase = (await getSupabaseServerClient()) || supabaseAdmin;
 
-  // 2. Lấy thông tin lớp học của học sinh
-  const { data: studentDetail } = await supabase
-    .from('student_details')
-    .select('*, classes(*)')
-    .eq('student_id', studentId)
-    .maybeSingle();
+  // 2. Lấy thông tin lớp học của học sinh (kèm fallback tra cứu theo email)
+  let studentDetail: any = null;
+  if (studentId) {
+    const { data: detailData } = await supabase
+      .from('student_details')
+      .select('*, classes(*)')
+      .eq('student_id', studentId)
+      .maybeSingle();
+
+    studentDetail = detailData;
+  }
+
+  if (!studentDetail && studentEmail) {
+    const { data: profileByEmail } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', studentEmail.trim().toLowerCase())
+      .maybeSingle();
+
+    if (profileByEmail) {
+      const { data: detailByProfile } = await supabase
+        .from('student_details')
+        .select('*, classes(*)')
+        .eq('student_id', profileByEmail.id)
+        .maybeSingle();
+
+      if (detailByProfile) studentDetail = detailByProfile;
+    }
+  }
 
   if (!studentDetail || !studentDetail.class_id) {
     return (
@@ -57,8 +81,8 @@ export default async function ClassroomPage() {
     supabase.from('teacher_classes').select('*, subjects(*)').eq('class_id', studentDetail.class_id),
     // Thông báo
     supabase.from('announcements').select('*').or(`target_type.eq.all,and(target_type.eq.individual,target_user_id.eq.${studentId}),target_type.is.null`).order('created_at', { ascending: false }),
-    // Môn học thuộc ban
-    supabase.from('subjects').select('id, name').in('group_type', groupType === 'X' ? ['X', 'ENG'] : ['T', 'ENG']),
+    // Toàn bộ môn học trong hệ thống
+    supabase.from('subjects').select('id, name, group_type').order('name'),
     // Kết quả thi
     supabase.from('exam_results').select('*').eq('student_id', studentId)
   ]);
@@ -66,8 +90,12 @@ export default async function ClassroomPage() {
   const classmates = classmatesRes.data || [];
   const rawTeacherAssignments = rawTeacherAssignmentsRes.data || [];
   const announcements = announcementsRes.data || [];
-  const subjects = subjectsRes.data || [];
+  const allSubjects = subjectsRes.data || [];
   const examResults = examResultsRes.data || [];
+
+  // Lọc môn học hiển thị: môn thuộc ban + môn có giáo viên được phân quyền cho lớp (Toán, Lý, Tin...)
+  const assignedSubjectIds = rawTeacherAssignments.map((t: any) => t.subject_id).filter(Boolean);
+  const subjects = filterAccessibleSubjectsForStudent(allSubjects, groupType, assignedSubjectIds);
 
   // Lấy thông tin & hồ sơ giáo viên phụ trách
   const teacherIds = rawTeacherAssignments.map((t: any) => t.teacher_id).filter(Boolean);

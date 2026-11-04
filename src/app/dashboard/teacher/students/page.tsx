@@ -19,24 +19,34 @@ export default async function TeacherStudentsPage() {
     redirect('/');
   }
   const teacherId = payload.sub;
+  const teacherEmail = payload.email || '';
 
   const supabase = await getSupabaseServerClient();
 
-  // 0. Lấy profile của giáo viên hiện tại để kiểm tra vai trò
-  const { data: teacherProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', teacherId)
-    .single();
+  // Xác định ID hồ sơ chuẩn trong CSDL (hỗ trợ cả UID và UUID tạo từ admin)
+  let effectiveTeacherId = teacherId;
+  let profileRole = payload.role || 'teacher';
 
-  const userRole = teacherProfile?.role || 'teacher';
+  if (teacherEmail) {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('email', teacherEmail.trim().toLowerCase())
+      .maybeSingle();
+    if (prof) {
+      effectiveTeacherId = prof.id;
+      profileRole = prof.role || profileRole;
+    }
+  }
+
+  const userRole = profileRole;
   const isHOD = userRole === 'head_of_department';
 
   // 1. Xác định môn học phụ trách của Giáo viên / Trưởng bộ môn
   const { data: myTeaching } = await supabase
     .from('teacher_classes')
     .select('subject_id, subjects(*)')
-    .eq('teacher_id', teacherId);
+    .or(`teacher_id.eq.${teacherId},teacher_id.eq.${effectiveTeacherId}`);
 
   const mySubjectId = myTeaching?.[0]?.subject_id || '';
 
@@ -45,7 +55,7 @@ export default async function TeacherStudentsPage() {
   if (isHOD && mySubjectId) {
     assignmentQuery = assignmentQuery.eq('subject_id', mySubjectId);
   } else {
-    assignmentQuery = assignmentQuery.eq('teacher_id', teacherId);
+    assignmentQuery = assignmentQuery.or(`teacher_id.eq.${teacherId},teacher_id.eq.${effectiveTeacherId}`);
   }
 
   let studentQuery = supabase.from('student_details').select('*, classes(*)');
