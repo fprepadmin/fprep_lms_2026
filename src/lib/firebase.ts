@@ -6,6 +6,7 @@ import {
   browserLocalPersistence, 
   browserSessionPersistence, 
   inMemoryPersistence, 
+  browserPopupRedirectResolver,
   GoogleAuthProvider, 
   signInWithPopup, 
   signOut 
@@ -34,7 +35,8 @@ if (typeof window !== 'undefined') {
         browserSessionPersistence,
         indexedDBLocalPersistence,
         inMemoryPersistence
-      ]
+      ],
+      popupRedirectResolver: browserPopupRedirectResolver
     });
   } catch (e) {
     authInstance = getAuth(app);
@@ -51,5 +53,5 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-export { signInWithPopup, signOut };
+export { signInWithPopup, signOut, browserPopupRedirectResolver };
 export default app;

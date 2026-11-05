@@ -258,6 +258,7 @@ export default function DashboardLayout({
     ],
     admin: [
       { name: 'Trang chủ', path: '/dashboard/admin', icon: <Home className="h-4.5 w-4.5" /> },
+      { name: 'Quản lý đề', path: '/dashboard/admin/exams', icon: <ClipboardList className="h-4.5 w-4.5" /> },
       { name: 'Phân quyền', path: '/dashboard/admin/users', icon: <Users className="h-4.5 w-4.5" /> },
       { name: 'Thông báo', path: '/dashboard/admin/announcements', icon: <Bell className="h-4.5 w-4.5" /> },
       { name: 'Nhật ký', path: '/dashboard/admin/logs', icon: <Activity className="h-4.5 w-4.5" /> }

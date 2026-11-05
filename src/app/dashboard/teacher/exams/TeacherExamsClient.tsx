@@ -8,12 +8,14 @@ import {
   Trash2, Edit3, Copy, Award, CheckCircle2, 
   Filter, Layers, BookOpen, AlertCircle, X, Sparkles,
   Send, Users, BarChart2, CheckSquare, ArrowRight,
-  Download, Eye, Calendar, FileText, Check, AlertTriangle, Trophy
+  Download, Eye, Calendar, FileText, Check, AlertTriangle, Trophy, FileCode2, FileDown
 } from 'lucide-react';
 import ExamEditorModal, { QuestionData } from '@/components/exam/ExamEditorModal';
 import AssignExamModal, { AssignmentPayload, ClassItem } from '@/components/exam/AssignExamModal';
 import StudentSubmissionDetailModal, { SubmissionData } from '@/components/exam/StudentSubmissionDetailModal';
 import StudentAttemptsModal, { StudentAttemptItem } from '@/components/exam/StudentAttemptsModal';
+import ExamJsonCopyModal from '@/components/exam/ExamJsonCopyModal';
+import ExamPdfModal from '@/components/exam/ExamPdfModal';
 import MathRenderer from '@/components/MathRenderer';
 import { cleanOptionText, parseOptions, formatQuestionOptionsForDb } from '@/lib/questionUtils';
 
@@ -159,6 +161,22 @@ export default function TeacherExamsClient({
     examTitle: string;
     attempts: StudentAttemptItem[];
   } | null>(null);
+
+  // Modal sao chép JSON đề thi chuẩn Dạng 2
+  const [copyJsonModalData, setCopyJsonModalData] = useState<{ exam: Exam; questions: Question[] } | null>(null);
+
+  const handleOpenCopyJson = (exam: Exam) => {
+    const examQuestions = localQuestions.filter(q => q.exam_id === exam.id);
+    setCopyJsonModalData({ exam, questions: examQuestions });
+  };
+
+  // Modal tạo và tải file PDF đề thi (Đáp án trang cuối)
+  const [pdfModalData, setPdfModalData] = useState<{ exam: Exam; questions: Question[] } | null>(null);
+
+  const handleOpenPdfModal = (exam: Exam) => {
+    const examQuestions = localQuestions.filter(q => q.exam_id === exam.id);
+    setPdfModalData({ exam, questions: examQuestions });
+  };
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -1095,6 +1113,20 @@ export default function TeacherExamsClient({
 
                         <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                           <button
+                            onClick={() => handleOpenPdfModal(exam)}
+                            className="p-1.5 hover:bg-red-500/10 rounded text-muted-foreground hover:text-red-600 transition-colors"
+                            title="Tải đề thi dạng file PDF (Đáp án trang cuối)"
+                          >
+                            <FileDown className="h-3.5 w-3.5 text-red-500" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenCopyJson(exam)}
+                            className="p-1.5 hover:bg-primary/10 rounded text-muted-foreground hover:text-primary transition-colors"
+                            title="Sao chép JSON đề thi (Dạng 2)"
+                          >
+                            <FileCode2 className="h-3.5 w-3.5 text-primary" />
+                          </button>
+                          <button
                             onClick={() => handleDuplicateExam(exam)}
                             className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-primary transition-colors"
                             title="Nhân bản đề thi"
@@ -1162,17 +1194,35 @@ export default function TeacherExamsClient({
                     </div>
 
                     {/* Footer Actions */}
-                    <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
+                    <div className="pt-3 border-t border-border flex items-center justify-between gap-1.5 flex-wrap">
+                      <button
+                        onClick={() => handleOpenPdfModal(exam)}
+                        className="btn-secondary text-[11px] py-1.5 px-2.5 flex items-center gap-1 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/40 hover:bg-red-50 dark:hover:bg-red-950/20 font-bold transition-colors"
+                        title="Tạo & Tải file PDF đề thi (Đáp án trang cuối)"
+                      >
+                        <FileDown className="h-3.5 w-3.5 text-red-500" />
+                        <span>Tải PDF</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenCopyJson(exam)}
+                        className="btn-secondary text-[11px] py-1.5 px-2 flex items-center gap-1 text-slate-700 dark:text-slate-300 border-border hover:bg-muted hover:text-primary transition-colors"
+                        title="Sao chép JSON chuẩn Dạng 2"
+                      >
+                        <FileCode2 className="h-3.5 w-3.5 text-primary" />
+                        <span>Copy JSON</span>
+                      </button>
+
                       <button
                         onClick={() => handleOpenAssignModal(exam)}
-                        className="btn-secondary text-[11px] py-1.5 px-3 flex items-center gap-1.5 flex-1 justify-center text-primary border-primary/30 hover:bg-primary/5"
+                        className="btn-secondary text-[11px] py-1.5 px-2 flex items-center gap-1 flex-1 justify-center text-primary border-primary/30 hover:bg-primary/5"
                       >
-                        <Send className="h-3.5 w-3.5" /> Giao cho lớp
+                        <Send className="h-3.5 w-3.5" /> Giao bài
                       </button>
 
                       <button
                         onClick={() => setEditingExamModal(exam)}
-                        className="btn-primary text-[11px] py-1.5 px-3.5 flex items-center gap-1.5"
+                        className="btn-primary text-[11px] py-1.5 px-2.5 flex items-center gap-1"
                       >
                         <Edit3 className="h-3.5 w-3.5" /> Soạn đề
                       </button>
@@ -1878,6 +1928,26 @@ export default function TeacherExamsClient({
             };
             setInspectingSubmission(payload);
           }}
+        />
+      )}
+
+      {/* MODAL XUẤT & SAO CHÉP JSON ĐỀ THI CHUẨN BỘ GD&ĐT 2026 */}
+      {copyJsonModalData && (
+        <ExamJsonCopyModal
+          isOpen={Boolean(copyJsonModalData)}
+          onClose={() => setCopyJsonModalData(null)}
+          exam={copyJsonModalData.exam}
+          questions={copyJsonModalData.questions}
+        />
+      )}
+
+      {/* MODAL TẠO & TẢI FILE PDF ĐỀ THI */}
+      {pdfModalData && (
+        <ExamPdfModal
+          isOpen={Boolean(pdfModalData)}
+          onClose={() => setPdfModalData(null)}
+          exam={pdfModalData.exam}
+          questions={pdfModalData.questions}
         />
       )}
 

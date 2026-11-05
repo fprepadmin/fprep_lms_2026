@@ -73,6 +73,10 @@ export function cleanOptionText(raw: any): string {
         cur = t;
         continue;
       }
+      if (cur.statement !== undefined) {
+        cur = cur.statement;
+        continue;
+      }
       if (cur.content !== undefined) {
         cur = cur.content;
         continue;
@@ -226,6 +230,8 @@ export function parseOptions(rawOptions: any, type?: 'mcq' | 'tf' | 'saq'): Pars
 
   if (Array.isArray(rawOptions)) {
     list = rawOptions;
+  } else if (typeof rawOptions === 'object' && rawOptions !== null && Array.isArray((rawOptions as any).statements)) {
+    list = (rawOptions as any).statements;
   } else if (typeof rawOptions === 'string') {
     const trimmed = rawOptions.trim();
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
@@ -258,10 +264,10 @@ export function parseOptions(rawOptions: any, type?: 'mcq' | 'tf' | 'saq'): Pars
   return list.map((opt, idx) => {
     const defaultKey = defaultKeys[idx] || String(idx + 1);
     if (typeof opt === 'object' && opt !== null) {
-      const rawId = opt.id || defaultKey;
+      const rawId = opt.id || opt.label || defaultKey;
       return {
         id: isTf ? String(rawId).toLowerCase() : String(rawId).toUpperCase(),
-        text: cleanOptionText(opt.text ?? opt.content ?? opt.label ?? opt.value ?? opt)
+        text: cleanOptionText(opt.text ?? opt.statement ?? opt.content ?? opt.label ?? opt.value ?? opt)
       };
     }
 
@@ -421,8 +427,9 @@ export function normalizeQuestionTypeAndAnswer(
   // Ưu tiên các trường tường minh mà giáo viên nhập
   const rawCa = rawItem.correct_answer !== undefined ? rawItem.correct_answer 
     : (rawItem.correctAnswer !== undefined ? rawItem.correctAnswer 
+    : (rawItem.shortAnswerCorrect !== undefined ? rawItem.shortAnswerCorrect
     : (rawItem.answer !== undefined ? rawItem.answer 
-    : (rawItem.correct !== undefined ? rawItem.correct : rawItem.key)));
+    : (rawItem.correct !== undefined ? rawItem.correct : rawItem.key))));
 
   let ca: any = rawCa;
   let correctOptIdx = 0;
@@ -486,7 +493,19 @@ export function normalizeQuestionTypeAndAnswer(
 
     let tfObj: { a: boolean; b: boolean; c: boolean; d: boolean } = { a: true, b: false, c: true, d: false };
 
-    if (typeof rawCa === 'object' && rawCa !== null && !Array.isArray(rawCa)) {
+    if (Array.isArray(rawItem.statements) && rawItem.statements.length > 0) {
+      const stmtMap: any = {};
+      rawItem.statements.forEach((s: any, idx: number) => {
+        const k = String(s.label || ['a', 'b', 'c', 'd'][idx] || '').toLowerCase();
+        stmtMap[k] = toBool(s.isCorrect ?? s.correct ?? s.answer);
+      });
+      tfObj = {
+        a: Boolean(stmtMap.a),
+        b: Boolean(stmtMap.b),
+        c: Boolean(stmtMap.c),
+        d: Boolean(stmtMap.d)
+      };
+    } else if (typeof rawCa === 'object' && rawCa !== null && !Array.isArray(rawCa)) {
       tfObj = {
         a: toBool(rawCa.a ?? rawCa.A ?? rawCa['1'] ?? rawCa[0]),
         b: toBool(rawCa.b ?? rawCa.B ?? rawCa['2'] ?? rawCa[1]),

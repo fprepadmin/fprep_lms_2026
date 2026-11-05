@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, googleProvider, signInWithPopup, signOut as firebaseSignOut } from './firebase';
+import { auth, googleProvider, signInWithPopup, signOut as firebaseSignOut, browserPopupRedirectResolver } from './firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 export interface AuthUser {
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithGoogle = async () => {
     setLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
       if (result.user) {
         await syncSession(result.user);
       }

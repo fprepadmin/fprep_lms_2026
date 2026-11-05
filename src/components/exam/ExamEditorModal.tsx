@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, Plus, Trash2, Check, Sparkles, Copy, 
-  FileCode2, CheckCircle2, Clock, 
+  FileCode2, FileDown, CheckCircle2, Clock, 
   BookOpen, HelpCircle, Layers, Eye, Image as ImageIcon,
   Upload, Link as LinkIcon, SlidersHorizontal, Calculator,
   Scale, Percent, Hash, ArrowRight, Edit3, AlertCircle,
@@ -15,6 +15,8 @@ import StructuredExplanation from '@/components/StructuredExplanation';
 import { uploadImageToCloudinary, getImageFromClipboardEvent } from '@/lib/cloudinary';
 import { parseAndRepairJson } from '@/lib/jsonRepair';
 import { cleanOptionText, parseOptions, formatExplanationWithLineBreaks, normalizeQuestionTypeAndAnswer } from '@/lib/questionUtils';
+import ExamJsonCopyModal from './ExamJsonCopyModal';
+import ExamPdfModal from './ExamPdfModal';
 
 const AI_PROMPT_FPREP = `Bạn là một chuyên gia giáo dục và kỹ sư dữ liệu khảo thí của hệ thống FPREP. 
 Nhiệm vụ: Đọc đề thi dưới đây và chuyển đổi toàn bộ câu hỏi sang mảng JSON chuẩn 2026. 
@@ -168,6 +170,8 @@ export default function ExamEditorModal({
   const [activeQuestionIdx, setActiveQuestionIdx] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showPdfModal, setShowPdfModal] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -441,14 +445,34 @@ export default function ExamEditorModal({
     }
 
     try {
-      const parsed = parseAndRepairJson<any[]>(jsonInput);
+      const parsed = parseAndRepairJson<any>(jsonInput);
 
-      if (!Array.isArray(parsed) || parsed.length === 0) {
+      let questionList: any[] = [];
+      if (Array.isArray(parsed)) {
+        questionList = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.questions)) {
+          questionList = parsed.questions;
+        } else if (Array.isArray(parsed.data)) {
+          questionList = parsed.data;
+        }
+        if (parsed.title && typeof parsed.title === 'string' && !examTitle.trim()) {
+          setExamTitle(parsed.title.trim());
+        }
+        if (parsed.durationMinutes && !isNaN(Number(parsed.durationMinutes))) {
+          setExamDuration(Number(parsed.durationMinutes));
+        } else if (parsed.duration_minutes && !isNaN(Number(parsed.duration_minutes))) {
+          setExamDuration(Number(parsed.duration_minutes));
+        }
+      }
+
+      if (!Array.isArray(questionList) || questionList.length === 0) {
         throw new Error('Dữ liệu sau khi xử lý phải là một danh sách các câu hỏi!');
       }
 
-      const formattedQuestions: QuestionData[] = parsed.map((item: any, idx: number) => {
-        const parsedOpts = parseOptions(item.options, (item.type || item.question_type) as any);
+      const formattedQuestions: QuestionData[] = questionList.map((item: any, idx: number) => {
+        const rawOpts = item.options || item.statements;
+        const parsedOpts = parseOptions(rawOpts, (item.type || item.question_type) as any);
         const norm = normalizeQuestionTypeAndAnswer(item, parsedOpts);
         const qType = norm.type;
         const isTf = qType === 'tf';
@@ -496,7 +520,7 @@ export default function ExamEditorModal({
       setActiveQuestionIdx(0);
       setShowAiModal(false);
       setJsonInput('');
-      alert(`Đã tự động sửa lỗi và nạp thành công ${formattedQuestions.length} câu hỏi vào đề thi!`);
+      alert(`Đã tự động chuẩn hóa và nạp thành công ${formattedQuestions.length} câu hỏi vào đề thi!`);
     } catch (err: any) {
       alert('Không thể tự động phân tích JSON: ' + err.message);
     }
@@ -570,6 +594,26 @@ export default function ExamEditorModal({
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
               <span>Chia Điểm ({totalExamPoints}đ)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowExportModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 font-bold text-xs hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-all shadow-xs"
+              title="Sao chép JSON đề thi chuẩn Dạng 2"
+            >
+              <FileCode2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <span>Copy JSON đề</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowPdfModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/20 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-500/20 transition-all shadow-xs"
+              title="Tạo và tải đề thi dạng file PDF (Đáp án trang cuối)"
+            >
+              <FileDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+              <span>Tải PDF</span>
             </button>
 
             <button
@@ -1644,6 +1688,42 @@ export default function ExamEditorModal({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL XUẤT & COPY JSON ĐỀ THI HIỆN TẠI (CHUẨN BỘ GD&ĐT 2026) */}
+      {showExportModal && (
+        <ExamJsonCopyModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          exam={{
+            title: examTitle.trim() || exam?.title || 'Đề thi chuẩn cấu trúc 3 phần',
+            duration_minutes: Number(examDuration) || 50,
+            subject_id: exam?.subject_id,
+            description: exam?.description
+          }}
+          questions={questions.map((q, idx) => ({
+            ...q,
+            order_index: idx
+          }))}
+        />
+      )}
+
+      {/* MODAL TẠO & TẢI FILE PDF ĐỀ THI */}
+      {showPdfModal && (
+        <ExamPdfModal
+          isOpen={showPdfModal}
+          onClose={() => setShowPdfModal(false)}
+          exam={{
+            title: examTitle.trim() || exam?.title || 'Đề thi chuẩn cấu trúc 3 phần',
+            duration_minutes: Number(examDuration) || 50,
+            subject_id: exam?.subject_id,
+            subjects: exam?.subjects
+          }}
+          questions={questions.map((q, idx) => ({
+            ...q,
+            order_index: idx
+          }))}
+        />
       )}
 
     </div>,
