@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation';
 import { supabaseAdmin, getSupabaseServerClient, verifySessionToken } from '@/lib/supabase';
 import StudentDashboardClient from '../StudentDashboardClient';
 import { BookOpen } from 'lucide-react';
-import { filterAccessibleSubjectsForStudent } from '@/lib/schoolUtils';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,65 +19,35 @@ export default async function StudentSubjectsPage() {
     redirect('/');
   }
   const studentId = payload.sub;
-  const studentEmail = payload.email || '';
 
   const supabase = (await getSupabaseServerClient()) || supabaseAdmin;
   if (!supabase) {
     redirect('/dashboard/student');
   }
 
-  // 2. Lấy thông tin lớp học và ban học sinh (với cơ chế dự phòng tra cứu theo email)
-  let studentDetail: any = null;
-  if (studentId) {
-    const { data: detailData } = await supabase
-      .from('student_details')
-      .select('*, classes(*)')
-      .eq('student_id', studentId)
-      .maybeSingle();
+  // 2. Lấy thông tin lớp học và ban học sinh
+  const { data: studentDetail } = await supabase
+    .from('student_details')
+    .select('*, classes(*)')
+    .eq('student_id', studentId)
+    .maybeSingle();
 
-    studentDetail = detailData;
-  }
-
-  if (!studentDetail && studentEmail) {
-    const { data: profileByEmail } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', studentEmail.trim().toLowerCase())
-      .maybeSingle();
-
-    if (profileByEmail) {
-      const { data: detailByProfile } = await supabase
-        .from('student_details')
-        .select('*, classes(*)')
-        .eq('student_id', profileByEmail.id)
-        .maybeSingle();
-
-      if (detailByProfile) studentDetail = detailByProfile;
-    }
-  }
-
-  const classId = studentDetail?.class_id;
   const groupType = studentDetail?.classes?.group_type || 'T';
 
   // 3. TỐI ƯU TRUY VẤN SONG SONG BẰNG PROMISE.ALL
   const [
-    allSubjectsRes,
-    teacherClassesRes,
+    subjectsRes,
     chaptersRes,
     progressRes,
     examsRes
   ] = await Promise.all([
-    supabase.from('subjects').select('*').order('name'),
-    classId 
-      ? supabase.from('teacher_classes').select('subject_id').eq('class_id', classId)
-      : Promise.resolve({ data: [] }),
+    supabase.from('subjects').select('*').in('group_type', groupType === 'X' ? ['X', 'ENG'] : ['T', 'ENG']).order('name'),
     supabase.from('chapters').select('*, lessons(*)').order('order_index', { ascending: true }),
     supabase.from('study_progress').select('*').eq('student_id', studentId),
     supabase.from('exams').select('*')
   ]);
 
-  const assignedSubjectIds = (teacherClassesRes.data || []).map((t: any) => t.subject_id).filter(Boolean);
-  const subjects = filterAccessibleSubjectsForStudent(allSubjectsRes.data || [], groupType, assignedSubjectIds);
+  const subjects = subjectsRes.data || [];
   const subjectIds = new Set(subjects.map((s: any) => s.id));
   const chapters = (chaptersRes.data || []).filter((c: any) => subjectIds.has(c.subject_id));
   const progress = progressRes.data || [];

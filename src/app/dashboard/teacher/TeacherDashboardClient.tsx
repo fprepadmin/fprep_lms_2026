@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import ExamEditorModal, { QuestionData } from '@/components/exam/ExamEditorModal';
 import MathRenderer from '@/components/MathRenderer';
-import { cleanOptionText, parseOptions, formatQuestionOptionsForDb } from '@/lib/questionUtils';
 import TheoryEditor from '@/components/theory/TheoryEditor';
 
 interface Assignment {
@@ -503,7 +502,7 @@ export default function TeacherDashboardClient({
           exam_id: savedExamId,
           content: q.content,
           question_type: q.type,
-          options: formatQuestionOptionsForDb(q.options, q.type),
+          options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options,
           correct_option_index: q.type === 'mcq' ? (['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0) : 0,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
@@ -521,7 +520,7 @@ export default function TeacherDashboardClient({
           const fallbackQs = questionsData.map((q, idx) => ({
             exam_id: savedExamId,
             content: q.content,
-            options: formatQuestionOptionsForDb(q.options, q.type),
+            options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options.map((o: any) => o.text || o),
             correct_option_index: ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0,
             order_index: idx + 1
           }));
@@ -573,7 +572,7 @@ export default function TeacherDashboardClient({
           exam_id: savedExamId,
           content: q.content,
           question_type: q.type,
-          options: formatQuestionOptionsForDb(q.options, q.type),
+          options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options,
           correct_option_index: q.type === 'mcq' ? (['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0) : 0,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
@@ -591,7 +590,7 @@ export default function TeacherDashboardClient({
           const fallbackQs = questionsData.map((q, idx) => ({
             exam_id: savedExamId,
             content: q.content,
-            options: formatQuestionOptionsForDb(q.options, q.type),
+            options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options.map((o: any) => o.text || o),
             correct_option_index: ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0,
             order_index: idx + 1
           }));
@@ -803,7 +802,7 @@ export default function TeacherDashboardClient({
         .from('questions')
         .update({
           content: updatedFields.content.trim(),
-          options: updatedFields.options.map(o => cleanOptionText(o)).filter(Boolean),
+          options: updatedFields.options.map(o => o.trim()).filter(Boolean),
           correct_option_index: updatedFields.correct_option_index
         })
         .eq('id', questionId)
@@ -2276,21 +2275,7 @@ export default function TeacherDashboardClient({
           isOpen={!!editingExamModal}
           onClose={() => setEditingExamModal(null)}
           exam={editingExamModal}
-          initialQuestions={localQuestions.filter(q => q.exam_id === editingExamModal.id).map(q => {
-            const qType = (q.question_type || q.type || 'mcq') as any;
-            return {
-              id: q.id,
-              content: q.content,
-              type: qType,
-              options: parseOptions(q.options, qType),
-              correct_answer: q.correct_answer !== undefined 
-                ? q.correct_answer 
-                : (q.correct_option_index !== undefined ? ['A', 'B', 'C', 'D'][q.correct_option_index] : 'A'),
-              explanation: q.explanation || '',
-              level: (q.level || 'Nhận biết') as any,
-              points: (q as any).points !== undefined && (q as any).points !== null ? Number((q as any).points) : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25)
-            };
-          })}
+          initialQuestions={localQuestions.filter(q => q.exam_id === editingExamModal.id)}
           onSave={handleSaveExamModal}
           lessonTitle={activeLesson?.title}
           subjectName={assignments.find(a => a.subject_id === selectedSubjectId)?.subjects?.name}

@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { 
   ClipboardList, Award, Clock, ChevronRight, CheckCircle2, 
-  BookOpen, Search, Sparkles, FileCheck, Target, Layers, 
-  ArrowRight, RotateCcw, Filter, Eye, Check, X, SlidersHorizontal,
-  GraduationCap, HelpCircle, Trophy, BarChart3, AlertCircle
+  ChevronDown, ChevronUp, BookOpen, Search, Sparkles,
+  FileCheck, Target, Layers, ArrowRight, RotateCcw
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -59,65 +58,6 @@ interface StudentExamsClientProps {
   studentId: string;
 }
 
-// Bảng màu nhận diện thương hiệu chuẩn từng môn học
-const getSubjectTheme = (name: string) => {
-  const n = (name || '').toLowerCase();
-  if (n.includes('toán')) {
-    return {
-      badge: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
-      dot: 'bg-blue-500',
-      borderHover: 'hover:border-blue-500/60',
-      tag: 'Toán học'
-    };
-  }
-  if (n.includes('lý') || n.includes('vật')) {
-    return {
-      badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
-      dot: 'bg-amber-500',
-      borderHover: 'hover:border-amber-500/60',
-      tag: 'Vật lý'
-    };
-  }
-  if (n.includes('hóa')) {
-    return {
-      badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-      dot: 'bg-emerald-500',
-      borderHover: 'hover:border-emerald-500/60',
-      tag: 'Hóa học'
-    };
-  }
-  if (n.includes('sinh')) {
-    return {
-      badge: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30',
-      dot: 'bg-teal-500',
-      borderHover: 'hover:border-teal-500/60',
-      tag: 'Sinh học'
-    };
-  }
-  if (n.includes('tin')) {
-    return {
-      badge: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
-      dot: 'bg-purple-500',
-      borderHover: 'hover:border-purple-500/60',
-      tag: 'Tin học'
-    };
-  }
-  if (n.includes('anh') || n.includes('tiếng')) {
-    return {
-      badge: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
-      dot: 'bg-indigo-500',
-      borderHover: 'hover:border-indigo-500/60',
-      tag: 'Tiếng Anh'
-    };
-  }
-  return {
-    badge: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30',
-    dot: 'bg-slate-500',
-    borderHover: 'hover:border-primary/60',
-    tag: name || 'Bộ môn'
-  };
-};
-
 export default function StudentExamsClient({
   subjects,
   chapters,
@@ -125,219 +65,152 @@ export default function StudentExamsClient({
   examResults,
   studentId
 }: StudentExamsClientProps) {
-  const [activeCategory, setActiveCategory] = useState<'all' | 'lesson' | 'test' | 'thptqg' | 'dgnl'>('all');
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'uncompleted' | 'completed'>('all');
-  const [sortBy, setSortBy] = useState<'latest' | 'score' | 'duration'>('latest');
+  const [activeCategory, setActiveCategory] = useState<'lesson' | 'test' | 'thptqg' | 'dgnl'>('lesson');
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(subjects[0]?.id || '');
+  const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
   const [searchKeyword, setSearchKeyword] = useState<string>('');
 
-  // Helper lấy kết quả nộp bài tốt nhất của đề thi
+  // Toggle thu phóng Chương
+  const toggleChapter = (chapterId: string) => {
+    setExpandedChapters(prev => ({
+      ...prev,
+      [chapterId]: !prev[chapterId]
+    }));
+  };
+
+  // Helper lấy kết quả cao nhất của đề thi
   const getBestResult = (examId: string) => {
     const results = examResults.filter(r => r.exam_id === examId);
     if (results.length === 0) return null;
     return results.reduce((prev, curr) => (Number(curr.score) > Number(prev.score) ? curr : prev), results[0]);
   };
 
-  // Phân loại đề thi thông minh
+  // Phân loại đề thi thông minh (nếu chưa có exam_type thì phân theo tiêu đề/lesson_id)
   const categorizeExam = (exam: Exam): 'lesson' | 'test' | 'thptqg' | 'dgnl' => {
     if (exam.exam_type) return exam.exam_type;
     const title = (exam.title || '').toLowerCase();
     if (title.includes('thpt') || title.includes('tốt nghiệp') || title.includes('quốc gia')) return 'thptqg';
     if (title.includes('đgnl') || title.includes('đánh giá năng lực') || title.includes('tư duy') || title.includes('hsa') || title.includes('aptitude')) return 'dgnl';
-    if (title.includes('kiểm tra') || title.includes('15') || title.includes('45') || title.includes('giữa kỳ') || title.includes('học kỳ') || title.includes('chương')) return 'test';
+    if (title.includes('kiểm tra') || title.includes('15') || title.includes('45') || title.includes('giữa kỳ') || title.includes('học kỳ')) return 'test';
+    if (exam.lesson_id) return 'lesson';
     return 'lesson';
   };
 
-  // Tính số lượng đề thi theo từng môn học
-  const examCountBySubject = useMemo(() => {
-    const counts: Record<string, number> = {};
-    exams.forEach(e => {
-      counts[e.subject_id] = (counts[e.subject_id] || 0) + 1;
-    });
-    return counts;
-  }, [exams]);
+  const selectedSubject = subjects.find(s => s.id === selectedSubjectId) || subjects[0];
+  const subjectChapters = chapters.filter(c => c.subject_id === selectedSubject?.id);
 
-  // Bộ lọc tổng hợp (Category + Môn học + Trạng thái đã/chưa làm + Tìm kiếm + Sắp xếp)
-  const filteredExams = useMemo(() => {
-    return exams
-      .filter(exam => {
-        // 1. Phân loại danh mục
-        if (activeCategory !== 'all') {
-          const cat = categorizeExam(exam);
-          if (cat !== activeCategory) return false;
-        }
-        
-        // 2. Môn học
-        if (selectedSubjectId !== 'all' && exam.subject_id !== selectedSubjectId) {
-          return false;
-        }
+  // Đề thi đã lọc theo danh mục & môn
+  const filteredExams = exams.filter(exam => {
+    const cat = categorizeExam(exam);
+    if (cat !== activeCategory) return false;
+    if (activeCategory !== 'lesson' && selectedSubjectId && exam.subject_id !== selectedSubjectId) {
+      if (selectedSubjectId !== 'all' && exam.subject_id !== selectedSubjectId) return false;
+    }
+    if (searchKeyword.trim()) {
+      const kw = searchKeyword.toLowerCase();
+      return (exam.title || '').toLowerCase().includes(kw);
+    }
+    return true;
+  });
 
-        // 3. Trạng thái nộp bài
-        const bestRes = getBestResult(exam.id);
-        if (statusFilter === 'completed' && !bestRes) return false;
-        if (statusFilter === 'uncompleted' && Boolean(bestRes)) return false;
-
-        // 4. Từ khóa tìm kiếm
-        if (searchKeyword.trim()) {
-          const kw = searchKeyword.toLowerCase();
-          const matchTitle = (exam.title || '').toLowerCase().includes(kw);
-          const matchSubject = (exam.subjects?.name || '').toLowerCase().includes(kw);
-          return matchTitle || matchSubject;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        if (sortBy === 'score') {
-          const resA = getBestResult(a.id)?.score ?? -1;
-          const resB = getBestResult(b.id)?.score ?? -1;
-          return Number(resB) - Number(resA);
-        }
-        if (sortBy === 'duration') {
-          return (b.duration_minutes || 0) - (a.duration_minutes || 0);
-        }
-        // Mặc định: theo thứ tự đề thi
-        return a.title.localeCompare(b.title, 'vi');
-      });
-  }, [exams, activeCategory, selectedSubjectId, statusFilter, sortBy, searchKeyword]);
-
-  // 5 Tab danh mục khảo thí lớn
-  const categories = [
-    { id: 'all', label: 'TẤT CẢ ĐỀ THI', icon: <Layers className="h-4 w-4" />, desc: 'Kho đề toàn diện mọi thể loại' },
-    { id: 'test', label: 'KIỂM TRA ĐỊNH KỲ', icon: <FileCheck className="h-4 w-4" />, desc: '15p, 45p, giữa kỳ & cuối kỳ' },
-    { id: 'thptqg', label: 'THI THỬ THPTQG', icon: <Target className="h-4 w-4" />, desc: 'Ma trận chuẩn Bộ GD&ĐT 2026' },
-    { id: 'dgnl', label: 'LUYỆN THI ĐGNL', icon: <Sparkles className="h-4 w-4" />, desc: 'ĐGNL ĐHQG & Tư duy ĐHBK' },
-    { id: 'lesson', label: 'THEO BÀI HỌC', icon: <BookOpen className="h-4 w-4" />, desc: 'Củng cố kiến thức từng bài' },
-  ];
-
-  // Render thẻ đề thi sang trọng, hiện đại, chuẩn FPREP
+  // Render thẻ đề thi chuẩn FPREP
   const renderExamCard = (exam: Exam) => {
     const bestRes = getBestResult(exam.id);
     const hasTaken = Boolean(bestRes);
-    const subjectName = exam.subjects?.name || subjects.find(s => s.id === exam.subject_id)?.name || 'Bộ môn';
-    const theme = getSubjectTheme(subjectName);
-    const category = categorizeExam(exam);
-
-    const categoryLabel = 
-      category === 'thptqg' ? 'THPTQG 2026' :
-      category === 'dgnl' ? 'Khảo thí ĐGNL' :
-      category === 'test' ? 'Khảo thí định kỳ' : 'Bài học';
 
     return (
       <div 
         key={exam.id}
-        className={`group relative rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-card p-5 sm:p-6 flex flex-col justify-between gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl shadow-2xs ${theme.borderHover}`}
+        className="flat-card flex flex-col justify-between gap-4 hover:border-primary/50 transition-all"
       >
-        {/* Header thẻ: Tên môn, Thể loại & Điểm số */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Badge môn học */}
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-black border ${theme.badge}`}>
-                <span className={`h-2 w-2 rounded-full ${theme.dot} animate-pulse`} />
-                {subjectName}
-              </span>
-
-              {/* Tag loại đề */}
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-muted text-muted-foreground border border-border">
-                {categoryLabel}
-              </span>
-            </div>
-
-            {/* Điểm số nếu đã làm bài */}
-            {hasTaken ? (
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-xs border border-emerald-500/30 shadow-xs">
-                <Trophy className="w-3.5 h-3.5 text-amber-500" />
-                {bestRes?.score}đ
-              </span>
-            ) : (
-              <span className="text-[10.5px] font-bold text-muted-foreground bg-muted/40 px-2.5 py-0.5 rounded-full border border-border/80">
-                Chưa làm
+        <div className="space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <h4 
+              className="font-bold text-[14px] sm:text-[15px] text-[#212529] dark:text-foreground line-clamp-3 break-words m-0 leading-snug"
+              title={exam.title}
+            >
+              {exam.title}
+            </h4>
+            {hasTaken && (
+              <span className="badge-success shrink-0">
+                {bestRes?.score}/10
               </span>
             )}
           </div>
 
-          {/* Tiêu đề đề thi */}
-          <h4 
-            className="font-extrabold text-sm sm:text-base text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-snug m-0 pt-0.5"
-            title={exam.title}
-          >
-            {exam.title}
-          </h4>
-
-          {/* Thông tin phụ: Thời lượng, cấu trúc 3 phần */}
-          <div className="flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground font-semibold pt-1">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/60">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[#6c757d] dark:text-muted-foreground font-semibold">
+            <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5 text-primary" /> {exam.duration_minutes} phút
             </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border/60">
-              <Sparkles className="h-3.5 w-3.5 text-amber-500" /> 3 dạng thức mới
-            </span>
+            {exam.subjects?.name && (
+              <span className="bg-[#f8f9fa] dark:bg-muted px-2 py-0.5 rounded text-[10px] font-bold text-[#495057] dark:text-foreground border border-border">
+                {exam.subjects.name}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Footer hành động: Nút Làm bài / Xem lại bài */}
-        <div className="pt-3.5 border-t border-border/70 flex items-center justify-between gap-2">
-          {hasTaken ? (
-            <div className="grid grid-cols-2 gap-2 w-full">
-              <Link
-                href={`/dashboard/student/exams/${exam.id}?review=true`}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-all shadow-xs"
-              >
-                <Eye className="h-3.5 w-3.5" /> Xem lại bài
-              </Link>
-              <Link
-                href={`/dashboard/student/exams/${exam.id}`}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 transition-all shadow-xs"
-                title="Làm lại đề thi này để nâng cao điểm số"
-              >
-                <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" /> Luyện lại
-              </Link>
-            </div>
-          ) : (
-            <Link
-              href={`/dashboard/student/exams/${exam.id}`}
-              className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs shadow-md shadow-blue-600/20 transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]"
-            >
-              <span>Bắt đầu làm bài</span>
-              <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
-          )}
+        <div className="pt-2.5 border-t border-border flex items-center justify-between gap-3">
+          <span className="text-[11px] text-[#6c757d] font-semibold">
+            {hasTaken ? 'Đã hoàn thành' : 'Chưa làm bài'}
+          </span>
+
+          <Link
+            href={`/dashboard/student/exams/${exam.id}`}
+            className={hasTaken ? "btn-secondary text-xs py-1.5 px-3.5" : "btn-primary text-xs py-1.5 px-3.5"}
+          >
+            {hasTaken ? (
+              <>
+                <RotateCcw className="h-3.5 w-3.5" /> Luyện lại
+              </>
+            ) : (
+              <>
+                Làm bài ngay <ArrowRight className="h-3.5 w-3.5" />
+              </>
+            )}
+          </Link>
         </div>
       </div>
     );
   };
 
+  const categories = [
+    { id: 'lesson', label: 'LUYỆN TẬP THEO BÀI', icon: <BookOpen className="h-4 w-4" />, desc: 'Củng cố kiến thức theo từng bài học' },
+    { id: 'test', label: 'KIỂM TRA', icon: <FileCheck className="h-4 w-4" />, desc: 'Đề kiểm tra 15p, 45p, định kỳ' },
+    { id: 'thptqg', label: 'THPTQG', icon: <Target className="h-4 w-4" />, desc: 'Bộ đề thi thử Tốt nghiệp THPT' },
+    { id: 'dgnl', label: 'ĐGNL', icon: <Sparkles className="h-4 w-4" />, desc: 'Đề luyện Đánh giá Năng lực' },
+  ];
+
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
+    <div className="space-y-6 animate-fade-in">
       
-      {/* 1. THANH 5 TAB DANH MỤC LỚN */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      {/* THANH TAB 4 DANH MỤC LỚN CHUẨN FPREP */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {categories.map((cat) => {
           const isActive = activeCategory === cat.id;
           return (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id as any)}
-              className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between gap-3 ${
+              className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between gap-2.5 ${
                 isActive
-                  ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-600 ring-2 ring-blue-600/20 shadow-sm'
-                  : 'bg-card border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-muted-foreground'
+                  ? 'bg-white dark:bg-card border-primary ring-2 ring-primary/20 shadow-sm'
+                  : 'bg-white/60 dark:bg-card/60 border-border hover:border-primary/40 hover:bg-white text-muted-foreground'
               }`}
             >
               <div className="flex items-center justify-between">
-                <div className={`p-2.5 rounded-xl border ${isActive ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200/60 dark:border-slate-700/60'}`}>
+                <div className={`p-2 rounded-lg border ${isActive ? 'bg-[#e7f1ff] dark:bg-primary/20 text-primary border-[#b6d4fe]' : 'bg-[#f8f9fa] dark:bg-muted text-[#6c757d] border-border'}`}>
                   {cat.icon}
                 </div>
                 {isActive && (
-                  <span className="h-2.5 w-2.5 rounded-full bg-blue-600 shadow-xs" />
+                  <span className="h-2 w-2 rounded-full bg-primary" />
                 )}
               </div>
               <div>
-                <span className={`block text-xs font-black tracking-tight ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}`}>
+                <span className={`block text-xs sm:text-[13px] font-bold tracking-wide ${isActive ? 'text-[#212529] dark:text-foreground' : 'text-[#6c757d]'}`}>
                   {cat.label}
                 </span>
-                <span className="text-[11px] text-muted-foreground line-clamp-1 font-medium mt-0.5">
+                <span className="text-[11px] text-[#6c757d] font-semibold line-clamp-1">
                   {cat.desc}
                 </span>
               </div>
@@ -346,151 +219,217 @@ export default function StudentExamsClient({
         })}
       </div>
 
-      {/* 2. THANH CÔNG CỤ BỘ LỌC TOÀN DIỆN (MÔN HỌC, TRẠNG THÁI, TÌM KIẾM, SẮP XẾP) */}
-      <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-card p-4 sm:p-5 space-y-4 shadow-sm">
+      {/* THANH BỘ LỌC MÔN HỌC & TÌM KIẾM */}
+      <div className="flat-card flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         
-        {/* Hàng 1: Bộ lọc Môn học dạng Pills trực quan */}
+        {/* Lựa chọn môn học */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
-          <span className="text-xs font-bold text-muted-foreground uppercase shrink-0 mr-1 flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5 text-primary" /> Môn:
-          </span>
-          <button
-            onClick={() => setSelectedSubjectId('all')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-              selectedSubjectId === 'all'
-                ? 'bg-blue-600 text-white border-blue-600 shadow-xs font-black'
-                : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground border-transparent hover:text-foreground'
-            }`}
-          >
-            Tất cả ({exams.length})
-          </button>
+          <span className="text-xs font-bold text-[#6c757d] uppercase shrink-0 mr-1">Môn học:</span>
           {subjects.map((sub) => {
-            const count = examCountBySubject[sub.id] || 0;
-            const theme = getSubjectTheme(sub.name);
-            const isSelected = selectedSubjectId === sub.id;
-
+            const isMathSub = sub.name.toLowerCase().includes('toán');
             return (
               <button
                 key={sub.id}
                 onClick={() => setSelectedSubjectId(sub.id)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
-                  isSelected
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs font-black'
-                    : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground border-transparent hover:text-foreground'
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                  selectedSubjectId === sub.id
+                    ? 'bg-primary text-white border-primary shadow-sm'
+                    : 'bg-[#f8f9fa] dark:bg-muted/40 text-[#495057] dark:text-muted-foreground border-border hover:bg-[#e9ecef]'
                 }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : theme.dot}`} />
                 <span>{sub.name}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'}`}>
-                  {count}
-                </span>
               </button>
             );
           })}
         </div>
 
-        {/* Hàng 2: Trạng thái nộp bài, Sắp xếp và Ô tìm kiếm */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-1 border-t border-border/60">
-          
-          {/* Lọc trạng thái làm bài */}
-          <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-border self-start sm:self-auto text-xs font-bold">
-            <button
-              onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-lg transition-colors ${statusFilter === 'all' ? 'bg-primary text-white shadow-xs font-black' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              Tất cả đề
-            </button>
-            <button
-              onClick={() => setStatusFilter('uncompleted')}
-              className={`px-3 py-1.5 rounded-lg transition-colors ${statusFilter === 'uncompleted' ? 'bg-primary text-white shadow-xs font-black' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              Chưa làm
-            </button>
-            <button
-              onClick={() => setStatusFilter('completed')}
-              className={`px-3 py-1.5 rounded-lg transition-colors ${statusFilter === 'completed' ? 'bg-primary text-white shadow-xs font-black' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              Đã nộp bài
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2.5 flex-1 justify-end flex-wrap sm:flex-nowrap">
-            {/* Sắp xếp */}
-            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground shrink-0">
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-muted/50 border border-border text-foreground rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="latest">Mặc định</option>
-                <option value="score">Điểm cao nhất</option>
-                <option value="duration">Thời lượng</option>
-              </select>
-            </div>
-
-            {/* Ô tìm kiếm đề */}
-            <div className="relative w-full sm:w-64 shrink-0">
-              <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Tìm tên đề thi..."
-                value={searchKeyword}
-                onChange={(e) => setSearchKeyword(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-1.5 pl-8.5 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {searchKeyword && (
-                <button
-                  onClick={() => setSearchKeyword('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
+        {/* Ô tìm kiếm đề */}
+        <div className="relative w-full md:w-64 shrink-0">
+          <input
+            type="text"
+            placeholder="Tìm kiếm đề thi..."
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            className="w-full bg-[#f8f9fa] dark:bg-muted/40 border border-border rounded-lg px-3 py-1.5 pl-8 text-xs font-semibold focus:outline-none focus:border-primary transition-colors"
+          />
+          <Search className="h-3.5 w-3.5 text-[#6c757d] absolute left-2.5 top-2.5" />
         </div>
 
       </div>
 
-      {/* 3. DANH SÁCH ĐỀ THI HIỂN THỊ */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-border pb-3">
-          <div>
-            <h3 className="text-base font-black font-heading text-foreground flex items-center gap-2 m-0">
-              <ClipboardList className="h-5 w-5 text-primary" />
-              Danh Sách Đề Thi Luyện Tập ({filteredExams.length} đề thi)
-            </h3>
-            <p className="text-xs text-muted-foreground font-medium m-0 mt-0.5">
-              Chọn đề thi và bấm &quot;Bắt đầu làm bài&quot; để bấm giờ khảo thí trực tuyến theo chuẩn đề thi 2026.
-            </p>
+      {/* NỘI DUNG THEO TỪNG TAB */}
+      
+      {/* 1. TAB LUYỆN TẬP THEO BÀI (MÔN > CHƯƠNG > BÀI) */}
+      {activeCategory === 'lesson' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-2.5">
+            <div>
+              <h3 className="text-base font-bold font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
+                <BookOpen className="h-4.5 w-4.5 text-primary" />
+                Luyện tập môn {selectedSubject?.name} theo Chương & Bài
+              </h3>
+              <p className="text-xs text-[#6c757d] font-semibold m-0 mt-0.5">
+                Chọn chương học và mở từng bài để làm bài tập trắc nghiệm củng cố kiến thức.
+              </p>
+            </div>
           </div>
-        </div>
 
-        {filteredExams.length === 0 ? (
-          <div className="text-center py-16 rounded-3xl border border-dashed border-border bg-card p-8 space-y-3">
-            <ClipboardList className="h-12 w-12 text-muted-foreground mx-auto opacity-40" />
-            <p className="font-bold text-foreground text-sm m-0">Không tìm thấy đề thi phù hợp với bộ lọc hiện tại.</p>
-            <p className="text-xs text-muted-foreground m-0">Hãy thử đổi môn học hoặc xóa từ khóa tìm kiếm để khám phá thêm đề thi.</p>
-            <button
-              onClick={() => {
-                setActiveCategory('all');
-                setSelectedSubjectId('all');
-                setStatusFilter('all');
-                setSearchKeyword('');
-              }}
-              className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-black hover:opacity-90 transition-opacity"
-            >
-              <RotateCcw className="w-3.5 h-3.5" /> Xóa bộ lọc xem tất cả
-            </button>
+          {subjectChapters.length === 0 ? (
+            <div className="text-center py-16 flat-card border-dashed">
+              <BookOpen className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
+              <p className="font-bold text-muted-foreground text-sm m-0">Chưa có dữ liệu bài học cho môn học này.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {subjectChapters.map((chap, chapIdx) => {
+                const isExpanded = expandedChapters[chap.id] !== false; // Mặc định mở
+                const lessons = chap.lessons || [];
+
+                return (
+                  <div key={chap.id} className="flat-card p-0 overflow-hidden shadow-sm">
+                    {/* Header Chương */}
+                    <button
+                      onClick={() => toggleChapter(chap.id)}
+                      className="w-full p-4 flex items-center justify-between bg-[#f8f9fa] dark:bg-muted/30 hover:bg-[#e9ecef] dark:hover:bg-muted/50 transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-7 h-7 rounded-lg bg-[#e7f1ff] dark:bg-primary/20 text-primary font-bold text-xs flex items-center justify-center border border-primary/20 shrink-0">
+                          {chapIdx + 1}
+                        </span>
+                        <div>
+                          <h4 className="font-bold text-[15px] text-[#212529] dark:text-foreground m-0">{chap.title}</h4>
+                          <span className="text-[11px] text-[#6c757d] dark:text-muted-foreground font-semibold">{lessons.length} Bài học</span>
+                        </div>
+                      </div>
+                      <div className="p-1 text-[#6c757d]">
+                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </div>
+                    </button>
+
+                    {/* Danh sách Bài học & Đề thi tương ứng */}
+                    {isExpanded && (
+                      <div className="p-4 sm:p-5 space-y-4 border-t border-border">
+                        {lessons.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic pl-2 m-0">Chưa có bài học trong chương này.</p>
+                        ) : (
+                          lessons.map((les, lesIdx) => {
+                            const lessonExams = exams.filter(e => e.lesson_id === les.id || (categorizeExam(e) === 'lesson' && e.title.toLowerCase().includes(`bài ${lesIdx + 1}`)));
+
+                            return (
+                              <div key={les.id} className="space-y-2.5 pl-3 border-l-2 border-primary/40">
+                                <div className="flex items-center justify-between">
+                                  <h5 className="font-bold text-[13px] sm:text-[14px] text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
+                                    <span className="text-primary font-bold">Bài {lesIdx + 1}:</span> {les.title}
+                                  </h5>
+                                  <span className="text-[10px] font-bold text-[#6c757d] bg-[#f8f9fa] dark:bg-muted border border-border px-2 py-0.5 rounded">
+                                    {lessonExams.length} Đề luyện tập
+                                  </span>
+                                </div>
+
+                                {lessonExams.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground italic pl-2 m-0">Chưa có đề luyện tập cho bài học này.</p>
+                                ) : (
+                                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-1">
+                                    {lessonExams.map(renderExamCard)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. TAB KIỂM TRA ĐỊNH KỲ */}
+      {activeCategory === 'test' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-2.5">
+            <div>
+              <h3 className="text-base font-bold font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
+                <FileCheck className="h-4.5 w-4.5 text-primary" />
+                Đề Kiểm Tra Định Kỳ ({selectedSubject?.name})
+              </h3>
+              <p className="text-xs text-[#6c757d] font-semibold m-0 mt-0.5">
+                Bài kiểm tra 15 phút, 1 tiết, đánh giá giữa kỳ và cuối học kỳ.
+              </p>
+            </div>
           </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredExams.map(renderExamCard)}
+
+          {filteredExams.length === 0 ? (
+            <div className="text-center py-16 flat-card border-dashed">
+              <FileCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
+              <p className="font-bold text-muted-foreground text-sm m-0">Hiện chưa có đề kiểm tra định kỳ cho môn này.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredExams.map(renderExamCard)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. TAB THPTQG */}
+      {activeCategory === 'thptqg' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-2.5">
+            <div>
+              <h3 className="text-base font-bold font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
+                <Target className="h-4.5 w-4.5 text-primary" />
+                Bộ Đề Luyện Thi Tốt Nghiệp THPT Quốc Gia ({selectedSubject?.name})
+              </h3>
+              <p className="text-xs text-[#6c757d] font-semibold m-0 mt-0.5">
+                Tổng hợp đề thi thử chuẩn cấu trúc và ma trận đề thi chính thức của Bộ Giáo dục & Đào tạo.
+              </p>
+            </div>
           </div>
-        )}
-      </div>
+
+          {filteredExams.length === 0 ? (
+            <div className="text-center py-16 flat-card border-dashed">
+              <Target className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
+              <p className="font-bold text-muted-foreground text-sm m-0">Hiện chưa có đề luyện thi THPTQG cho môn này.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredExams.map(renderExamCard)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4. TAB ĐGNL */}
+      {activeCategory === 'dgnl' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-border pb-2.5">
+            <div>
+              <h3 className="text-base font-bold font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
+                <Sparkles className="h-4.5 w-4.5 text-primary" />
+                Bộ Đề Ôn Luyện Đánh Giá Năng Lực (ĐGNL)
+              </h3>
+              <p className="text-xs text-[#6c757d] font-semibold m-0 mt-0.5">
+                Rèn luyện tư duy logic, định lượng, đọc hiểu và giải quyết vấn đề cho các kỳ thi ĐGNL ĐHQG & ĐHBK.
+              </p>
+            </div>
+          </div>
+
+          {filteredExams.length === 0 ? (
+            <div className="text-center py-16 flat-card border-dashed">
+              <Sparkles className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-40" />
+              <p className="font-bold text-muted-foreground text-sm m-0">Hiện chưa có đề thi ĐGNL được tải lên.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredExams.map(renderExamCard)}
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );

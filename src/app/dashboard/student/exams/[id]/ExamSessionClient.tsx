@@ -9,13 +9,11 @@ import {
   Minimize2, Flag, RotateCcw, BookOpen, AlertCircle,
   Eye, CheckSquare, XCircle, Send, ZoomIn, ZoomOut,
   SlidersHorizontal, ChevronRight, CornerDownRight,
-  ListFilter, LayoutGrid, Menu, PanelRight
+  ListFilter, LayoutGrid, Menu
 } from 'lucide-react';
 import { createSupabaseClient } from '@/lib/supabase';
 import MathRenderer from '@/components/MathRenderer';
-import StructuredExplanation from '@/components/StructuredExplanation';
 import { parseAndRepairJson } from '@/lib/jsonRepair';
-import { cleanOptionText, parseOptions } from '@/lib/questionUtils';
 
 interface Question {
   id: string;
@@ -43,8 +41,64 @@ interface ExamSessionClientProps {
   exam: Exam;
   questions: Question[];
   studentId: string;
-  initialResult?: any;
-  initialReviewMode?: boolean;
+}
+
+/**
+ * Làm sạch và giải mã đệ quy các tầng JSON stringified lồng nhau.
+ * Xử lý dứt điểm lỗi hiển thị chuỗi JSON thô như:
+ * {"id":"a","text":"{\"id\":\"a\",\"text\":\"Đạo hàm của hàm số...\"}"}
+ */
+function cleanOptionText(raw: any): string {
+  if (raw === null || raw === undefined) return '';
+  let cur: any = raw;
+
+  // 1. Unwrap các object có thuộc tính text / content / label
+  let objectDepth = 0;
+  while (typeof cur === 'object' && cur !== null && objectDepth < 5) {
+    if (cur.text !== undefined) cur = cur.text;
+    else if (cur.content !== undefined) cur = cur.content;
+    else if (cur.label !== undefined) cur = cur.label;
+    else break;
+    objectDepth++;
+  }
+
+  // 2. Unwrap các chuỗi JSON lồng nhau
+  let stringDepth = 0;
+  while (typeof cur === 'string' && stringDepth < 5) {
+    const trimmed = cur.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (typeof parsed === 'object' && parsed !== null) {
+          if (Array.isArray(parsed)) {
+            cur = parsed.length > 0 ? parsed[0] : '';
+          } else {
+            cur = parsed.text ?? parsed.content ?? parsed.label ?? parsed;
+          }
+          stringDepth++;
+          continue;
+        }
+      } catch (e) {
+        try {
+          const repaired = parseAndRepairJson(trimmed);
+          if (typeof repaired === 'object' && repaired !== null) {
+            cur = (repaired as any).text ?? (repaired as any).content ?? (repaired as any).label ?? repaired;
+            stringDepth++;
+            continue;
+          }
+        } catch (e2) {}
+        break;
+      }
+    }
+    break;
+  }
+
+  // 3. Nếu sau khi parse vẫn là object
+  if (typeof cur === 'object' && cur !== null) {
+    cur = (cur as any).text ?? (cur as any).content ?? (cur as any).label ?? '';
+  }
+
+  return typeof cur === 'string' ? cur : String(cur ?? '');
 }
 
 // Helpers nhận diện loại câu hỏi
@@ -96,12 +150,45 @@ const getQuestionType = (q: Question): 'mcq' | 'tf' | 'saq' => {
   return 'mcq';
 };
 
+const parseOptions = (rawOptions: any, type?: 'mcq' | 'tf' | 'saq'): { id: string; text: string }[] => {
+  if (!rawOptions) return [];
+  let list: any[] = [];
+  if (Array.isArray(rawOptions)) {
+    list = rawOptions;
+  } else if (typeof rawOptions === 'string') {
+    try {
+      const parsed = parseAndRepairJson(rawOptions);
+      if (Array.isArray(parsed)) list = parsed;
+      else if (typeof parsed === 'object' && parsed !== null) {
+        list = Object.entries(parsed).map(([key, val]) => ({ id: key, text: val }));
+      }
+    } catch (e) {}
+  }
+
+  if (list.length === 0) return [];
+
+  const isTf = type === 'tf';
+  const defaultKeys = isTf ? ['a', 'b', 'c', 'd'] : ['A', 'B', 'C', 'D'];
+
+  return list.map((opt, idx) => {
+    if (typeof opt === 'object' && opt !== null) {
+      const rawId = opt.id || defaultKeys[idx] || String(idx + 1);
+      return {
+        id: isTf ? String(rawId).toLowerCase() : String(rawId).toUpperCase(),
+        text: cleanOptionText(opt.text ?? opt.content ?? opt)
+      };
+    }
+    return {
+      id: defaultKeys[idx] || String(idx + 1),
+      text: cleanOptionText(opt)
+    };
+  });
+};
+
 export default function ExamSessionClient({
   exam,
   questions: initialQuestions,
-  studentId,
-  initialResult,
-  initialReviewMode = false
+  studentId
 }: ExamSessionClientProps) {
   const router = useRouter();
   const supabase = createSupabaseClient();
@@ -110,8 +197,6 @@ export default function ExamSessionClient({
   const questions = useMemo(() => {
     return [...initialQuestions].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
   }, [initialQuestions]);
-
-  const isStartReview = Boolean(initialResult && initialReviewMode);
 
   // Phân loại câu hỏi theo Cấu trúc Đề thi Chuẩn 2026 của Bộ GD&ĐT
   const part1Questions = useMemo(() => questions.filter(q => getQuestionType(q) === 'mcq'), [questions]);
@@ -122,33 +207,16 @@ export default function ExamSessionClient({
   const [viewMode, setViewMode] = useState<'focus' | 'list'>('focus');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>('base');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [answers, setAnswers] = useState<Record<string, any>>(
-    isStartReview ? (initialResult.answers || {}) : {}
-  );
+  const [answers, setAnswers] = useState<Record<string, any>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Record<string, boolean>>({});
   const [timeLeft, setTimeLeft] = useState((exam.duration_minutes || 45) * 60);
-  const [isSubmitted, setIsSubmitted] = useState(isStartReview);
+  const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [gridFilter, setGridFilter] = useState<'all' | 'done' | 'undone' | 'flagged'>('all');
   const [reviewFilter, setReviewFilter] = useState<'all' | 'wrong' | 'correct'>('all');
-  const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>(() => {
-    if (isStartReview) {
-      const init: Record<string, boolean> = {};
-      questions.forEach(q => { init[q.id] = true; });
-      return init;
-    }
-    return {};
-  });
-
-  const toggleAllExplanations = () => {
-    const areAllOpen = questions.length > 0 && questions.every(q => expandedExplanations[q.id]);
-    const next: Record<string, boolean> = {};
-    questions.forEach(q => { next[q.id] = !areAllOpen; });
-    setExpandedExplanations(next);
-  };
+  const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>({});
 
   // Kết quả sau khi nộp bài
   const [result, setResult] = useState<{
@@ -159,17 +227,7 @@ export default function ExamSessionClient({
     part1Correct: number;
     part2Correct: number;
     part3Correct: number;
-  } | null>(
-    isStartReview ? {
-      score: Number(initialResult.score) || 0,
-      correctCount: initialResult.correct_answers || 0,
-      totalCount: initialResult.total_questions || questions.length,
-      timeSpent: initialResult.time_spent_seconds || 0,
-      part1Correct: 0,
-      part2Correct: 0,
-      part3Correct: 0
-    } : null
-  );
+  } | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -461,41 +519,8 @@ export default function ExamSessionClient({
     });
 
     return (
-      <div className="space-y-6 animate-fade-in w-full max-w-5xl mx-auto px-4 py-8 select-none">
+      <div className="space-y-8 animate-fade-in w-full max-w-5xl mx-auto px-4 py-8 select-none">
         
-        {/* BANNER THÔNG BÁO XEM LẠI BÀI NỘP */}
-        {initialResult && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl text-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
-                <CheckCircle2 className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-800 dark:text-slate-100 m-0">
-                  Đang xem lại bài làm đã nộp lúc: {new Date(initialResult.created_at).toLocaleString('vi-VN')}
-                </p>
-                <p className="text-[11px] text-muted-foreground m-0">
-                  Điểm số ghi nhận: <strong className="text-blue-600 dark:text-blue-400 font-black">{initialResult.score}/10</strong> &bull; Thời gian làm bài: {Math.floor((initialResult.time_spent_seconds || 0) / 60)} phút {(initialResult.time_spent_seconds || 0) % 60}s
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                setAnswers({});
-                setFlaggedQuestions({});
-                setTimeLeft((exam.duration_minutes || 45) * 60);
-                setIsSubmitted(false);
-                setResult(null);
-                setCurrentQuestionIndex(0);
-                router.replace(`/dashboard/student/exams/${exam.id}`);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors shrink-0"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Làm lại đề này
-            </button>
-          </div>
-        )}
-
         {/* BANNER TỔNG KẾT ĐIỂM SỐ */}
         <div className="rounded-3xl border border-border bg-card p-6 sm:p-10 text-center space-y-6 relative overflow-hidden shadow-xl bg-gradient-to-br from-primary/10 via-card to-card">
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-4 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
@@ -585,36 +610,26 @@ export default function ExamSessionClient({
               </p>
             </div>
 
-            {/* Bộ lọc xem lại & Nút mở rộng toàn bộ */}
-            <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+            {/* Bộ lọc xem lại */}
+            <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-border text-xs font-bold self-start sm:self-auto">
               <button
-                onClick={toggleAllExplanations}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition-colors flex items-center gap-1.5 shadow-2xs"
+                onClick={() => setReviewFilter('all')}
+                className={`px-3 py-1.5 rounded-lg transition-colors ${reviewFilter === 'all' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
               >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>{questions.every(q => expandedExplanations[q.id]) ? 'Thu gọn tất cả lời giải' : 'Mở rộng tất cả lời giải'}</span>
+                Tất cả ({questions.length})
               </button>
-
-              <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-border text-xs font-bold">
-                <button
-                  onClick={() => setReviewFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors ${reviewFilter === 'all' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Tất cả ({questions.length})
-                </button>
-                <button
-                  onClick={() => setReviewFilter('wrong')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors ${reviewFilter === 'wrong' ? 'bg-rose-500 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Câu Sai
-                </button>
-                <button
-                  onClick={() => setReviewFilter('correct')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors ${reviewFilter === 'correct' ? 'bg-emerald-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Câu Đúng
-                </button>
-              </div>
+              <button
+                onClick={() => setReviewFilter('wrong')}
+                className={`px-3 py-1.5 rounded-lg transition-colors ${reviewFilter === 'wrong' ? 'bg-rose-500 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                Câu Sai
+              </button>
+              <button
+                onClick={() => setReviewFilter('correct')}
+                className={`px-3 py-1.5 rounded-lg transition-colors ${reviewFilter === 'correct' ? 'bg-emerald-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                Câu Đúng
+              </button>
             </div>
           </div>
 
@@ -811,8 +826,8 @@ export default function ExamSessionClient({
                       </button>
 
                       {isExplanationOpen && (
-                        <div className="mt-3 animate-fade-in">
-                          <StructuredExplanation content={q.explanation} />
+                        <div className="mt-3 p-4 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 text-xs sm:text-sm font-medium leading-relaxed animate-fade-in">
+                          <MathRenderer content={q.explanation} />
                         </div>
                       )}
                     </div>
@@ -845,15 +860,15 @@ export default function ExamSessionClient({
       <div 
         key={q.id}
         id={`question-${q.id}`}
-        className="flat-card p-4 sm:p-6 space-y-4 relative scroll-mt-24 transition-all border border-border shadow-xs hover:border-primary/40 bg-card rounded-2xl"
+        className="flat-card p-5 sm:p-7 space-y-5 relative scroll-mt-24 transition-all border border-border shadow-xs hover:border-primary/40 bg-card rounded-2xl"
       >
         {/* Header câu hỏi */}
-        <div className="flex items-center justify-between border-b border-border/70 pb-3 flex-wrap gap-2.5">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center justify-between border-b border-border/70 pb-3.5 flex-wrap gap-2">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span className="font-black text-xs sm:text-sm text-primary bg-primary/10 px-3 py-1 rounded-xl border border-primary/20">
               Câu {q.order_index || qIndex + 1}
             </span>
-            <span className="text-[11px] font-bold text-muted-foreground uppercase bg-muted/60 px-2.5 py-0.5 rounded-lg border border-border">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase bg-muted/50 px-2.5 py-0.5 rounded-lg border border-border">
               {qType === 'mcq' ? 'Trắc nghiệm 4 ý' : qType === 'tf' ? 'Đúng / Sai' : 'Trả lời ngắn'}
             </span>
             {q.level && (
@@ -867,33 +882,6 @@ export default function ExamSessionClient({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Phím điều hướng nhanh ngay trên đầu câu hỏi trong chế độ Focus */}
-            {viewMode === 'focus' && (
-              <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl border border-border">
-                <button
-                  type="button"
-                  onClick={() => jumpToQuestion(Math.max(0, currentQuestionIndex - 1))}
-                  disabled={currentQuestionIndex === 0}
-                  className="p-1 rounded-lg hover:bg-background text-muted-foreground hover:text-foreground disabled:opacity-30 transition-all"
-                  title="Câu trước (Phím ←)"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <span className="text-[11px] font-black px-1.5 text-muted-foreground font-mono">
-                  {currentQuestionIndex + 1}/{questions.length}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => jumpToQuestion(Math.min(questions.length - 1, currentQuestionIndex + 1))}
-                  disabled={currentQuestionIndex === questions.length - 1}
-                  className="p-1 rounded-lg hover:bg-background text-muted-foreground hover:text-foreground disabled:opacity-30 transition-all"
-                  title="Câu sau (Phím →)"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-
             <button
               onClick={() => toggleFlag(q.id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
@@ -914,7 +902,7 @@ export default function ExamSessionClient({
                   delete copy[q.id];
                   return copy;
                 })}
-                className="text-[11px] font-bold text-muted-foreground hover:text-rose-500 transition-colors px-1.5 py-1 rounded-lg hover:bg-rose-500/10"
+                className="text-[11px] font-bold text-muted-foreground hover:text-rose-500 transition-colors pl-1"
                 title="Xóa câu trả lời này"
               >
                 Xóa chọn
@@ -930,7 +918,7 @@ export default function ExamSessionClient({
 
         {/* PHẦN I: TRẮC NGHIỆM 4 PHƯƠNG ÁN LỰA CHỌN */}
         {qType === 'mcq' && (
-          <div className="grid gap-2.5 sm:grid-cols-2 pt-1">
+          <div className="grid gap-3 sm:grid-cols-2 pt-2">
             {opts.map((opt, optIdx) => {
               const optKey = ['A', 'B', 'C', 'D'][optIdx] || opt.id.toUpperCase();
               const isSelected = String(userAns || '').toUpperCase() === optKey;
@@ -939,20 +927,20 @@ export default function ExamSessionClient({
                 <div
                   key={opt.id || optIdx}
                   onClick={() => setAnswers(prev => ({ ...prev, [q.id]: optKey }))}
-                  className={`p-3 sm:p-3.5 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 select-none ${
+                  className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3.5 select-none ${
                     isSelected 
                       ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-2 ring-primary/20' 
                       : 'bg-background border-border hover:border-primary/40 hover:bg-muted/20 text-foreground'
                   }`}
                 >
-                  <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 border transition-all ${
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 border transition-all ${
                     isSelected 
                       ? 'bg-primary border-primary text-primary-foreground shadow-xs' 
-                      : 'border-border bg-muted/60 text-foreground font-bold'
+                      : 'border-border bg-muted/50 text-foreground'
                   }`}>
                     {optKey}
                   </span>
-                  <div className={`min-w-0 pt-0.5 break-words font-medium ${fontSizeClass}`}>
+                  <div className={`min-w-0 pt-1 break-words font-medium ${fontSizeClass}`}>
                     <MathRenderer content={opt.text} />
                   </div>
                 </div>
@@ -961,10 +949,10 @@ export default function ExamSessionClient({
           </div>
         )}
 
-        {/* PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI (THIẾT KẾ CÔNG THÁI HỌC GỌN GÀNG) */}
+        {/* PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI (THIẾT KẾ MỚI SEGMENTED CONTROL) */}
         {qType === 'tf' && (
-          <div className="space-y-2.5 pt-1">
-            <div className="text-[11px] font-bold text-muted-foreground bg-muted/40 px-3 py-1 rounded-lg border border-border inline-block">
+          <div className="space-y-3 pt-2">
+            <div className="text-xs font-bold text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg border border-border inline-block">
               Xét tính đúng hoặc sai của các mệnh đề a), b), c), d) dưới đây:
             </div>
 
@@ -985,54 +973,42 @@ export default function ExamSessionClient({
               return (
                 <div 
                   key={opt.id || optIdx}
-                  className={`p-3 sm:p-3.5 rounded-xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs ${
-                    currentChoice === true 
-                      ? 'border-emerald-500/50 bg-emerald-500/5' 
-                      : currentChoice === false 
-                        ? 'border-rose-500/50 bg-rose-500/5' 
-                        : 'border-border/80 bg-background/70 hover:border-primary/40'
-                  }`}
+                  className="p-4 rounded-2xl border border-border/80 bg-background/60 hover:bg-background transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
                 >
-                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                    <span className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 uppercase border transition-all ${
-                      currentChoice === true 
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' 
-                        : currentChoice === false 
-                          ? 'bg-rose-600 text-white border-rose-600 shadow-xs' 
-                          : 'bg-primary/10 text-primary border-primary/20'
-                    }`}>
-                      {subKey}
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <span className="w-7 h-7 rounded-xl bg-primary/10 text-primary font-black text-xs flex items-center justify-center shrink-0 uppercase border border-primary/20">
+                      {subKey})
                     </span>
                     <div className={`min-w-0 pt-0.5 break-words font-medium text-foreground ${fontSizeClass}`}>
                       <MathRenderer content={opt.text} />
                     </div>
                   </div>
 
-                  {/* Nút Toggle ĐÚNG / SAI Công Thái Học */}
-                  <div className="flex items-center gap-1.5 shrink-0 self-end md:self-center bg-muted/60 p-1 rounded-xl border border-border/80">
+                  {/* Nút Toggle ĐÚNG / SAI Hiện Đại */}
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center bg-muted/40 p-1 rounded-xl border border-border">
                     <button
                       type="button"
                       onClick={() => handleSelect(true)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${
+                      className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
                         currentChoice === true 
-                          ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-500' 
-                          : 'text-muted-foreground hover:text-emerald-600 hover:bg-background/80'
+                          ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40' 
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
                       }`}
                     >
-                      <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                      <Check className={`h-3.5 w-3.5 ${currentChoice === true ? 'stroke-[3]' : ''}`} />
                       <span>ĐÚNG</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleSelect(false)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${
+                      className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
                         currentChoice === false 
-                          ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-500' 
-                          : 'text-muted-foreground hover:text-rose-600 hover:bg-background/80'
+                          ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-400/40' 
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
                       }`}
                     >
-                      <X className="h-3.5 w-3.5 stroke-[2.5]" />
+                      <X className={`h-3.5 w-3.5 ${currentChoice === false ? 'stroke-[3]' : ''}`} />
                       <span>SAI</span>
                     </button>
                   </div>
@@ -1187,20 +1163,6 @@ export default function ExamSessionClient({
             </button>
           </div>
 
-          {/* Nút bật / tắt Phiếu trả lời trên màn hình rộng */}
-          <button
-            onClick={() => setIsSidebarOpen(prev => !prev)}
-            className={`hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
-              isSidebarOpen 
-                ? 'bg-primary/10 border-primary/30 text-primary' 
-                : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
-            title={isSidebarOpen ? "Thu gọn phiếu trả lời để mở rộng không gian đọc đề" : "Mở phiếu trả lời"}
-          >
-            <PanelRight className="h-4 w-4" />
-            <span className="hidden xl:inline">{isSidebarOpen ? "Thu gọn phiếu" : "Hiện phiếu trả lời"}</span>
-          </button>
-
           {/* Nút nộp bài */}
           <button
             onClick={() => setShowConfirmModal(true)}
@@ -1214,43 +1176,13 @@ export default function ExamSessionClient({
 
       </header>
 
-      {/* THÔNG BÁO BÀI ĐÃ TỪNG NỘP (NẾU ĐANG LÀM LẠI) */}
-      {initialResult && (
-        <div className="w-full max-w-[1550px] mx-auto px-3 sm:px-6 pt-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-900 dark:text-amber-200 text-xs">
-            <span className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              Bạn đã nộp bài đề này vào {new Date(initialResult.created_at).toLocaleDateString('vi-VN')} &bull; Điểm đã đạt: <strong className="font-extrabold text-foreground">{initialResult.score}/10</strong>.
-            </span>
-            <button
-              onClick={() => {
-                setAnswers(initialResult.answers || {});
-                setResult({
-                  score: Number(initialResult.score) || 0,
-                  correctCount: initialResult.correct_answers || 0,
-                  totalCount: initialResult.total_questions || questions.length,
-                  timeSpent: initialResult.time_spent_seconds || 0,
-                  part1Correct: 0,
-                  part2Correct: 0,
-                  part3Correct: 0
-                });
-                setIsSubmitted(true);
-              }}
-              className="text-blue-600 dark:text-blue-400 hover:underline font-bold flex items-center gap-1 shrink-0 self-start sm:self-auto"
-            >
-              <Eye className="w-3.5 h-3.5" /> Xem lại bài nộp trước
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* =====================================================================
           2. BODY KHU VỰC LÀM BÀI
           ===================================================================== */}
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-3 sm:px-6 py-4 sm:py-6 grid gap-6 lg:grid-cols-12 items-start">
+      <main className="flex-1 w-full max-w-[1550px] mx-auto px-3 sm:px-6 py-6 grid gap-6 lg:grid-cols-12 items-start">
         
-        {/* CỘT CHÍNH: NỘI DUNG BÀI LÀM */}
-        <div className={`${isSidebarOpen ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12 max-w-5xl mx-auto w-full'} space-y-5 transition-all duration-300`}>
+        {/* CỘT CHÍNH (COL-SPAN-8 / 9): NỘI DUNG BÀI LÀM */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-6">
           
           {/* Thanh chỉ báo tiến trình nhanh */}
           <div className="flex items-center justify-between bg-card border border-border rounded-2xl p-4 shadow-xs">
@@ -1366,8 +1298,7 @@ export default function ExamSessionClient({
         </div>
 
         {/* CỘT PHẢI (COL-SPAN-4 / 3): PHIẾU TRẢ LỜI TRƯỢT THÔNG MINH (DESKTOP) */}
-        {isSidebarOpen && (
-          <aside className="hidden lg:flex lg:col-span-4 xl:col-span-3 sticky top-[72px] self-start max-h-[calc(100vh-5.5rem)] flex-col space-y-3 z-30 animate-fade-in">
+        <aside className="hidden lg:flex lg:col-span-4 xl:col-span-3 sticky top-[72px] self-start max-h-[calc(100vh-5.5rem)] flex-col space-y-3 z-30">
           
           <div className="flat-card p-4 sm:p-5 space-y-3.5 shadow-md bg-card border-border flex flex-col flex-1 overflow-hidden rounded-2xl">
             
@@ -1466,7 +1397,6 @@ export default function ExamSessionClient({
           </div>
 
         </aside>
-        )}
 
       </main>
 

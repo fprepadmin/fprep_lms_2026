@@ -52,19 +52,6 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Đồng bộ giao diện Sáng / Tối (Theme Mode) ngay trước khi Render để tránh chớp nửa sáng nửa tối
-              (function() {
-                try {
-                  var saved = localStorage.getItem('theme');
-                  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  if (saved === 'dark' || (!saved && prefersDark)) {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
-                } catch (e) {}
-              })();
-
               // Bỏ qua cảnh báo hydration do tiện ích trình duyệt (Bitwarden bis_skin_checked) chèn vào DOM
               (function() {
                 if (typeof window !== 'undefined') {

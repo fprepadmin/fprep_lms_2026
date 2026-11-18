@@ -8,16 +8,13 @@ import {
   Trash2, Edit3, Copy, Award, CheckCircle2, 
   Filter, Layers, BookOpen, AlertCircle, X, Sparkles,
   Send, Users, BarChart2, CheckSquare, ArrowRight,
-  Download, Eye, Calendar, FileText, Check, AlertTriangle, Trophy, FileCode2, FileDown
+  Download, Eye, Calendar, FileText, Check, AlertTriangle, Trophy
 } from 'lucide-react';
 import ExamEditorModal, { QuestionData } from '@/components/exam/ExamEditorModal';
 import AssignExamModal, { AssignmentPayload, ClassItem } from '@/components/exam/AssignExamModal';
 import StudentSubmissionDetailModal, { SubmissionData } from '@/components/exam/StudentSubmissionDetailModal';
 import StudentAttemptsModal, { StudentAttemptItem } from '@/components/exam/StudentAttemptsModal';
-import ExamJsonCopyModal from '@/components/exam/ExamJsonCopyModal';
-import ExamPdfModal from '@/components/exam/ExamPdfModal';
 import MathRenderer from '@/components/MathRenderer';
-import { cleanOptionText, parseOptions, formatQuestionOptionsForDb } from '@/lib/questionUtils';
 
 interface Subject {
   id: string;
@@ -161,22 +158,6 @@ export default function TeacherExamsClient({
     examTitle: string;
     attempts: StudentAttemptItem[];
   } | null>(null);
-
-  // Modal sao chép JSON đề thi chuẩn Dạng 2
-  const [copyJsonModalData, setCopyJsonModalData] = useState<{ exam: Exam; questions: Question[] } | null>(null);
-
-  const handleOpenCopyJson = (exam: Exam) => {
-    const examQuestions = localQuestions.filter(q => q.exam_id === exam.id);
-    setCopyJsonModalData({ exam, questions: examQuestions });
-  };
-
-  // Modal tạo và tải file PDF đề thi (Đáp án trang cuối)
-  const [pdfModalData, setPdfModalData] = useState<{ exam: Exam; questions: Question[] } | null>(null);
-
-  const handleOpenPdfModal = (exam: Exam) => {
-    const examQuestions = localQuestions.filter(q => q.exam_id === exam.id);
-    setPdfModalData({ exam, questions: examQuestions });
-  };
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -400,7 +381,7 @@ export default function TeacherExamsClient({
           exam_id: clonedExam.id,
           content: q.content,
           question_type: q.question_type || q.type || 'mcq',
-          options: formatQuestionOptionsForDb(q.options, q.question_type || q.type || 'mcq'),
+          options: q.options,
           correct_option_index: q.correct_option_index,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
@@ -478,7 +459,7 @@ export default function TeacherExamsClient({
           exam_id: savedExamId,
           content: q.content,
           question_type: q.type,
-          options: formatQuestionOptionsForDb(q.options, q.type),
+          options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options,
           correct_option_index: q.type === 'mcq' ? (['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0) : 0,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
@@ -496,7 +477,7 @@ export default function TeacherExamsClient({
           const fallbackQs = questionsData.map((q, idx) => ({
             exam_id: savedExamId,
             content: q.content,
-            options: formatQuestionOptionsForDb(q.options, q.type),
+            options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options.map((o: any) => o.text || o),
             correct_option_index: ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0,
             order_index: idx + 1
           }));
@@ -547,7 +528,7 @@ export default function TeacherExamsClient({
           exam_id: savedExamId,
           content: q.content,
           question_type: q.type,
-          options: formatQuestionOptionsForDb(q.options, q.type),
+          options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options,
           correct_option_index: q.type === 'mcq' ? (['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0) : 0,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
@@ -565,7 +546,7 @@ export default function TeacherExamsClient({
           const fallbackQs = questionsData.map((q, idx) => ({
             exam_id: savedExamId,
             content: q.content,
-            options: formatQuestionOptionsForDb(q.options, q.type),
+            options: q.type === 'mcq' ? q.options.map(o => o.text) : q.options.map((o: any) => o.text || o),
             correct_option_index: ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) !== -1 ? ['A', 'B', 'C', 'D'].indexOf(String(q.correct_answer).toUpperCase()) : 0,
             order_index: idx + 1
           }));
@@ -922,64 +903,30 @@ export default function TeacherExamsClient({
     <div className="space-y-6 animate-fade-in">
 
       {/* ==================================================== */}
-      {/* THANH CHUYỂN TAB CHÍNH CHUẨN LMS HIỆN ĐẠI */}
+      {/* THANH CHUYỂN TAB CHÍNH CHUẨN LMS */}
       {/* ==================================================== */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-1.5 rounded-2xl border border-border">
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-          <button
-            onClick={() => setMainTab('bank')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all whitespace-nowrap ${
-              mainTab === 'bank'
-                ? 'bg-primary text-primary-foreground shadow-md font-black'
-                : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
-            }`}
-          >
-            <ClipboardList className="h-4 w-4" /> 
-            <span>Ngân Hàng Đề Thi & Soạn Đề</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
-              mainTab === 'bank' ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
-            }`}>
-              {localExams.length}
-            </span>
-          </button>
+      <div className="flex items-center gap-3 border-b border-border pb-3 overflow-x-auto">
+        <button
+          onClick={() => setMainTab('bank')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
+            mainTab === 'bank'
+              ? 'bg-primary text-primary-foreground shadow-md'
+              : 'bg-muted/40 hover:bg-muted text-muted-foreground'
+          }`}
+        >
+          <ClipboardList className="h-4 w-4" /> Ngân Hàng Đề Thi & Soạn Đề ({localExams.length})
+        </button>
 
-          <button
-            onClick={() => setMainTab('submissions')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all whitespace-nowrap ${
-              mainTab === 'submissions'
-                ? 'bg-primary text-primary-foreground shadow-md font-black'
-                : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
-            }`}
-          >
-            <BarChart2 className="h-4 w-4" /> 
-            <span>Quản Lý Nộp Bài & Sổ Điểm LMS</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${
-              mainTab === 'submissions' ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground'
-            }`}>
-              {localExamResults.length} bài
-            </span>
-          </button>
-        </div>
-
-        {/* Nút hành động nhanh bên phải */}
-        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-          {mainTab === 'bank' ? (
-            <button
-              onClick={() => handleOpenCreateModal()}
-              className="btn-primary text-xs py-2 px-3.5 shadow-sm flex items-center gap-1.5 font-bold"
-            >
-              <Plus className="h-4 w-4" /> Soạn Đề Thi Mới
-            </button>
-          ) : (
-            <button
-              onClick={handleExportCSV}
-              className="btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 font-bold"
-              title="Xuất bảng điểm ra file CSV"
-            >
-              <Download className="h-3.5 w-3.5" /> Xuất Sổ Điểm (CSV)
-            </button>
-          )}
-        </div>
+        <button
+          onClick={() => setMainTab('submissions')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
+            mainTab === 'submissions'
+              ? 'bg-primary text-primary-foreground shadow-md'
+              : 'bg-muted/40 hover:bg-muted text-muted-foreground'
+          }`}
+        >
+          <BarChart2 className="h-4 w-4" /> Quản Lý Nộp Bài & Sổ Điểm LMS ({localExamResults.length} lượt nộp)
+        </button>
       </div>
 
       {/* ==================================================== */}
@@ -1026,7 +973,7 @@ export default function TeacherExamsClient({
           </div>
 
           {/* THANH CÔNG CỤ & TẠO ĐỀ NHANH */}
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-4 sm:p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flat-card flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Lọc theo môn phụ trách */}
               {allSubjects.length > 1 ? (
@@ -1073,7 +1020,7 @@ export default function TeacherExamsClient({
 
           {/* DANH SÁCH ĐỀ THI */}
           {filteredExams.length === 0 ? (
-            <div className="text-center py-16 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs border-dashed space-y-3">
+            <div className="text-center py-16 flat-card border-dashed space-y-3">
               <ClipboardList className="h-10 w-10 text-muted-foreground mx-auto opacity-40" />
               <p className="font-bold text-muted-foreground text-sm">Không tìm thấy đề thi nào phù hợp.</p>
               <button
@@ -1093,7 +1040,7 @@ export default function TeacherExamsClient({
                 return (
                   <div 
                     key={exam.id}
-                    className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-4 sm:p-5 shadow-2xs flex flex-col justify-between gap-4 hover:border-primary/50 transition-all group"
+                    className="flat-card flex flex-col justify-between gap-4 hover:border-primary/50 transition-all group"
                   >
                     <div className="space-y-3">
                       
@@ -1112,20 +1059,6 @@ export default function TeacherExamsClient({
                         </div>
 
                         <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleOpenPdfModal(exam)}
-                            className="p-1.5 hover:bg-red-500/10 rounded text-muted-foreground hover:text-red-600 transition-colors"
-                            title="Tải đề thi dạng file PDF (Đáp án trang cuối)"
-                          >
-                            <FileDown className="h-3.5 w-3.5 text-red-500" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenCopyJson(exam)}
-                            className="p-1.5 hover:bg-primary/10 rounded text-muted-foreground hover:text-primary transition-colors"
-                            title="Sao chép JSON đề thi (Dạng 2)"
-                          >
-                            <FileCode2 className="h-3.5 w-3.5 text-primary" />
-                          </button>
                           <button
                             onClick={() => handleDuplicateExam(exam)}
                             className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-primary transition-colors"
@@ -1194,35 +1127,17 @@ export default function TeacherExamsClient({
                     </div>
 
                     {/* Footer Actions */}
-                    <div className="pt-3 border-t border-border flex items-center justify-between gap-1.5 flex-wrap">
-                      <button
-                        onClick={() => handleOpenPdfModal(exam)}
-                        className="btn-secondary text-[11px] py-1.5 px-2.5 flex items-center gap-1 text-red-700 dark:text-red-400 border-red-200 dark:border-red-900/40 hover:bg-red-50 dark:hover:bg-red-950/20 font-bold transition-colors"
-                        title="Tạo & Tải file PDF đề thi (Đáp án trang cuối)"
-                      >
-                        <FileDown className="h-3.5 w-3.5 text-red-500" />
-                        <span>Tải PDF</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleOpenCopyJson(exam)}
-                        className="btn-secondary text-[11px] py-1.5 px-2 flex items-center gap-1 text-slate-700 dark:text-slate-300 border-border hover:bg-muted hover:text-primary transition-colors"
-                        title="Sao chép JSON chuẩn Dạng 2"
-                      >
-                        <FileCode2 className="h-3.5 w-3.5 text-primary" />
-                        <span>Copy JSON</span>
-                      </button>
-
+                    <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
                       <button
                         onClick={() => handleOpenAssignModal(exam)}
-                        className="btn-secondary text-[11px] py-1.5 px-2 flex items-center gap-1 flex-1 justify-center text-primary border-primary/30 hover:bg-primary/5"
+                        className="btn-secondary text-[11px] py-1.5 px-3 flex items-center gap-1.5 flex-1 justify-center text-primary border-primary/30 hover:bg-primary/5"
                       >
-                        <Send className="h-3.5 w-3.5" /> Giao bài
+                        <Send className="h-3.5 w-3.5" /> Giao cho lớp
                       </button>
 
                       <button
                         onClick={() => setEditingExamModal(exam)}
-                        className="btn-primary text-[11px] py-1.5 px-2.5 flex items-center gap-1"
+                        className="btn-primary text-[11px] py-1.5 px-3.5 flex items-center gap-1.5"
                       >
                         <Edit3 className="h-3.5 w-3.5" /> Soạn đề
                       </button>
@@ -1244,7 +1159,7 @@ export default function TeacherExamsClient({
         <div className="space-y-6">
 
           {/* THANH CHUYỂN ĐỔI CHẾ ĐỘ: TOÀN KHỐI 12 vs THEO TỪNG LỚP */}
-          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-3 sm:p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSelectedGradeView('class')}
@@ -1315,19 +1230,19 @@ export default function TeacherExamsClient({
               
               {/* Tổng quan toàn khối */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs p-4 space-y-1">
+                <div className="flat-card p-4 space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tổng học sinh khối 12</span>
                   <div className="text-2xl font-black text-foreground">{students.length} học sinh</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs p-4 space-y-1">
+                <div className="flat-card p-4 space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tổng lượt nộp bài</span>
                   <div className="text-2xl font-black text-primary">{localExamResults.length} bài</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs p-4 space-y-1">
+                <div className="flat-card p-4 space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tổng đề thi đã giao</span>
                   <div className="text-2xl font-black text-green-600">{localExamAssignments.length} lượt giao</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs p-4 space-y-1">
+                <div className="flat-card p-4 space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Điểm TB toàn khối</span>
                   <div className="text-2xl font-black text-secondary dark:text-foreground">
                     {localExamResults.length > 0 
@@ -1338,7 +1253,7 @@ export default function TeacherExamsClient({
               </div>
 
               {/* Bảng so sánh giữa các lớp trong khối */}
-              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs overflow-hidden p-0 border border-border">
+              <div className="flat-card overflow-hidden p-0 border border-border">
                 <div className="p-4 border-b border-border bg-muted/20 flex items-center justify-between">
                   <h3 className="font-extrabold text-sm text-foreground flex items-center gap-2">
                     <BarChart2 className="h-4 w-4 text-primary" /> Bảng Tiến Độ & Điểm Số Theo Lớp Khối 12
@@ -1418,12 +1333,12 @@ export default function TeacherExamsClient({
 
               {/* Thẻ thống kê tổng quan của lớp đang chọn */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs p-4 space-y-1">
+                <div className="flat-card p-4 space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Sĩ số lớp</span>
                   <div className="text-2xl font-black text-foreground">{totalClassStudents} học sinh</div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs p-4 space-y-1">
+                <div className="flat-card p-4 space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tỷ lệ nộp bài</span>
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-black text-primary">{submittedCount}/{totalClassStudents}</span>
@@ -1431,7 +1346,7 @@ export default function TeacherExamsClient({
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs p-4 space-y-1">
+                <div className="flat-card p-4 space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Điểm TB của lớp</span>
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-black text-green-600">{avgScore}</span>
@@ -1439,7 +1354,7 @@ export default function TeacherExamsClient({
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs p-4 space-y-1">
+                <div className="flat-card p-4 space-y-1">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Điểm Cao nhất / Thấp nhất</span>
                   <div className="text-xl font-black text-foreground">
                     <span className="text-green-600">{maxScore}</span> / <span className="text-orange-500">{minScore}</span>
@@ -1448,7 +1363,7 @@ export default function TeacherExamsClient({
               </div>
 
               {/* Bộ lọc bảng điểm */}
-              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card p-4 sm:p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flat-card flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-1.5 overflow-x-auto">
                     <span className="text-xs font-bold text-muted-foreground uppercase mr-1">Trạng thái:</span>
@@ -1525,7 +1440,7 @@ export default function TeacherExamsClient({
               </div>
 
               {/* BẢNG DANH SÁCH NỘP BÀI VÀ ĐIỂM SỐ */}
-              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-2xs overflow-hidden p-0 border border-border">
+              <div className="flat-card overflow-hidden p-0 border border-border">
                 <div className="p-4 border-b border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <h3 className="font-extrabold text-sm text-foreground flex items-center gap-2">
                     <ClipboardList className="h-4 w-4 text-primary" /> 
@@ -1854,21 +1769,23 @@ export default function TeacherExamsClient({
             exam_type: editingExamModal.exam_type || 'test',
             subject_id: editingExamModal.subject_id
           }}
-          initialQuestions={localQuestions.filter(q => q.exam_id === editingExamModal.id).map(q => {
-            const qType = (q.question_type || q.type || 'mcq') as any;
-            return {
-              id: q.id,
-              content: q.content,
-              type: qType,
-              options: parseOptions(q.options, qType),
-              correct_answer: q.correct_answer !== undefined 
-                ? q.correct_answer 
-                : (q.correct_option_index !== undefined ? ['A', 'B', 'C', 'D'][q.correct_option_index] : 'A'),
-              explanation: q.explanation || '',
-              level: (q.level || 'Nhận biết') as any,
-              points: (q as any).points !== undefined && (q as any).points !== null ? Number((q as any).points) : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25)
-            };
-          })}
+          initialQuestions={localQuestions.filter(q => q.exam_id === editingExamModal.id).map(q => ({
+            id: q.id,
+            content: q.content,
+            type: (q.question_type || q.type || 'mcq') as any,
+            options: Array.isArray(q.options) 
+              ? q.options.map((opt: any, idx: number) => ({
+                  id: opt.id || ['A', 'B', 'C', 'D'][idx] || String(idx),
+                  text: typeof opt === 'object' && opt !== null ? opt.text : String(opt)
+                }))
+              : [],
+            correct_answer: q.correct_answer !== undefined 
+              ? q.correct_answer 
+              : (q.correct_option_index !== undefined ? ['A', 'B', 'C', 'D'][q.correct_option_index] : 'A'),
+            explanation: q.explanation || '',
+            level: (q.level || 'Nhận biết') as any,
+            points: (q as any).points !== undefined && (q as any).points !== null ? Number((q as any).points) : ((q.question_type || q.type) === 'tf' ? 1.0 : (q.question_type || q.type) === 'saq' ? 0.5 : 0.25)
+          }))}
           onSave={handleSaveExamModal}
         />
       )}
@@ -1928,26 +1845,6 @@ export default function TeacherExamsClient({
             };
             setInspectingSubmission(payload);
           }}
-        />
-      )}
-
-      {/* MODAL XUẤT & SAO CHÉP JSON ĐỀ THI CHUẨN BỘ GD&ĐT 2026 */}
-      {copyJsonModalData && (
-        <ExamJsonCopyModal
-          isOpen={Boolean(copyJsonModalData)}
-          onClose={() => setCopyJsonModalData(null)}
-          exam={copyJsonModalData.exam}
-          questions={copyJsonModalData.questions}
-        />
-      )}
-
-      {/* MODAL TẠO & TẢI FILE PDF ĐỀ THI */}
-      {pdfModalData && (
-        <ExamPdfModal
-          isOpen={Boolean(pdfModalData)}
-          onClose={() => setPdfModalData(null)}
-          exam={pdfModalData.exam}
-          questions={pdfModalData.questions}
         />
       )}
 

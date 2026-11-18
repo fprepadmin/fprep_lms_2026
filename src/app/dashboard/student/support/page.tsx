@@ -47,17 +47,15 @@ export default async function StudentSupportPage() {
     .order('created_at', { ascending: false });
 
   return (
-    <div className="space-y-6 w-full animate-fade-in pb-12">
+    <div className="space-y-8 w-full">
       {/* HEADER HỎI ĐÁP */}
-      <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-card p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-xs">
-        <div className="space-y-1.5 max-w-xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/60 px-3 py-0.5 text-xs font-bold text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-gradient-to-r from-primary/5 via-transparent to-transparent">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary border border-primary/20">
             <MessageSquare className="h-3.5 w-3.5" /> Kênh tương tác học thuật chuyên môn
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground m-0 font-heading">
-            Hỏi Đáp & Hỗ Trợ Học Tập
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground m-0">
+          <h1 className="text-3xl font-black text-foreground">Hỏi Đáp Hỗ Trợ Học Tập</h1>
+          <p className="text-xs text-muted-foreground font-semibold">
             Gửi câu hỏi thắc mắc chuyên môn đến thầy cô tổ bộ môn để nhận giải đáp trực tiếp nhanh chóng.
           </p>
         </div>

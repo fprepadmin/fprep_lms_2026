@@ -2108,8 +2108,10 @@ export default function TeacherStudentsClient({
             const isT = c.group_type === 'T';
             const isX = c.group_type === 'X';
 
-            // Tìm toàn bộ môn học & giáo viên phụ trách lớp này
-            const classAssList = localAssignments.filter(ass => ass.class_id === c.id);
+            // Tìm giáo viên bộ môn phụ trách lớp này
+            const classAss = localAssignments.find(ass => ass.class_id === c.id);
+            const assignedSub = classAss?.subjects?.name || 'Môn học';
+            const assignedTeacherEmail = allTeachers?.find(t => t.id === classAss?.teacher_id)?.email;
 
             return (
               <div 
@@ -2165,26 +2167,9 @@ export default function TeacherStudentsClient({
                     <p className="text-[10px] text-muted-foreground font-semibold mt-1">
                       Niên khóa: {c.academic_year} &bull; Sĩ số: {analytics.studentsCount} học sinh
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {classAssList.length === 0 ? (
-                        <span className="text-[9.5px] text-muted-foreground italic">Chưa phân công giáo viên</span>
-                      ) : (
-                        classAssList.map((ass, assIdx) => {
-                          const tEmail = allTeachers?.find(t => t.id === ass.teacher_id)?.email || '';
-                          const tName = tEmail ? tEmail.split('@')[0].toUpperCase() : 'GV';
-                          return (
-                            <span 
-                              key={assIdx}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/70 border border-border/70 text-[9.5px] font-semibold text-foreground"
-                              title={`${ass.subjects?.name || 'Môn'}: ${tEmail}`}
-                            >
-                              <span className="font-bold text-primary">{ass.subjects?.name}:</span>
-                              <span>{tName}</span>
-                            </span>
-                          );
-                        })
-                      )}
-                    </div>
+                    <span className="block text-[9px] text-muted-foreground font-bold mt-1.5">
+                      Môn học: {assignedSub} &bull; GV: {assignedTeacherEmail || 'Chưa phân công'}
+                    </span>
                   </div>
                 </div>
 

@@ -19,39 +19,21 @@ export default async function TeacherMaterialsPage() {
     redirect('/');
   }
   const teacherId = payload.sub;
-  const teacherEmail = payload.email || '';
 
   const supabase = await getSupabaseServerClient();
 
-  // Xác định ID hồ sơ chuẩn trong CSDL (hỗ trợ cả UID và UUID tạo từ admin)
-  let effectiveTeacherId = teacherId;
-  let profileRole = payload.role || 'teacher';
-
-  if (teacherEmail) {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('email', teacherEmail.trim().toLowerCase())
-      .maybeSingle();
-    if (prof) {
-      effectiveTeacherId = prof.id;
-      profileRole = prof.role || profileRole;
-    }
-  }
-
   // 1. Lấy thông tin vai trò, danh sách lớp & môn học phân công, và toàn bộ danh mục môn học
   const [
+    profileRes,
     assignmentsRes,
     allSubjectsRes
   ] = await Promise.all([
-    supabase
-      .from('teacher_classes')
-      .select('*, classes(*), subjects(*)')
-      .or(`teacher_id.eq.${teacherId},teacher_id.eq.${effectiveTeacherId}`),
+    supabase.from('profiles').select('role').eq('id', teacherId).single(),
+    supabase.from('teacher_classes').select('*, classes(*), subjects(*)').eq('teacher_id', teacherId),
     supabase.from('subjects').select('*')
   ]);
 
-  const userRole = profileRole;
+  const userRole = profileRes.data?.role || payload.role || 'teacher';
   const isSystemAdmin = userRole === 'admin';
   const assignments = assignmentsRes.data || [];
   const allSubjects = allSubjectsRes.data || [];
@@ -115,19 +97,19 @@ export default async function TeacherMaterialsPage() {
 
   return (
     <div className="space-y-5 w-full animate-fade-in">
-      {/* HEADER BIÊN SOẠN HỌC LIỆU HIỆN ĐẠI */}
-      <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-6 shadow-xs">
-        <div className="space-y-1.5 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-0.5 text-xs font-bold text-primary border border-primary/20">
+      {/* HEADER BIÊN SOẠN HỌC LIỆU CHUẨN LMS */}
+      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 relative overflow-hidden bg-white dark:bg-card">
+        <div className="space-y-1 max-w-2xl">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-0.5 text-xs font-bold text-primary">
             <BookOpen className="h-3.5 w-3.5" />
             {allowedSubjects.length > 0 
-              ? `Kho Học Liệu: ${allowedSubjects.map(s => s.name).join(', ')}`
+              ? `Kho Học Liệu & Bài Giảng: ${allowedSubjects.map(s => s.name).join(', ')}`
               : 'Kho Học Liệu & Bài Giảng'}
           </div>
-          <h1 className="text-xl sm:text-2xl font-black font-heading text-foreground tracking-tight m-0">
+          <h1 className="text-xl sm:text-2xl font-black font-heading text-secondary dark:text-foreground tracking-tight m-0">
             Biên Soạn Bài Giảng & Học Liệu
           </h1>
-          <p className="text-xs text-muted-foreground font-medium m-0">
+          <p className="text-xs text-muted-foreground font-semibold m-0">
             {allowedSubjects.length > 0
               ? `Quản lý cấu trúc bài giảng, lý thuyết LaTeX, video và bài tập tự luyện cho môn: ${allowedSubjects.map(s => s.name).join(', ')}.`
               : 'Quản lý cấu trúc chương hồi, soạn thảo lý thuyết chuẩn LaTeX, liên kết video bài giảng và bài tập tự luyện.'}

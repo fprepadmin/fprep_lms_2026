@@ -4,67 +4,98 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, Plus, Trash2, Check, Sparkles, Copy, 
-  FileCode2, FileDown, CheckCircle2, Clock, 
+  FileCode2, CheckCircle2, Clock, 
   BookOpen, HelpCircle, Layers, Eye, Image as ImageIcon,
   Upload, Link as LinkIcon, SlidersHorizontal, Calculator,
   Scale, Percent, Hash, ArrowRight, Edit3, AlertCircle,
   RefreshCw, CheckSquare, TrendingUp
 } from 'lucide-react';
-import MathRenderer from '@/components/MathRenderer';
-import StructuredExplanation from '@/components/StructuredExplanation';
+import MathRenderer, { cleanMathContent } from '@/components/MathRenderer';
 import { uploadImageToCloudinary, getImageFromClipboardEvent } from '@/lib/cloudinary';
 import { parseAndRepairJson } from '@/lib/jsonRepair';
-import { cleanOptionText, parseOptions, formatExplanationWithLineBreaks, normalizeQuestionTypeAndAnswer } from '@/lib/questionUtils';
-import ExamJsonCopyModal from './ExamJsonCopyModal';
-import ExamPdfModal from './ExamPdfModal';
 
-const AI_PROMPT_FPREP = `Bạn là một chuyên gia giáo dục và kỹ sư dữ liệu khảo thí của hệ thống FPREP. 
-Nhiệm vụ: Đọc đề thi dưới đây và chuyển đổi toàn bộ câu hỏi sang mảng JSON chuẩn 2026. 
-ĐẶC BIỆT LƯU Ý: Giáo viên đã cung cấp sẵn đáp án đúng trong đề (bằng cách gạch chân, in đậm, bôi đỏ, có dấu * ở phương án đúng, hoặc để bảng đáp án ở cuối file). 
-Bạn PHẢI dò tìm và trích xuất chính xác đáp án này làm \`correct_answer\`. TUYỆT ĐỐI KHÔNG tự giải và chọn đáp án khác với ý đồ của giáo viên. 
-Sau khi lấy được đáp án của giáo viên, hãy tự động soạn phần \`explanation\` (lời giải chi tiết) sao cho logic và dẫn đến đúng đáp án đó.
+const AI_PROMPT_FPREP = `Bạn là một chuyên gia giáo dục và kỹ sư dữ liệu khảo thí cấp cao của hệ thống FPREP LMS. 
+Nhiệm vụ: Chuyển đổi chính xác 100% đề thi dưới đây sang định dạng mảng JSON chuẩn khảo thí 2026 của Bộ GD&ĐT.
 
-QUY ƯỚC QUAN TRỌNG CẦN TUÂN THỦ:
-1. BẢNG BIỂU & CÔNG THỨC (LATEX): 
-   - ĐƯỢC PHÉP dùng LaTeX để viết công thức toán học hoặc bảng biến thiên.
-   - TUYỆT ĐỐI BẮT BUỘC PHẢI DÙNG DẤU $ CHO CÔNG THỨC NGẮN VÀ $$ CHO KHỐI CÔNG THỨC. (Ví dụ ĐÚNG: $y = x^2$, $\\frac{1}{2}$).
-2. CẤU TRÚC JSON CHUẨN 2026:
+CÁC NGUYÊN TẮC BẮT BUỘC TUYỆT ĐỐI KHÔNG ĐƯỢC VI PHẠM (CRITICAL STRICT RULES):
+
+1. BẢO LƯU NGUYÊN BẢN 100% (KHÔNG ĐƯỢC PHÉP THAY ĐỔI NỘI DUNG, CÁCH HỎI, ĐÁP ÁN):
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ Ý THAY ĐỔI, viết lại, biên tập lại, tóm tắt hay diễn giải lại câu chữ, câu dẫn, cách hỏi trong trường "content".
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC THAY ĐỔI văn phong, dữ liệu số, thứ tự câu hỏi và nội dung các phương án ("options").
+   - ĐÁP ÁN CỦA ĐỀ GỐC/GIÁO VIÊN LÀ CHÂN LÝ TUYỆT ĐỐI: Bạn PHẢI trích xuất chính xác đáp án giáo viên đã cung cấp trong đề (gạch chân, in đậm, đánh dấu *, khoanh tròn hoặc bảng đáp án ở cuối đề) làm "correct_answer". TUYỆT ĐỐI KHÔNG tự ý giải lại rồi chọn đáp án khác với chỉ định của đề gốc.
+   - Lời giải ("explanation") phải lập luận sư phạm logic, chặt chẽ để chứng minh và dẫn về ĐÚNG đáp án mà đề gốc đã chọn.
+
+2. QUY TẮC HÌNH ẢNH HOẶC BẢNG BIỂU / BẢNG BIẾN THIÊN / ĐỒ THỊ:
+   - VỚI BẢNG BIỂU / BẢNG BIẾN THIÊN / BẢNG SỐ LIỆU DẠNG CHỮ HOẶC LATEX: Copy và dán nguyên văn vào đúng vị trí xuất hiện trong "content" hoặc "explanation" (dưới dạng bảng Markdown hoặc ma trận LaTeX chuẩn, ví dụ: \\begin{array}...\\end{array} hoặc bảng Markdown | ... |).
+   - VỚI HÌNH VẼ, ĐỒ THỊ, HÌNH HỌC KHÔNG GIAN, TRANH ẢNH MINH HỌA:
+     + TUYỆT ĐỐI KHÔNG tự ý bỏ qua hay tự bịa lời văn mô tả thay thế hình.
+     + Đặt đúng vị trí hình ảnh bằng ký hiệu giữ chỗ rõ ràng: \`[Hình vẽ: Mô tả vị trí xuất hiện trong đề]\` (hoặc \`[Đồ thị hàm số]\`, \`[Bảng biến thiên]\`, hoặc nếu có link ảnh thì giữ nguyên \`![Hình vẽ](link_anh)\`).
+     + Hình vẽ phải được đặt CHÍNH XÁC tại vị trí xuất hiện trong đề bài hoặc trong các phương án, lời giải. Hệ thống FPREP sẽ tự động nhận diện vị trí này để hiển thị và cắt sát ảnh tương ứng.
+
+3. QUY ƯỚC CÔNG THỨC TOÁN HỌC & LATEX:
+   - VỀ PHÂN SỐ: BẮT BUỘC 100% DÙNG \\dfrac (ví dụ: \\dfrac{a}{b}), TUYỆT ĐỐI KHÔNG DÙNG \\frac để đảm bảo phân số hiển thị to rõ, cân đối và chuẩn thẩm mỹ toán học trên web.
+   - VỀ DẤU KHÁC: BẮT BUỘC DÙNG \\neq (ví dụ: $x \\neq 2$), TUYỆT ĐỐI KHÔNG DÙNG \\ne.
+   - Mọi công thức toán học PHẢI đặt trong cặp dấu $ cho công thức nội dòng (ví dụ: $y = f(x)$) hoặc $$ cho công thức độc lập.
+   - Vector: \\overrightarrow{AB}, căn bậc hai: \\sqrt{...}, tích vô hướng: \\vec a \\cdot \\vec b.
+   - Trong chuỗi JSON, tất cả dấu gạch chéo ngược LaTeX phải được escape hợp lệ (ví dụ: "\\\\dfrac{1}{2}", "\\\\sqrt{3}", "\\\\overrightarrow{AB}").
+
+4. ĐỊNH DẠNG XUỐNG DÒNG DỄ ĐỌC TRONG LỜI GIẢI ("explanation"):
+   - Các bước giải, lập luận phân tích PHẢI được ngắt dòng rõ ràng bằng ký tự xuống dòng \\n hoặc \\n\\n, không viết dồn thành một khối chữ đặc.
+   - Trắc nghiệm Đúng/Sai (type "tf"): Bắt buộc ngắt dòng riêng biệt cho từng ý:
+     Ý a) ... -> Đúng.\\n\\nÝ b) ... -> Sai.\\n\\nÝ c) ... -> Đúng.\\n\\nÝ d) ... -> Sai.
+   - Trả lời ngắn (type "saq"): Trình bày từng bước tính, dòng cuối ghi rõ kết luận giá trị cần điền.
+
+5. CẤU TRÚC JSON CHUẨN 2026 (MẪU 3 DẠNG THỨC):
 [
-  // 1. Trắc nghiệm 4 lựa chọn (type: "mcq") - Mặc định 0.25 điểm
-  { 
-    "type": "mcq", 
-    "level": "Nhận biết", 
+  // Dạng 1: Trắc nghiệm 4 lựa chọn (type: "mcq", points: 0.25)
+  {
+    "type": "mcq",
+    "level": "Nhận biết",
     "points": 0.25,
-    "content": "Nội dung câu hỏi...", 
-    "options": [ {"id": "A", "text": "Đáp án A"}, {"id": "B", "text": "Đáp án B"}, {"id": "C", "text": "Đáp án C"}, {"id": "D", "text": "Đáp án D"} ], 
-    "correct_answer": "A", 
-    "explanation": "Lời giải chi tiết..." 
+    "content": "Nội dung câu hỏi nguyên văn không đổi...",
+    "options": [
+      {"id": "A", "text": "Phương án A nguyên văn..."},
+      {"id": "B", "text": "Phương án B nguyên văn..."},
+      {"id": "C", "text": "Phương án C nguyên văn..."},
+      {"id": "D", "text": "Phương án D nguyên văn..."}
+    ],
+    "correct_answer": "A",
+    "explanation": "Bước 1: ...\\nBước 2: ...\\nSuy ra chọn đáp án A."
   },
-  // 2. Trắc nghiệm Đúng/Sai (type: "tf") - Mặc định 1.0 điểm
-  { 
-    "type": "tf", 
-    "level": "Thông hiểu", 
+  // Dạng 2: Trắc nghiệm Đúng/Sai (type: "tf", points: 1.0)
+  {
+    "type": "tf",
+    "level": "Thông hiểu",
     "points": 1.0,
-    "content": "Nội dung phần dẫn chung...", 
-    "options": [ {"id": "a", "text": "Ý a..."}, {"id": "b", "text": "Ý b..."}, {"id": "c", "text": "Ý c..."}, {"id": "d", "text": "Ý d..."} ], 
-    "correct_answer": { "a": true, "b": false, "c": true, "d": false }, 
-    "explanation": "Lời giải chi tiết cho từng ý..." 
+    "content": "Lời dẫn câu hỏi nguyên văn không đổi...",
+    "options": [
+      {"id": "a", "text": "Mệnh đề a nguyên văn..."},
+      {"id": "b", "text": "Mệnh đề b nguyên văn..."},
+      {"id": "c", "text": "Mệnh đề c nguyên văn..."},
+      {"id": "d", "text": "Mệnh đề d nguyên văn..."}
+    ],
+    "correct_answer": { "a": true, "b": false, "c": true, "d": false },
+    "explanation": "a) Lời giải mệnh đề a... -> Đúng.\\n\\nb) Lời giải mệnh đề b... -> Sai.\\n\\nc) Lời giải mệnh đề c... -> Đúng.\\n\\nd) Lời giải mệnh đề d... -> Sai."
   },
-  // 3. Trả lời ngắn (type: "saq") - Mặc định 0.5 điểm
-  { 
-    "type": "saq", 
-    "level": "Vận dụng", 
+  // Dạng 3: Trắc nghiệm Trả lời ngắn (type: "saq", points: 0.5)
+  {
+    "type": "saq",
+    "level": "Vận dụng",
     "points": 0.5,
-    "content": "Nội dung câu hỏi...", 
-    "options": [], 
-    "correct_answer": "12.5", 
-    "explanation": "Lời giải chi tiết..." 
+    "content": "Nội dung câu hỏi nguyên văn không đổi...",
+    "options": [],
+    "correct_answer": "12.5",
+    "explanation": "Bước 1: ...\\nBước 2: ...\\n\\nVậy giá trị cần điền vào ô đáp án là: 12.5"
   }
 ]
 
-TRẢ VỀ DUY NHẤT MẢNG JSON BẮT ĐẦU BẰNG [ VÀ KẾT THÚC BẰNG ].
-ĐỀ THI:
-[DÁN ĐỀ THI VÀO ĐÂY]`;
+YÊU CẦU ĐẦU RA:
+- CHỈ TRẢ VỀ DUY NHẤT MẢNG JSON HỢP LỆ (Bắt đầu bằng [ và kết thúc bằng ]).
+- Đảm bảo đủ tất cả các dấu đóng ngoặc nhọn } của các object con trước khi đóng ngoặc vuông ].
+- Không thêm bất kỳ lời dẫn giải, ghi chú thừa nào ngoài mảng JSON.
+
+ĐỀ THI VÀ ĐÁP ÁN:
+[DÁN NỘI DUNG ĐỀ THI VÀ BẢNG ĐÁP ÁN VÀO ĐÂY]`;
 
 export interface QuestionData {
   id?: string;
@@ -110,27 +141,71 @@ export default function ExamEditorModal({
   const [questions, setQuestions] = useState<QuestionData[]>(() => {
     if (initialQuestions && initialQuestions.length > 0) {
       return initialQuestions.map((q, idx) => {
-        const parsedOptions = parseOptions(q.options, (q.question_type || q.type) as any);
-        const norm = normalizeQuestionTypeAndAnswer(q, parsedOptions);
-        const qType = norm.type;
-        const ca = norm.correct_answer;
+        let qType: 'mcq' | 'tf' | 'saq' = q.question_type || q.type || 'mcq';
+        let parsedOptions = Array.isArray(q.options) ? q.options : [];
+        if (typeof q.options === 'string') {
+          try { parsedOptions = JSON.parse(q.options); } catch (e) {}
+        }
+
+        // Tự động suy luận dạng câu hỏi nếu chưa rõ
+        const contentLower = (q.content || '').toLowerCase();
+        if (
+          contentLower.includes('đúng hoặc sai') || 
+          contentLower.includes('đúng sai') || 
+          contentLower.includes('tính đúng/sai') || 
+          contentLower.includes('tính đúng sai') || 
+          contentLower.includes('xét tính đúng') ||
+          contentLower.includes('mệnh đề sau')
+        ) {
+          qType = 'tf';
+        } else if (typeof q.correct_answer === 'object' && q.correct_answer !== null && !Array.isArray(q.correct_answer)) {
+          qType = 'tf';
+        } else if (parsedOptions.length === 0 && qType !== 'tf') {
+          qType = 'saq';
+        }
+
         const isTf = qType === 'tf';
+        const defaultKeys = isTf ? ['a', 'b', 'c', 'd'] : ['A', 'B', 'C', 'D'];
+
+        if (parsedOptions.length > 0) {
+          parsedOptions = parsedOptions.map((opt: any, optIdx: number) => {
+            if (typeof opt === 'object' && opt !== null) {
+              return {
+                id: isTf ? String(opt.id || defaultKeys[optIdx] || String(optIdx + 1)).toLowerCase() : String(opt.id || defaultKeys[optIdx] || String(optIdx + 1)).toUpperCase(),
+                text: String(opt.text || opt.content || '')
+              };
+            }
+            return {
+              id: defaultKeys[optIdx] || String(optIdx + 1),
+              text: String(opt)
+            };
+          });
+        }
+
+        let ca = q.correct_answer;
+        if (qType === 'mcq') {
+          if (q.correct_option_index !== undefined && q.correct_option_index !== null) {
+            ca = ['A', 'B', 'C', 'D'][q.correct_option_index] || 'A';
+          }
+          if (!ca || typeof ca !== 'string') ca = 'A';
+        } else if (qType === 'tf') {
+          if (!ca || typeof ca !== 'object' || Array.isArray(ca)) {
+            ca = { a: true, b: false, c: true, d: false };
+          }
+        } else if (qType === 'saq') {
+          if (ca === undefined || ca === null) ca = '';
+          else ca = String(ca);
+        }
 
         const rawPt = q.points !== undefined && q.points !== null && !isNaN(Number(q.points))
           ? Number(q.points)
           : (q.point !== undefined ? Number(q.point) : (q.score !== undefined ? Number(q.score) : getDefaultQuestionPoints(qType)));
 
-        let finalContent = (q.content || '').trim();
-        const imgUrl = (q as any).image || (q as any).image_url || (q as any).imageUrl || (q as any).img;
-        if (imgUrl && typeof imgUrl === 'string' && !finalContent.includes(imgUrl)) {
-          finalContent = finalContent + `\n\n![Hình minh họa](${imgUrl})\n`;
-        }
-
         return {
           id: q.id || `temp-${idx}`,
           type: qType,
           level: q.level || (qType === 'saq' ? 'Vận dụng' : qType === 'tf' ? 'Thông hiểu' : 'Nhận biết'),
-          content: finalContent,
+          content: q.content || '',
           points: rawPt,
           options: qType === 'saq' ? [] : (parsedOptions.length > 0 ? parsedOptions : isTf ? [
             { id: 'a', text: '' },
@@ -170,8 +245,6 @@ export default function ExamEditorModal({
   const [activeQuestionIdx, setActiveQuestionIdx] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showPdfModal, setShowPdfModal] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -328,9 +401,10 @@ export default function ExamEditorModal({
     if (!file) return;
     setIsUploadingImage(true);
     try {
-      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams');
-      const imgMarkdown = `\n\n![Hình minh họa](${imgUrl})\n`;
-      handleUpdateCurrentQ('content', (currentQ.content || '').trim() + imgMarkdown);
+      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams', true);
+      const imgMarkdown = `![Hình vẽ đề bài](${imgUrl})`;
+      const updatedText = insertImageIntoText(currentQ.content || '', imgMarkdown, 'Hình vẽ đề bài');
+      handleUpdateCurrentQ('content', updatedText);
     } catch (err: any) {
       alert('Không thể tải ảnh lên Cloudinary: ' + err.message);
     } finally {
@@ -351,14 +425,15 @@ export default function ExamEditorModal({
     const targetIdx = targetOptionIdxRef.current;
     setIsUploadingImage(true);
     try {
-      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams');
+      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams', true);
       const optTag = currentQ.options[targetIdx]?.id || ['A', 'B', 'C', 'D'][targetIdx] || 'Đáp án';
-      const imgMarkdown = `\n![${optTag}](${imgUrl})`;
+      const imgMarkdown = `![Hình ${optTag}](${imgUrl})`;
       const newOpts = [...currentQ.options];
       const curText = newOpts[targetIdx]?.text || '';
+      const updatedText = insertImageIntoText(curText, imgMarkdown, `Hình ${optTag}`);
       newOpts[targetIdx] = { 
         id: newOpts[targetIdx]?.id || optTag, 
-        text: curText.trim() ? `${curText} ${imgMarkdown}` : imgMarkdown 
+        text: updatedText
       };
       handleUpdateCurrentQ('options', newOpts);
     } catch (err: any) {
@@ -375,9 +450,10 @@ export default function ExamEditorModal({
     if (!file) return;
     setIsUploadingImage(true);
     try {
-      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams');
-      const imgMarkdown = `\n\n![Hình lời giải](${imgUrl})\n`;
-      handleUpdateCurrentQ('explanation', (currentQ.explanation || '').trim() + imgMarkdown);
+      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams', true);
+      const imgMarkdown = `![Hình vẽ lời giải](${imgUrl})`;
+      const updatedText = insertImageIntoText(currentQ.explanation || '', imgMarkdown, 'Hình vẽ lời giải');
+      handleUpdateCurrentQ('explanation', updatedText);
     } catch (err: any) {
       alert('Không thể tải ảnh lời giải lên Cloudinary: ' + err.message);
     } finally {
@@ -387,13 +463,33 @@ export default function ExamEditorModal({
   };
 
   // 4. Xử lý dán ảnh từ Clipboard (Ctrl + V) trực tiếp vào textarea / input
+  // Tự động thay thế vị trí giữ chỗ [Hình vẽ], [Hình minh họa], [Đồ thị], [Bảng biến thiên]
+  const insertImageIntoText = (currentText: string, imgMarkdown: string, defaultLabel: string): string => {
+    let text = currentText || '';
+    
+    // Tìm các vị trí placeholder thường gặp do AI sinh ra hoặc giáo viên ghi chú:
+    // [Hình vẽ], [Hình minh họa], [Đồ thị], [Bảng biến thiên], [Hình 1], [Hình 2], [Hình vẽ câu ...], (Hình vẽ)...
+    const placeholderRegex = /\[(?:Hình vẽ|Hình minh họa|Đồ thị|Bảng biến thiên|Bảng số liệu|Hình ảnh|Hình \d+|Hình vẽ câu \d+)\]|\((?:Hình vẽ|Đồ thị|Bảng biến thiên)\)/i;
+    
+    if (placeholderRegex.test(text)) {
+      // Thay thế chính xác vị trí placeholder đầu tiên tìm thấy
+      return text.replace(placeholderRegex, `\n\n${imgMarkdown.trim()}\n\n`).trim();
+    }
+    
+    // Nếu không có placeholder cụ thể:
+    // Tự động chèn xuống dòng cuối cùng một cách hợp lý
+    return text.trim() ? `${text.trim()}\n\n${imgMarkdown.trim()}\n` : `${imgMarkdown.trim()}\n`;
+  };
+
   const handlePasteImage = async (field: 'content' | 'explanation', file: File) => {
     setIsUploadingImage(true);
     try {
-      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams');
-      const label = field === 'content' ? 'Hình minh họa' : 'Hình lời giải';
-      const imgMarkdown = `\n\n![${label}](${imgUrl})\n`;
-      handleUpdateCurrentQ(field, (currentQ[field] || '').trim() + imgMarkdown);
+      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams', true);
+      const label = field === 'content' ? 'Hình vẽ đề bài' : 'Hình vẽ lời giải';
+      const imgMarkdown = `![${label}](${imgUrl})`;
+      
+      const updatedText = insertImageIntoText(currentQ[field] || '', imgMarkdown, label);
+      handleUpdateCurrentQ(field, updatedText);
     } catch (err: any) {
       alert('Không thể tải ảnh từ Clipboard lên Cloudinary: ' + err.message);
     } finally {
@@ -404,14 +500,16 @@ export default function ExamEditorModal({
   const handlePasteImageOption = async (optIdx: number, file: File) => {
     setIsUploadingImage(true);
     try {
-      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams');
+      const imgUrl = await uploadImageToCloudinary(file, 'fprep_exams', true);
       const optTag = currentQ.options[optIdx]?.id || ['A', 'B', 'C', 'D'][optIdx] || 'Đáp án';
-      const imgMarkdown = `\n![${optTag}](${imgUrl})`;
+      const imgMarkdown = `![Hình ${optTag}](${imgUrl})`;
       const newOpts = [...currentQ.options];
       const curText = newOpts[optIdx]?.text || '';
+      
+      const updatedText = insertImageIntoText(curText, imgMarkdown, `Hình ${optTag}`);
       newOpts[optIdx] = { 
         id: newOpts[optIdx]?.id || optTag, 
-        text: curText.trim() ? `${curText} ${imgMarkdown}` : imgMarkdown 
+        text: updatedText
       };
       handleUpdateCurrentQ('options', newOpts);
     } catch (err: any) {
@@ -445,62 +543,92 @@ export default function ExamEditorModal({
     }
 
     try {
-      const parsed = parseAndRepairJson<any>(jsonInput);
+      let parsed = parseAndRepairJson<any>(jsonInput);
 
-      let questionList: any[] = [];
-      if (Array.isArray(parsed)) {
-        questionList = parsed;
-      } else if (parsed && typeof parsed === 'object') {
+      // Tự động nhận diện nếu dữ liệu được bọc trong object wrapper
+      if (parsed && !Array.isArray(parsed)) {
         if (Array.isArray(parsed.questions)) {
-          questionList = parsed.questions;
+          parsed = parsed.questions;
         } else if (Array.isArray(parsed.data)) {
-          questionList = parsed.data;
-        }
-        if (parsed.title && typeof parsed.title === 'string' && !examTitle.trim()) {
-          setExamTitle(parsed.title.trim());
-        }
-        if (parsed.durationMinutes && !isNaN(Number(parsed.durationMinutes))) {
-          setExamDuration(Number(parsed.durationMinutes));
-        } else if (parsed.duration_minutes && !isNaN(Number(parsed.duration_minutes))) {
-          setExamDuration(Number(parsed.duration_minutes));
+          parsed = parsed.data;
+        } else if (parsed.exam && Array.isArray(parsed.exam.questions)) {
+          parsed = parsed.exam.questions;
+        } else if (parsed.content || parsed.type || parsed.options) {
+          parsed = [parsed];
         }
       }
 
-      if (!Array.isArray(questionList) || questionList.length === 0) {
+      if (!Array.isArray(parsed) || parsed.length === 0) {
         throw new Error('Dữ liệu sau khi xử lý phải là một danh sách các câu hỏi!');
       }
 
-      const formattedQuestions: QuestionData[] = questionList.map((item: any, idx: number) => {
-        const rawOpts = item.options || item.statements;
-        const parsedOpts = parseOptions(rawOpts, (item.type || item.question_type) as any);
-        const norm = normalizeQuestionTypeAndAnswer(item, parsedOpts);
-        const qType = norm.type;
+      const enforceDfracAndMath = (str: any): string => {
+        if (!str || typeof str !== 'string') return String(str || '');
+        return str
+          .replace(/\\frac\b/g, '\\dfrac')
+          .replace(/\\ne\b/g, '\\neq');
+      };
+
+      const formattedQuestions: QuestionData[] = parsed.map((item: any, idx: number) => {
+        let qType: 'mcq' | 'tf' | 'saq' = item.type || item.question_type || 'mcq';
+        let opts = Array.isArray(item.options) ? item.options : [];
+        
+        // Tự động suy luận dạng câu hỏi
+        const contentLower = (item.content || '').toLowerCase();
+        if (
+          contentLower.includes('đúng hoặc sai') || 
+          contentLower.includes('đúng sai') || 
+          contentLower.includes('tính đúng/sai') || 
+          contentLower.includes('tính đúng sai') || 
+          contentLower.includes('xét tính đúng') ||
+          contentLower.includes('mệnh đề sau')
+        ) {
+          qType = 'tf';
+        } else if (typeof item.correct_answer === 'object' && item.correct_answer !== null && !Array.isArray(item.correct_answer)) {
+          qType = 'tf';
+        } else if (opts.length === 0 && qType !== 'tf') {
+          qType = 'saq';
+        }
+
         const isTf = qType === 'tf';
-        const ca = norm.correct_answer;
+        const defaultKeys = isTf ? ['a', 'b', 'c', 'd'] : ['A', 'B', 'C', 'D'];
+
+        if (opts.length > 0) {
+          opts = opts.map((t: any, i: number) => {
+            if (typeof t === 'object' && t !== null) {
+              return {
+                id: isTf ? String(t.id || defaultKeys[i] || String(i + 1)).toLowerCase() : String(t.id || defaultKeys[i] || String(i + 1)).toUpperCase(),
+                text: enforceDfracAndMath(t.text || t.content || '')
+              };
+            }
+            return { id: defaultKeys[i] || String(i + 1), text: enforceDfracAndMath(String(t)) };
+          });
+        }
+
+        let ca = item.correct_answer;
+        if (qType === 'mcq') {
+          if (!ca || typeof ca !== 'string') ca = 'A';
+          else ca = String(ca).toUpperCase();
+        } else if (qType === 'tf') {
+          if (!ca || typeof ca !== 'object' || Array.isArray(ca)) {
+            ca = { a: true, b: false, c: true, d: false };
+          }
+        } else if (qType === 'saq') {
+          if (ca === undefined || ca === null) ca = '';
+          else ca = String(ca);
+        }
 
         const parsedPt = item.points !== undefined && item.points !== null && !isNaN(Number(item.points))
           ? Number(item.points)
           : (item.point !== undefined ? Number(item.point) : (item.score !== undefined ? Number(item.score) : getDefaultQuestionPoints(qType)));
 
-        let finalContent = (item.content || '').trim();
-        const imgUrl = item.image || item.image_url || item.imageUrl || item.img;
-        if (imgUrl && typeof imgUrl === 'string' && !finalContent.includes(imgUrl)) {
-          finalContent = finalContent + `\n\n![Hình minh họa](${imgUrl})\n`;
-        }
-
-        let finalExplanation = formatExplanationWithLineBreaks(item.explanation, qType);
-        const expImg = item.explanation_image || item.explanation_img;
-        if (expImg && typeof expImg === 'string' && !finalExplanation.includes(expImg)) {
-          finalExplanation = finalExplanation + `\n\n![Hình lời giải](${expImg})\n`;
-        }
-
         return {
           id: `imported-${idx}`,
           type: qType,
           level: item.level || (qType === 'saq' ? 'Vận dụng' : qType === 'tf' ? 'Thông hiểu' : 'Nhận biết'),
-          content: finalContent,
+          content: enforceDfracAndMath(item.content || ''),
           points: parsedPt,
-          options: qType === 'saq' ? [] : (parsedOpts.length > 0 ? parsedOpts : isTf ? [
+          options: qType === 'saq' ? [] : (opts.length > 0 ? opts : isTf ? [
             { id: 'a', text: '' },
             { id: 'b', text: '' },
             { id: 'c', text: '' },
@@ -512,7 +640,7 @@ export default function ExamEditorModal({
             { id: 'D', text: '' }
           ]),
           correct_answer: ca,
-          explanation: finalExplanation
+          explanation: enforceDfracAndMath(cleanMathContent(item.explanation || ''))
         };
       });
 
@@ -520,7 +648,7 @@ export default function ExamEditorModal({
       setActiveQuestionIdx(0);
       setShowAiModal(false);
       setJsonInput('');
-      alert(`Đã tự động chuẩn hóa và nạp thành công ${formattedQuestions.length} câu hỏi vào đề thi!`);
+      alert(`Đã tự động sửa lỗi và nạp thành công ${formattedQuestions.length} câu hỏi vào đề thi!`);
     } catch (err: any) {
       alert('Không thể tự động phân tích JSON: ' + err.message);
     }
@@ -542,10 +670,6 @@ export default function ExamEditorModal({
         },
         questions.map(q => ({
           ...q,
-          options: (q.options || []).map((opt, optIdx) => ({
-            id: opt.id || (q.type === 'tf' ? ['a', 'b', 'c', 'd'][optIdx] : ['A', 'B', 'C', 'D'][optIdx]) || String(optIdx + 1),
-            text: cleanOptionText(opt.text ?? (opt as any).content ?? opt)
-          })),
           points: q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : getDefaultQuestionPoints(q.type)
         }))
       );
@@ -594,26 +718,6 @@ export default function ExamEditorModal({
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
               <span>Chia Điểm ({totalExamPoints}đ)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowExportModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 font-bold text-xs hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-all shadow-xs"
-              title="Sao chép JSON đề thi chuẩn Dạng 2"
-            >
-              <FileCode2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Copy JSON đề</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowPdfModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/20 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-500/20 transition-all shadow-xs"
-              title="Tạo và tải đề thi dạng file PDF (Đáp án trang cuối)"
-            >
-              <FileDown className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
-              <span>Tải PDF</span>
             </button>
 
             <button
@@ -1164,9 +1268,11 @@ export default function ExamEditorModal({
                     className="w-full rounded-xl border border-border bg-card p-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-sans text-sm leading-relaxed text-foreground"
                   />
                   {currentQ.explanation && (
-                    <div className="space-y-1.5 pt-1">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Xem trước lời giải trực quan:</span>
-                      <StructuredExplanation content={currentQ.explanation} />
+                    <div className="p-4 bg-muted/20 border border-border rounded-xl space-y-1">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Xem trước lời giải:</span>
+                      <div className="text-sm font-medium text-foreground">
+                        <MathRenderer content={currentQ.explanation} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1688,42 +1794,6 @@ export default function ExamEditorModal({
             </div>
           </div>
         </div>
-      )}
-
-      {/* MODAL XUẤT & COPY JSON ĐỀ THI HIỆN TẠI (CHUẨN BỘ GD&ĐT 2026) */}
-      {showExportModal && (
-        <ExamJsonCopyModal
-          isOpen={showExportModal}
-          onClose={() => setShowExportModal(false)}
-          exam={{
-            title: examTitle.trim() || exam?.title || 'Đề thi chuẩn cấu trúc 3 phần',
-            duration_minutes: Number(examDuration) || 50,
-            subject_id: exam?.subject_id,
-            description: exam?.description
-          }}
-          questions={questions.map((q, idx) => ({
-            ...q,
-            order_index: idx
-          }))}
-        />
-      )}
-
-      {/* MODAL TẠO & TẢI FILE PDF ĐỀ THI */}
-      {showPdfModal && (
-        <ExamPdfModal
-          isOpen={showPdfModal}
-          onClose={() => setShowPdfModal(false)}
-          exam={{
-            title: examTitle.trim() || exam?.title || 'Đề thi chuẩn cấu trúc 3 phần',
-            duration_minutes: Number(examDuration) || 50,
-            subject_id: exam?.subject_id,
-            subjects: exam?.subjects
-          }}
-          questions={questions.map((q, idx) => ({
-            ...q,
-            order_index: idx
-          }))}
-        />
       )}
 
     </div>,

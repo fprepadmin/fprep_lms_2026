@@ -75,12 +75,64 @@ export async function POST(request: Request) {
     if (dbProfile) {
       profile = dbProfile;
       
+      // Nếu ID trong Database khác với Firebase UID thật khi đăng nhập lần đầu
+      if (profile.id !== uid) {
+        console.log(`[AUTH SYNC] Đồng bộ UID: ${cleanEmail} (${profile.id} -> ${uid})`);
+        
+        const { data: studentDetails } = await supabaseAdmin
+          .from('student_details')
+          .select('*')
+          .eq('student_id', profile.id)
+          .maybeSingle();
+          
+        const { data: teacherClasses } = await supabaseAdmin
+          .from('teacher_classes')
+          .select('*')
+          .eq('teacher_id', profile.id);
+
+        if (studentDetails) {
+          await supabaseAdmin.from('student_details').delete().eq('student_id', profile.id);
+        }
+        if (teacherClasses && teacherClasses.length > 0) {
+          await supabaseAdmin.from('teacher_classes').delete().eq('teacher_id', profile.id);
+        }
+        
+        await supabaseAdmin.from('study_progress').delete().eq('student_id', profile.id);
+        await supabaseAdmin.from('study_logs').delete().eq('student_id', profile.id);
+        await supabaseAdmin.from('support_requests').delete().eq('student_id', profile.id);
+
+        const { error: updateIdErr } = await supabaseAdmin
+          .from('profiles')
+          .update({ id: uid })
+          .eq('id', profile.id);
+
+        if (!updateIdErr) {
+          profile.id = uid;
+          if (studentDetails) {
+            await supabaseAdmin.from('student_details').insert({
+              student_id: uid,
+              mshs: studentDetails.mshs,
+              full_name: studentDetails.full_name,
+              class_id: studentDetails.class_id
+            });
+          }
+          if (teacherClasses && teacherClasses.length > 0) {
+            const restoredClasses = teacherClasses.map((tc: any) => ({
+              teacher_id: uid,
+              class_id: tc.class_id,
+              subject_id: tc.subject_id
+            }));
+            await supabaseAdmin.from('teacher_classes').insert(restoredClasses);
+          }
+        }
+      }
+
       // Đảm bảo fprep.fschool@gmail.com luôn có vai trò admin
       if (isDefaultAdmin && profile.role !== 'admin') {
         const { data: updatedProfile } = await supabaseAdmin
           .from('profiles')
           .update({ role: 'admin' })
-          .eq('id', profile.id)
+          .eq('id', uid)
           .select()
           .single();
         if (updatedProfile) {
@@ -126,7 +178,7 @@ export async function POST(request: Request) {
     const payload = {
       aud: 'authenticated',
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
-      sub: profile.id,
+      sub: uid,
       email: cleanEmail,
       role: profile.role,
       iss: 'supabase'
@@ -146,7 +198,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       user: {
-        id: profile.id,
+        id: uid,
         email: cleanEmail,
         role: profile.role
       }

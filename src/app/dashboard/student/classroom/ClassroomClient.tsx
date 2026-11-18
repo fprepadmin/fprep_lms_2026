@@ -5,7 +5,7 @@ import {
   Users, GraduationCap, Calendar, Mail, BookOpen, 
   FileText, CheckCircle2, Award, Clock,
   ArrowRight, Search, Bell, RotateCcw, AlertCircle, Send,
-  UserCheck, ShieldCheck, Sparkles, ChevronRight, Eye, CheckSquare
+  UserCheck, ShieldCheck, Sparkles, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { getSubjectColorTheme } from '@/lib/schoolUtils';
@@ -67,7 +67,6 @@ export default function ClassroomClient({
 }: ClassroomClientProps) {
   const [activeTab, setActiveTab] = useState<'feed' | 'assignments' | 'members'>('feed');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
-  const [submissionStatusFilter, setSubmissionStatusFilter] = useState<'all' | 'submitted' | 'unsubmitted'>('all');
   const [searchMember, setSearchMember] = useState<string>('');
   const [searchExam, setSearchExam] = useState<string>('');
 
@@ -78,16 +77,9 @@ export default function ClassroomClient({
       ? 'Khoa học Xã hội (Ban X)' 
       : 'Khai phóng (Ban K)';
 
-  // Lọc bài tập theo môn, trạng thái nộp bài & từ khóa tìm kiếm
+  // Lọc bài tập theo môn & từ khóa tìm kiếm
   const filteredExams = exams.filter(exam => {
     if (selectedSubjectFilter !== 'all' && exam.subject_id !== selectedSubjectFilter) {
-      return false;
-    }
-    const hasTaken = examResults.some(r => r.exam_id === exam.id);
-    if (submissionStatusFilter === 'submitted' && !hasTaken) {
-      return false;
-    }
-    if (submissionStatusFilter === 'unsubmitted' && hasTaken) {
       return false;
     }
     if (searchExam.trim()) {
@@ -121,17 +113,10 @@ export default function ClassroomClient({
 
   const progressPercent = exams.length > 0 ? Math.round((completedCount / exams.length) * 100) : 0;
 
-  // Gom nhóm giáo viên phụ trách: kết hợp môn thuộc ban và môn có giáo viên được phân quyền
-  const subjectMap = new Map<string, any>();
-  (subjects || []).forEach((s: any) => {
-    if (s && s.id) subjectMap.set(s.id, s);
-  });
-  (teacherAssignments || []).forEach((a: any) => {
-    if (a && a.subject_id && a.subjects) {
-      subjectMap.set(a.subject_id, a.subjects);
-    }
-  });
-  const relevantSubjects = Array.from(subjectMap.values());
+  // Gom nhóm giáo viên phụ trách theo môn học thuộc ban
+  const relevantSubjects = subjects.length > 0 ? subjects : Array.from(
+    new Map(teacherAssignments.map(a => [a.subject_id, a.subjects])).values()
+  ).filter(Boolean);
 
   const assignmentsBySubject = relevantSubjects.map((sub: any) => {
     const teachers = teacherAssignments.filter(t => t.subject_id === sub.id);
@@ -163,11 +148,11 @@ export default function ClassroomClient({
               alt={`Ảnh nền Lớp ${classInfo.name}`} 
               className="absolute inset-0 w-full h-full object-cover object-center scale-100 hover:scale-105 transition-transform duration-700" 
             />
-            {/* Gradient overlay cao cấp đảm bảo chữ luôn nổi bật 100% */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-950/40" />
+            {/* Gradient overlay nhiều lớp giúp đọc văn bản cực kỳ rõ nét */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/70 to-slate-900/40 dark:from-black/95 dark:via-black/75 dark:to-black/50" />
             
             {/* Huy hiệu Không gian riêng của lớp */}
-            <div className="absolute top-4 right-4 z-10 hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold shadow-md">
+            <div className="absolute top-4 right-4 z-10 hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold">
               <Sparkles className="h-3.5 w-3.5 text-amber-400" /> Không gian riêng Lớp {classInfo.name}
             </div>
           </>
@@ -175,18 +160,18 @@ export default function ClassroomClient({
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           
-          <div className="space-y-4 sm:space-y-5 max-w-2xl">
+          <div className="space-y-3 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
                 classInfo.background_url
-                  ? 'bg-white/15 backdrop-blur-md border-white/25 text-white shadow-xs'
+                  ? 'bg-white/15 backdrop-blur-md border-white/25 text-white'
                   : 'bg-primary/10 border-primary/25 text-primary'
               }`}>
-                <GraduationCap className="h-3.5 w-3.5" /> FPT School Cần Thơ
+                <GraduationCap className="h-3.5 w-3.5" /> Lớp học chính khóa FPT School
               </span>
               <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
                 classInfo.background_url
-                  ? 'bg-blue-500/20 backdrop-blur-md border-blue-400/30 text-blue-200'
+                  ? 'bg-white/15 backdrop-blur-md border-white/25 text-white'
                   : classInfo.group_type === 'T'
                     ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25'
                     : classInfo.group_type === 'X'
@@ -197,46 +182,40 @@ export default function ClassroomClient({
               </span>
             </div>
 
-            <div className="py-1">
-              <h1 className={`text-2xl sm:text-4xl font-black font-heading tracking-tight leading-normal m-0 ${
-                classInfo.background_url ? 'text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]' : 'text-foreground'
-              }`}>
-                Không gian Lớp {classInfo.name}
-              </h1>
-            </div>
+            <h1 className={`text-2xl sm:text-4xl font-extrabold font-heading tracking-tight m-0 ${
+              classInfo.background_url ? 'text-white drop-shadow-sm' : 'text-foreground'
+            }`}>
+              Không gian Lớp {classInfo.name}
+            </h1>
 
-            <div className={`flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs font-medium pt-1 ${
+            <div className={`flex flex-wrap items-center gap-4 text-xs font-semibold ${
               classInfo.background_url ? 'text-slate-200' : 'text-muted-foreground'
             }`}>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${
-                classInfo.background_url ? 'bg-black/50 backdrop-blur-md border border-white/15 text-slate-200 shadow-xs' : ''
-              }`}>
-                <Calendar className={`h-3.5 w-3.5 ${classInfo.background_url ? 'text-orange-400' : 'text-primary'}`} /> Niên khóa: <strong className={classInfo.background_url ? 'text-white' : 'text-foreground'}>{classInfo.academic_year || '2026-2027'}</strong>
+              <span className="flex items-center gap-1.5">
+                <Calendar className={`h-4 w-4 ${classInfo.background_url ? 'text-orange-400' : 'text-primary'}`} /> Niên khóa: <strong className={classInfo.background_url ? 'text-white' : 'text-foreground'}>{classInfo.academic_year || '2024-2027'}</strong>
               </span>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${
-                classInfo.background_url ? 'bg-black/50 backdrop-blur-md border border-white/15 text-slate-200 shadow-xs' : ''
-              }`}>
-                MSHS của bạn: <strong className={`font-mono font-bold ${classInfo.background_url ? 'text-amber-300' : 'text-primary'}`}>{currentStudent?.mshs || 'N/A'}</strong>
+              <span>&bull;</span>
+              <span>
+                MSHS của bạn: <strong className={`font-mono ${classInfo.background_url ? 'text-amber-300 font-bold' : 'text-primary'}`}>{currentStudent?.mshs || 'N/A'}</strong>
               </span>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${
-                classInfo.background_url ? 'bg-black/50 backdrop-blur-md border border-white/15 text-slate-200 shadow-xs' : ''
-              }`}>
+              <span>&bull;</span>
+              <span>
                 Học sinh: <strong className={classInfo.background_url ? 'text-white' : 'text-foreground'}>{currentStudent?.full_name || 'Học sinh'}</strong>
               </span>
             </div>
           </div>
 
-          {/* CHỈ SỐ NHANH (FROSTED GLASS METRICS BADGES) */}
-          <div className={`grid grid-cols-3 gap-2.5 sm:gap-3.5 border-t lg:border-t-0 lg:border-l pt-4 lg:pt-0 lg:pl-6 shrink-0 ${
-            classInfo.background_url ? 'border-white/15' : 'border-border'
+          {/* CHỈ SỐ NHANH (METRICS BADGES) */}
+          <div className={`grid grid-cols-3 gap-3 sm:gap-4 border-t lg:border-t-0 lg:border-l pt-4 lg:pt-0 lg:pl-6 shrink-0 ${
+            classInfo.background_url ? 'border-white/20' : 'border-border'
           }`}>
-            <div className={`p-3 sm:p-4 rounded-2xl text-center min-w-[95px] border transition-transform hover:scale-105 ${
+            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
               classInfo.background_url 
-                ? 'bg-black/40 backdrop-blur-xl border-white/15 shadow-lg' 
+                ? 'bg-black/35 backdrop-blur-md border-white/20' 
                 : 'bg-background/60 border-border/80'
             }`}>
               <span className={`block text-2xl sm:text-3xl font-black font-heading ${
-                classInfo.background_url ? 'text-amber-400 drop-shadow-sm' : 'text-primary'
+                classInfo.background_url ? 'text-amber-400' : 'text-primary'
               }`}>
                 {classmates.length}
               </span>
@@ -247,13 +226,13 @@ export default function ClassroomClient({
               </span>
             </div>
 
-            <div className={`p-3 sm:p-4 rounded-2xl text-center min-w-[95px] border transition-transform hover:scale-105 ${
+            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
               classInfo.background_url 
-                ? 'bg-black/40 backdrop-blur-xl border-white/15 shadow-lg' 
+                ? 'bg-black/35 backdrop-blur-md border-white/20' 
                 : 'bg-background/60 border-border/80'
             }`}>
               <span className={`block text-2xl sm:text-3xl font-black font-heading ${
-                classInfo.background_url ? 'text-white drop-shadow-sm' : 'text-foreground'
+                classInfo.background_url ? 'text-white' : 'text-foreground'
               }`}>
                 {teacherAssignments.length}
               </span>
@@ -264,13 +243,13 @@ export default function ClassroomClient({
               </span>
             </div>
 
-            <div className={`p-3 sm:p-4 rounded-2xl text-center min-w-[95px] border transition-transform hover:scale-105 ${
+            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
               classInfo.background_url 
-                ? 'bg-black/40 backdrop-blur-xl border-white/15 shadow-lg' 
+                ? 'bg-black/35 backdrop-blur-md border-white/20' 
                 : 'bg-background/60 border-border/80'
             }`}>
               <span className={`block text-2xl sm:text-3xl font-black font-heading ${
-                classInfo.background_url ? 'text-emerald-400 drop-shadow-sm' : 'text-green-600 dark:text-green-400'
+                classInfo.background_url ? 'text-emerald-400' : 'text-green-600 dark:text-green-400'
               }`}>
                 {completedCount}/{exams.length}
               </span>
@@ -288,13 +267,13 @@ export default function ClassroomClient({
       {/* ========================================================================= */}
       {/* 2. TAB ĐIỀU HƯỚNG CHÍNH */}
       {/* ========================================================================= */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200/80 dark:border-slate-800 pb-3 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-border pb-3 overflow-x-auto">
         <button
           onClick={() => setActiveTab('feed')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'feed'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
+              ? 'bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20'
+              : 'bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40'
           }`}
         >
           <Bell className="h-4 w-4" /> Bảng tin & Giáo viên
@@ -302,10 +281,10 @@ export default function ClassroomClient({
 
         <button
           onClick={() => setActiveTab('assignments')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'assignments'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
+              ? 'bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20'
+              : 'bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40'
           }`}
         >
           <FileText className="h-4 w-4" /> Đề thi & Bài tập ({exams.length})
@@ -313,10 +292,10 @@ export default function ClassroomClient({
 
         <button
           onClick={() => setActiveTab('members')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
             activeTab === 'members'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-slate-100 dark:bg-slate-800 text-muted-foreground hover:text-foreground'
+              ? 'bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20'
+              : 'bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40'
           }`}
         >
           <Users className="h-4 w-4" /> Danh sách Sĩ số ({classmates.length})
@@ -404,13 +383,13 @@ export default function ClassroomClient({
 
           {/* CỘT PHẢI (COL-SPAN-4): DANH SÁCH GIÁO VIÊN BỘ MÔN */}
           <div className="md:col-span-4 space-y-4">
-            <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 space-y-3.5 shadow-xs">
+            <div className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-xs">
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <h3 className="font-extrabold text-sm flex items-center gap-2 text-foreground m-0">
                   <BookOpen className="h-4 w-4 text-primary" />
-                  Giáo viên bộ môn
+                  Đội ngũ Giáo viên lớp {classInfo.name}
                 </h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-muted text-muted-foreground">
                   {teacherAssignments.length} GV
                 </span>
               </div>
@@ -418,7 +397,7 @@ export default function ClassroomClient({
               {assignmentsBySubject.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic m-0">Chưa có phân công giáo viên cho lớp.</p>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {assignmentsBySubject.map(({ subject, teachers }: any) => {
                     const theme = getSubjectColorTheme(subject.name);
                     const hasTeachers = teachers.length > 0;
@@ -426,22 +405,29 @@ export default function ClassroomClient({
                     return (
                       <div 
                         key={subject.id} 
-                        className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-background/60 p-2.5 space-y-2 transition-all hover:border-primary/40"
+                        className="rounded-xl border border-border bg-background p-3.5 space-y-2.5 transition-all hover:border-border/80"
                       >
-                        {/* Header môn học nhỏ gọn */}
-                        <div className="flex items-center justify-between">
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10.5px] font-bold border ${theme.badgeBg} ${theme.badgeText} ${theme.badgeBorder}`}>
+                        {/* Header môn học */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold border ${theme.badgeBg} ${theme.badgeText} ${theme.badgeBorder}`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${theme.dotColor}`} />
                             {subject.name}
                           </span>
-                          <span className="text-[10px] font-medium text-muted-foreground">
-                            {hasTeachers ? `${teachers.length} GV` : 'Đang phân công'}
-                          </span>
+
+                          {hasTeachers ? (
+                            <span className="text-[10px] font-bold text-muted-foreground">
+                              {teachers.length} GV
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-medium text-muted-foreground/60 italic">
+                              Đang phân công
+                            </span>
+                          )}
                         </div>
 
-                        {/* Danh sách giáo viên tinh gọn, không chiếm diện tích */}
-                        {hasTeachers && (
-                          <div className="space-y-1.5 pt-0.5">
+                        {/* Danh sách giáo viên của môn này */}
+                        {hasTeachers ? (
+                          <div className="space-y-2 pt-1">
                             {teachers.map((t: TeacherAssignment) => {
                               const initial = (t.teacherFullName || t.teacherEmail || 'G')
                                 .split(' ')
@@ -450,37 +436,45 @@ export default function ClassroomClient({
                                 .toUpperCase();
 
                               return (
-                                <div key={t.id} className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-card border border-border/40 hover:border-border transition-colors">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <div className="h-6 w-6 rounded-md bg-primary/10 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
-                                      {initial}
-                                    </div>
-                                    <div className="min-w-0">
-                                      <span className="font-bold text-xs text-foreground truncate block leading-tight">
+                                <div key={t.id} className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/30 border border-border/50">
+                                  {/* Avatar Icon / Initial */}
+                                  <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary font-black text-xs flex items-center justify-center shrink-0 border border-primary/20">
+                                    {initial}
+                                  </div>
+
+                                  <div className="space-y-0.5 min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-extrabold text-xs text-foreground truncate">
                                         {t.teacherFullName || 'Giáo viên bộ môn'}
                                       </span>
                                       {t.teacherFptName && (
-                                        <span className="text-[9.5px] font-mono text-muted-foreground block leading-none">
+                                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-muted border border-border text-muted-foreground">
                                           {t.teacherFptName}
                                         </span>
                                       )}
                                     </div>
-                                  </div>
 
-                                  {t.teacherEmail && (
-                                    <a
-                                      href={`mailto:${t.teacherEmail}`}
-                                      className="p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors shrink-0"
-                                      title={`Gửi email: ${t.teacherEmail}`}
-                                    >
-                                      <Mail className="h-3.5 w-3.5" />
-                                    </a>
-                                  )}
+                                    {t.teacherEmail && (
+                                      <a
+                                        href={`mailto:${t.teacherEmail}`}
+                                        className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 truncate"
+                                        title={`Gửi email cho ${t.teacherFullName || t.teacherEmail}`}
+                                      >
+                                        <Mail className="h-3 w-3 shrink-0" />
+                                        <span className="truncate">{t.teacherEmail}</span>
+                                      </a>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
                           </div>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground italic m-0 pt-0.5">
+                            Chưa có thông tin giáo viên phụ trách cho môn học này.
+                          </p>
                         )}
+
                       </div>
                     );
                   })}
@@ -493,85 +487,33 @@ export default function ClassroomClient({
       )}
 
       {/* ========================================================================= */}
-      {/* 4. TAB 2: ĐỀ THI & BÀI TẬP (QUẢN LÝ NỘP BÀI VÀ XEM LẠI BÀI ĐÃ NỘP) */}
+      {/* 4. TAB 2: ĐỀ THI & BÀI TẬP */}
       {/* ========================================================================= */}
       {activeTab === 'assignments' && (
         <div className="space-y-4">
           
-          {/* THANH QUẢN LÝ NỘP BÀI & BỘ LỌC */}
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-3.5 shadow-xs">
-            
-            {/* Hàng 1: Bộ lọc trạng thái nộp bài */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-muted-foreground uppercase mr-1">Trạng thái:</span>
-                <button
-                  onClick={() => setSubmissionStatusFilter('all')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                    submissionStatusFilter === 'all'
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                      : 'bg-muted/40 text-muted-foreground border-border hover:bg-muted'
-                  }`}
-                >
-                  Tất cả bài tập ({exams.length})
-                </button>
-                <button
-                  onClick={() => setSubmissionStatusFilter('submitted')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                    submissionStatusFilter === 'submitted'
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                      : 'bg-muted/40 text-muted-foreground border-border hover:bg-muted'
-                  }`}
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Đã nộp bài ({completedCount})
-                </button>
-                <button
-                  onClick={() => setSubmissionStatusFilter('unsubmitted')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                    submissionStatusFilter === 'unsubmitted'
-                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                      : 'bg-muted/40 text-muted-foreground border-border hover:bg-muted'
-                  }`}
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                  Chưa nộp ({Math.max(0, exams.length - completedCount)})
-                </button>
-              </div>
-
-              {/* Ô tìm kiếm bài tập */}
-              <div className="relative w-full sm:w-64">
-                <input
-                  type="text"
-                  placeholder="Tìm bài tập theo tên..."
-                  value={searchExam}
-                  onChange={(e) => setSearchExam(e.target.value)}
-                  className="w-full bg-background border border-border rounded-xl px-3 py-1.5 pl-8 text-xs font-semibold focus:outline-none focus:border-primary transition-colors text-foreground"
-                />
-                <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-2.5" />
-              </div>
-            </div>
-
-            {/* Hàng 2: Bộ lọc theo môn học */}
+          {/* THANH LỌC VÀ TÌM KIẾM BÀI TẬP */}
+          <div className="rounded-2xl border border-border bg-card p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
               <span className="text-xs font-bold text-muted-foreground uppercase shrink-0 mr-1">Môn:</span>
               <button
                 onClick={() => setSelectedSubjectFilter('all')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
                   selectedSubjectFilter === 'all'
                     ? 'bg-primary text-primary-foreground border-primary shadow-xs'
                     : 'bg-background text-muted-foreground border-border hover:bg-muted'
                 }`}
               >
-                Tất cả môn
+                Tất cả ({exams.length})
               </button>
               {uniqueSubjects.map((sub: any) => {
                 const count = exams.filter(e => e.subject_id === sub.id).length;
+                const isMathSub = sub.name.toLowerCase().includes('toán');
                 return (
                   <button
                     key={sub.id}
                     onClick={() => setSelectedSubjectFilter(sub.id)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
                       selectedSubjectFilter === sub.id
                         ? 'bg-primary text-primary-foreground border-primary shadow-xs'
                         : 'bg-background text-muted-foreground border-border hover:bg-muted'
@@ -583,14 +525,26 @@ export default function ClassroomClient({
               })}
             </div>
 
+            <div className="relative w-full md:w-64 shrink-0">
+              <input
+                type="text"
+                placeholder="Tìm bài tập theo tên..."
+                value={searchExam}
+                onChange={(e) => setSearchExam(e.target.value)}
+                className="w-full bg-background border border-border rounded-xl px-3 py-1.5 pl-8 text-xs font-semibold focus:outline-none focus:border-primary transition-colors text-foreground"
+              />
+              <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-2.5" />
+            </div>
           </div>
+
+
 
           {/* DANH SÁCH THẺ BÀI TẬP */}
           {filteredExams.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-card text-center py-16 space-y-3">
               <FileText className="h-10 w-10 text-muted-foreground/30 mx-auto" />
               <p className="font-bold text-foreground text-sm m-0">Không tìm thấy bài tập nào phù hợp.</p>
-              <p className="text-xs text-muted-foreground m-0">Hãy thử đổi trạng thái lọc nộp bài hoặc từ khóa tìm kiếm.</p>
+              <p className="text-xs text-muted-foreground m-0">Hãy thử đổi bộ lọc môn học hoặc từ khóa tìm kiếm.</p>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -633,18 +587,18 @@ export default function ClassroomClient({
 
                       {/* Trạng thái làm bài & Điểm cao nhất */}
                       {hasTaken ? (
-                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs">
-                          <span className="text-emerald-700 dark:text-emerald-400 font-extrabold flex items-center gap-1.5">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Đã nộp bài
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-xs">
+                          <span className="text-green-600 dark:text-green-400 font-extrabold flex items-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4" /> Đã hoàn thành
                           </span>
-                          <span className="font-black text-emerald-700 dark:text-emerald-400 font-mono text-sm">
+                          <span className="font-black text-green-600 dark:text-green-400 font-mono text-sm">
                             {bestRes?.score}/10
                           </span>
                         </div>
                       ) : (
                         <div className="p-2.5 rounded-xl bg-muted/40 border border-border text-xs flex items-center justify-between">
                           <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" /> Chưa nộp bài
+                            <Clock className="h-3.5 w-3.5" /> Chưa làm bài
                           </span>
                           <span className="text-[10px] font-bold text-muted-foreground">Sẵn sàng</span>
                         </div>
@@ -652,32 +606,26 @@ export default function ClassroomClient({
 
                     </div>
 
-                    {/* Nút hành động: Cho phép Xem lại bài làm đã nộp hoặc Làm lại */}
-                    <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
-                      {hasTaken ? (
-                        <>
-                          <Link
-                            href={`/dashboard/student/exams/${exam.id}?review=true`}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 transition-colors shadow-2xs"
-                          >
-                            <Eye className="h-3.5 w-3.5" /> Xem lại bài
-                          </Link>
-                          <Link
-                            href={`/dashboard/student/exams/${exam.id}`}
-                            className="inline-flex items-center justify-center gap-1 text-xs font-semibold py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition-colors"
-                            title="Làm lại đề thi này"
-                          >
+                    {/* Nút hành động */}
+                    <div className="pt-2 border-t border-border flex items-center justify-end">
+                      <Link
+                        href={`/dashboard/student/exams/${exam.id}`}
+                        className={`inline-flex items-center gap-1.5 text-xs font-extrabold py-2 px-4 rounded-xl transition-all ${
+                          hasTaken 
+                            ? 'bg-muted text-foreground hover:bg-muted/80' 
+                            : 'bg-primary text-primary-foreground hover:opacity-90 shadow-xs'
+                        }`}
+                      >
+                        {hasTaken ? (
+                          <>
                             <RotateCcw className="h-3.5 w-3.5" /> Làm lại
-                          </Link>
-                        </>
-                      ) : (
-                        <Link
-                          href={`/dashboard/student/exams/${exam.id}`}
-                          className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
-                        >
-                          Làm bài ngay <ArrowRight className="h-3.5 w-3.5" />
-                        </Link>
-                      )}
+                          </>
+                        ) : (
+                          <>
+                            Làm bài ngay <ArrowRight className="h-3.5 w-3.5" />
+                          </>
+                        )}
+                      </Link>
                     </div>
                   </div>
                 );

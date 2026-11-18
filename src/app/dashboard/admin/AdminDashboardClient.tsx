@@ -7,7 +7,7 @@ import {
   CheckCircle, AlertCircle, RefreshCw, Terminal, Check,
   ChevronRight, Calendar, Info, Building2, GraduationCap, BookOpen, Plus, Trash2, Edit3, Loader2,
   FileSpreadsheet, AlertTriangle, CheckSquare, Square, X, Filter, UserX, FolderX,
-  Image as ImageIcon, UploadCloud, Sparkles
+  Image as ImageIcon, UploadCloud, Sparkles, ClipboardList, HelpCircle, TrendingUp, Award, BarChart3, Clock
 } from 'lucide-react';
 import ExcelImportModal from '@/components/student/ExcelImportModal';
 import { sortClassesNaturally, getTeacherDisplayName, getSubjectColorTheme, CLASS_BACKGROUND_PRESETS, getClassBackgroundUrl } from '@/lib/schoolUtils';
@@ -44,6 +44,9 @@ interface AdminDashboardClientProps {
   initialClasses?: any[];
   subjects?: any[];
   initialTeacherClasses?: any[];
+  exams?: any[];
+  questions?: any[];
+  examResults?: any[];
   token: string;
   currentUserId: string;
   viewMode: 'home' | 'users' | 'logs';
@@ -58,6 +61,9 @@ export default function AdminDashboardClient({
   initialClasses = [],
   subjects = [],
   initialTeacherClasses = [],
+  exams = [],
+  questions = [],
+  examResults = [],
   token,
   currentUserId,
   viewMode
@@ -129,6 +135,107 @@ export default function AdminDashboardClient({
 
   const visits = getDailyVisits();
   const activeUsers = getActiveUsersNow();
+
+  // -------------------------------------------------------------
+  // PHÂN HỆ THỐNG KÊ KHẢO THÍ CHUYÊN SÂU THEO MÔN & THỜI GIAN
+  // -------------------------------------------------------------
+  const [examStatsTimeRange, setExamStatsTimeRange] = useState<'today' | 'week' | 'month' | 'all'>('week');
+  const [examStatsSubjectFilter, setExamStatsSubjectFilter] = useState<string>('all');
+
+  // Lọc exam_results theo mốc thời gian
+  const filteredExamResults = React.useMemo(() => {
+    if (!examResults || examResults.length === 0) return [];
+    if (examStatsTimeRange === 'all') return examResults;
+
+    const now = new Date().getTime();
+    let threshold = 0;
+    if (examStatsTimeRange === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      threshold = today.getTime();
+    } else if (examStatsTimeRange === 'week') {
+      threshold = now - 7 * 24 * 60 * 60 * 1000;
+    } else if (examStatsTimeRange === 'month') {
+      threshold = now - 30 * 24 * 60 * 60 * 1000;
+    }
+
+    return examResults.filter((r: any) => {
+      if (!r || !r.created_at) return false;
+      return new Date(r.created_at).getTime() >= threshold;
+    });
+  }, [examResults, examStatsTimeRange]);
+
+  // Tạo map tra cứu nhanh đề thi theo exam_id
+  const examMap = React.useMemo(() => {
+    const map = new Map<string, any>();
+    exams.forEach((e: any) => {
+      if (e && e.id) map.set(e.id, e);
+    });
+    return map;
+  }, [exams]);
+
+  // Thống kê chi tiết theo từng môn học
+  const subjectExamStats = React.useMemo(() => {
+    return subjects.map((subj: any) => {
+      // 1. Số lượng đề của môn
+      const subjExams = exams.filter((e: any) => e.subject_id === subj.id);
+      const subjExamIds = new Set(subjExams.map((e: any) => e.id));
+
+      // 2. Số lượng câu hỏi của môn & phân bổ loại câu hỏi
+      const subjQuestions = questions.filter((q: any) => subjExamIds.has(q.exam_id));
+      const mcqCount = subjQuestions.filter((q: any) => !q.question_type || q.question_type === 'mcq').length;
+      const tfCount = subjQuestions.filter((q: any) => q.question_type === 'tf').length;
+      const saqCount = subjQuestions.filter((q: any) => q.question_type === 'saq').length;
+
+      // 3. Số lượt làm của học sinh (toàn thời gian vs trong kỳ lọc)
+      const allSubjAttempts = examResults.filter((r: any) => subjExamIds.has(r.exam_id));
+      const periodSubjAttempts = filteredExamResults.filter((r: any) => subjExamIds.has(r.exam_id));
+
+      // Điểm trung bình trong kỳ lọc
+      const avgScore = periodSubjAttempts.length > 0
+        ? (periodSubjAttempts.reduce((acc: number, curr: any) => acc + (Number(curr.score) || 0), 0) / periodSubjAttempts.length)
+        : 0;
+
+      // Số học sinh độc lập đã tham gia luyện đề môn này
+      const uniqueStudents = new Set(periodSubjAttempts.map((r: any) => r.student_id)).size;
+
+      return {
+        subject: subj,
+        examCount: subjExams.length,
+        questionCount: subjQuestions.length,
+        mcqCount,
+        tfCount,
+        saqCount,
+        totalAttemptsAllTime: allSubjAttempts.length,
+        periodAttempts: periodSubjAttempts.length,
+        avgScore: Math.round(avgScore * 10) / 10,
+        uniqueStudents
+      };
+    });
+  }, [subjects, exams, questions, examResults, filteredExamResults]);
+
+  // Tổng hợp chỉ số khảo thí toàn trường
+  const totalStatsSummary = React.useMemo(() => {
+    const totalExams = exams.length;
+    const totalQuestions = questions.length;
+    const totalAttemptsInPeriod = filteredExamResults.length;
+    const totalAttemptsAllTime = examResults.length;
+    const totalUniqueStudentsInPeriod = new Set(filteredExamResults.map((r: any) => r.student_id)).size;
+
+    return {
+      totalExams,
+      totalQuestions,
+      totalAttemptsInPeriod,
+      totalAttemptsAllTime,
+      totalUniqueStudentsInPeriod
+    };
+  }, [exams, questions, filteredExamResults, examResults]);
+
+  // Danh sách hiển thị theo bộ lọc môn học
+  const displayedSubjectStats = React.useMemo(() => {
+    if (examStatsSubjectFilter === 'all') return subjectExamStats;
+    return subjectExamStats.filter((s: any) => s.subject.id === examStatsSubjectFilter);
+  }, [subjectExamStats, examStatsSubjectFilter]);
 
 
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -553,12 +660,10 @@ export default function AdminDashboardClient({
   // Mở modal phân công giáo viên cho lớp học
   const openAssignModal = (cls: any) => {
     setAssigningClass(cls);
-    // Ưu tiên hiển thị các môn thuộc ban của lớp lên trước, nhưng hiển thị đầy đủ tất cả các môn để Admin có thể phân công môn Toán, Lý, Tin cho các lớp Ban X và Ban K
-    const applicableSubs = [...subjects].sort((a, b) => {
-      const aMatch = a.group_type === cls.group_type || a.group_type === 'ENG' ? 0 : 1;
-      const bMatch = b.group_type === cls.group_type || b.group_type === 'ENG' ? 0 : 1;
-      if (aMatch !== bMatch) return aMatch - bMatch;
-      return a.name.localeCompare(b.name, 'vi');
+    const applicableSubs = subjects.filter(s => {
+      if (cls.group_type === 'T') return s.group_type === 'T' || s.group_type === 'ENG';
+      if (cls.group_type === 'X') return s.group_type === 'X' || s.group_type === 'ENG';
+      return true;
     });
     const currentClassAssignments = localTeacherClasses.filter(tc => tc.class_id === cls.id);
     const drafts = applicableSubs.map(s => {
@@ -993,6 +1098,232 @@ export default function AdminDashboardClient({
                 <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Đang trực tuyến</span>
                 <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{activeUsers.length}</h4>
               </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* PHÂN HỆ THỐNG KÊ KHẢO THÍ CHUYÊN SÂU THEO MÔN & THỜI GIAN (ADMIN) */}
+          {/* ========================================================================= */}
+          <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border pb-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary mb-1">
+                  <BarChart3 className="h-3.5 w-3.5" /> Báo cáo Khảo thí & Luyện đề
+                </div>
+                <h3 className="font-extrabold text-base sm:text-lg text-foreground tracking-tight m-0 flex items-center gap-2">
+                  Thống kê Ngân hàng đề, Câu hỏi & Lượt làm bài theo Môn học
+                </h3>
+                <p className="text-xs text-muted-foreground m-0">
+                  Dữ liệu thời gian thực giúp quản trị viên và ban giám hiệu đánh giá học liệu và mức độ tương tác của học sinh.
+                </p>
+              </div>
+
+              {/* Bộ lọc thời gian & bộ lọc môn */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Bộ lọc thời gian */}
+                <div className="flex items-center bg-muted/60 p-1 rounded-xl border border-border text-xs font-bold">
+                  <button
+                    onClick={() => setExamStatsTimeRange('today')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      examStatsTimeRange === 'today'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Hôm nay
+                  </button>
+                  <button
+                    onClick={() => setExamStatsTimeRange('week')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      examStatsTimeRange === 'week'
+                        ? 'bg-background text-primary shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Trong tuần (7 ngày)
+                  </button>
+                  <button
+                    onClick={() => setExamStatsTimeRange('month')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      examStatsTimeRange === 'month'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Trong tháng (30 ngày)
+                  </button>
+                  <button
+                    onClick={() => setExamStatsTimeRange('all')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      examStatsTimeRange === 'all'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Tất cả
+                  </button>
+                </div>
+
+                {/* Chọn môn học cụ thể */}
+                <select
+                  value={examStatsSubjectFilter}
+                  onChange={(e) => setExamStatsSubjectFilter(e.target.value)}
+                  className="rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground focus:outline-none"
+                >
+                  <option value="all">Tất cả môn học ({subjects.length})</option>
+                  {subjects.map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* 4 Thẻ tổng quan nhanh về Khảo thí */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+              <div className="p-3.5 rounded-xl border border-border bg-muted/20">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tổng số đề thi</span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <h4 className="text-xl font-black text-foreground m-0">{totalStatsSummary.totalExams}</h4>
+                  <span className="text-[11px] text-muted-foreground font-semibold">đề đã tạo</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-border bg-muted/20">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tổng số câu hỏi</span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <h4 className="text-xl font-black text-primary m-0">{totalStatsSummary.totalQuestions}</h4>
+                  <span className="text-[11px] text-muted-foreground font-semibold">câu trắc nghiệm</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" /> Lượt làm ({examStatsTimeRange === 'today' ? 'Hôm nay' : examStatsTimeRange === 'week' ? '7 ngày' : examStatsTimeRange === 'month' ? '30 ngày' : 'Toàn thời gian'})
+                </span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <h4 className="text-xl font-black text-emerald-600 dark:text-emerald-400 m-0">{totalStatsSummary.totalAttemptsInPeriod}</h4>
+                  <span className="text-[11px] text-muted-foreground font-semibold">lượt nộp bài</span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-purple-500/20 bg-purple-500/5">
+                <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider block flex items-center gap-1">
+                  <Users className="h-3 w-3" /> Học sinh tham gia
+                </span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <h4 className="text-xl font-black text-purple-600 dark:text-purple-400 m-0">{totalStatsSummary.totalUniqueStudentsInPeriod}</h4>
+                  <span className="text-[11px] text-muted-foreground font-semibold">học sinh tích cực</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bảng ma trận thống kê chi tiết theo từng môn học */}
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-[11px] font-extrabold text-muted-foreground uppercase">
+                    <th className="py-3 px-4">Môn học</th>
+                    <th className="py-3 px-4 text-center">Số đề thi</th>
+                    <th className="py-3 px-4 text-center">Tổng câu hỏi</th>
+                    <th className="py-3 px-4 text-center">Phân loại câu hỏi</th>
+                    <th className="py-3 px-4 text-center">
+                      Lượt làm ({examStatsTimeRange === 'today' ? 'Hôm nay' : examStatsTimeRange === 'week' ? 'Tuần' : examStatsTimeRange === 'month' ? 'Tháng' : 'Tất cả'})
+                    </th>
+                    <th className="py-3 px-4 text-center">Học sinh làm</th>
+                    <th className="py-3 px-4 text-center">Điểm TB</th>
+                    <th className="py-3 px-4 text-center">Tổng lượt (All time)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {displayedSubjectStats.map((item: any) => {
+                    const theme = getSubjectColorTheme(item.subject.name);
+                    return (
+                      <tr key={item.subject.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${theme.dotColor || 'bg-primary'}`} />
+                            <div>
+                              <p className="font-extrabold text-foreground m-0 text-sm">{item.subject.name}</p>
+                              {item.subject.code && (
+                                <span className="text-[10px] text-muted-foreground font-mono">{item.subject.code}</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold">
+                            <ClipboardList className="h-3 w-3" /> {item.examCount}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/10 text-primary font-bold">
+                            <HelpCircle className="h-3 w-3" /> {item.questionCount}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground">
+                            <span title="Trắc nghiệm 4 lựa chọn (mcq)" className="px-1.5 py-0.5 rounded bg-muted border border-border">
+                              4LC: <strong className="text-foreground">{item.mcqCount}</strong>
+                            </span>
+                            <span title="Đúng/Sai (tf)" className="px-1.5 py-0.5 rounded bg-muted border border-border">
+                              Đ/S: <strong className="text-foreground">{item.tfCount}</strong>
+                            </span>
+                            <span title="Trả lời ngắn (saq)" className="px-1.5 py-0.5 rounded bg-muted border border-border">
+                              TLN: <strong className="text-foreground">{item.saqCount}</strong>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-black text-sm ${
+                            item.periodAttempts > 0 
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' 
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {item.periodAttempts}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-bold text-foreground">
+                          {item.uniqueStudents} <span className="text-[10px] font-normal text-muted-foreground">hs</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {item.periodAttempts > 0 ? (
+                            <span className={`font-bold px-2 py-0.5 rounded text-xs ${
+                              item.avgScore >= 8 
+                                ? 'bg-green-500/15 text-green-700 dark:text-green-400' 
+                                : item.avgScore >= 5 
+                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400' 
+                                : 'bg-rose-500/15 text-rose-700 dark:text-rose-400'
+                            }`}>
+                              {item.avgScore} / 10
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-[11px]">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center text-muted-foreground font-semibold">
+                          {item.totalAttemptsAllTime}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {displayedSubjectStats.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-muted-foreground italic text-xs">
+                        Chưa có môn học nào hoặc không tìm thấy dữ liệu phù hợp với bộ lọc.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between text-[11px] text-muted-foreground pt-1 gap-2">
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" /> Dữ liệu được tính toán tự động dựa trên toàn bộ các bài làm thực tế của học sinh trên hệ thống FPREP.
+              </span>
+              <span>
+                Chú thích: <strong>4LC</strong> (Trắc nghiệm 4 lựa chọn), <strong>Đ/S</strong> (Đúng/Sai), <strong>TLN</strong> (Trả lời ngắn).
+              </span>
             </div>
           </div>
 

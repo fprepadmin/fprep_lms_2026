@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
 import { Bell, Calendar, Plus, X, Image as ImageIcon, Bold, Italic, Underline, List, FileText } from 'lucide-react';
 
@@ -36,27 +35,6 @@ export default function AnnouncementManager({
   const [announcements, setAnnouncements] = useState<Announcement[]>(initialAnnouncements);
   const [showForm, setShowForm] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (selectedAnnouncement) {
-      document.body.style.overflow = 'hidden';
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') setSelectedAnnouncement(null);
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.body.style.overflow = '';
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    } else {
-      document.body.style.overflow = '';
-    }
-  }, [selectedAnnouncement]);
 
   // Form states
   const [title, setTitle] = useState('');
@@ -413,10 +391,10 @@ export default function AnnouncementManager({
         )}
       </div>
 
-      {/* POPUP MODAL XEM CHI TIẾT THÔNG BÁO (CHUẨN FPREP MODAL - SỬ DỤNG PORTAL) */}
-      {mounted && selectedAnnouncement && typeof document !== 'undefined' && createPortal(
+      {/* POPUP MODAL XEM CHI TIẾT THÔNG BÁO (CHUẨN FPREP MODAL) */}
+      {selectedAnnouncement && (
         <div 
-          className="fixed inset-0 z-[9999] bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 animate-fade-in"
+          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in"
           onClick={() => setSelectedAnnouncement(null)}
         >
           <div 
@@ -472,8 +450,7 @@ export default function AnnouncementManager({
             </div>
             
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );

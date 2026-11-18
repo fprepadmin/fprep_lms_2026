@@ -1,14 +1,17 @@
 /**
  * jsonRepair.ts
- * Bộ công cụ tự động phát hiện, làm sạch và sửa chữa các lỗi JSON thường gặp từ AI:
- * 1. Bad escaped character (lỗi gạch chéo ngược LaTeX như \frac, \alpha, \sqrt, \Delta, \vec, \times, \pi, \text...)
- * 2. Unescaped control characters (xuống dòng thô, tab, return trong chuỗi string)
- * 3. Dấu phẩy thừa (Trailing commas) trước ] hoặc }
- * 4. Chú thích JavaScript (// hoặc /* * /) do AI thêm vào
- * 5. Dấu ngoặc kép thông minh (smart/curly quotes “ ” ‘ ’)
- * 6. Markdown code blocks (```json ... ```) và văn bản đệm
- * 7. Thiếu dấu phẩy giữa các object / item
- * 8. Heuristic Fallback: Tự động bóc tách từng câu hỏi nếu toàn bộ chuỗi bị lỗi cú pháp nặng
+ * Bộ công cụ tự động phát hiện, làm sạch và sửa chữa các lỗi JSON thường gặp từ AI và người dùng:
+ * 1. HTML entities do copy-paste từ web/chat: &#x20;, &#39;, &quot;, &amp;
+ * 2. Escape xuống dòng markdown do copy từ code block: \ ở cuối dòng (\ \n)
+ * 3. Bad escaped character (lỗi gạch chéo ngược LaTeX như \frac, \alpha, \sqrt, \Delta, \vec, \times, \pi, \text...)
+ * 4. Unescaped control characters (xuống dòng thô, tab, return trong chuỗi string)
+ * 5. Lệch/thiếu dấu ngoặc nhọn hoặc vuông (ví dụ thiếu } đóng option trước khi đóng ])
+ * 6. Dấu phẩy thừa (Trailing commas) trước ] hoặc }
+ * 7. Thiếu dấu phẩy giữa các object / item (} { => }, {)
+ * 8. Chú thích JavaScript (// hoặc /* * /) do AI thêm vào
+ * 9. Dấu ngoặc kép thông minh (smart/curly quotes “ ” ‘ ’)
+ * 10. Markdown code blocks (```json ... ```) và văn bản đệm
+ * 11. Balanced Braces Depth Fallback: Bóc tách 100% câu hỏi chuẩn kể cả khi cấu trúc ngoài cùng bị hỏng nặng
  */
 
 /**
@@ -19,15 +22,27 @@ export function repairJsonString(rawInput: string): string {
 
   let text = rawInput.trim();
 
-  // 1. Loại bỏ các khối Markdown ```json ... ``` hoặc ``` ... ```
+  // 1. Tiền xử lý HTML entities thường xuất hiện khi copy từ trình duyệt / chat
+  text = text
+    .replace(/&#x20;/g, ' ')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+
+  // 2. Xóa các dấu backslash thoát dòng Markdown vô hiệu ở cuối dòng (\ \n hoặc \\\n)
+  text = text.replace(/\\+(\r?\n)/g, '$1');
+
+  // 3. Loại bỏ các khối Markdown ```json ... ``` hoặc ``` ... ```
   text = text.replace(/```(?:json|JSON)?([\s\S]*?)```/g, '$1').trim();
 
-  // 2. Chuyển đổi dấu ngoặc kép thông minh (Smart quotes) thành ASCII
+  // 4. Chuyển đổi dấu ngoặc kép thông minh (Smart quotes) thành ASCII
   text = text
     .replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"')
     .replace(/[\u2018\u2019\u201A\u201B]/g, "'");
 
-  // 3. Trích xuất vùng JSON chính từ dấu [ đầu tiên đến ] cuối cùng (hoặc { đến })
+  // 5. Trích xuất vùng JSON chính từ dấu [ đầu tiên đến ] cuối cùng (hoặc { đến })
   const firstBracket = text.indexOf('[');
   const lastBracket = text.lastIndexOf(']');
   const firstBrace = text.indexOf('{');
@@ -39,10 +54,10 @@ export function repairJsonString(rawInput: string): string {
     text = text.substring(firstBrace, lastBrace + 1);
   }
 
-  // 4. Xóa chú thích (Comments) an toàn ngoài chuỗi
+  // 6. Xóa chú thích (Comments) an toàn ngoài chuỗi
   text = removeComments(text);
 
-  // 5. Duyệt phân tích theo máy trạng thái (State Machine): Sửa Escape LaTeX trong chuỗi & Sửa cấu trúc ngoài chuỗi
+  // 7. Duyệt phân tích theo máy trạng thái (State Machine) kết hợp Stack kiểm soát cấu trúc
   text = processJsonStateMachine(text);
 
   return text;
@@ -96,19 +111,38 @@ function removeComments(input: string): string {
   return result;
 }
 
+const LATEX_N_REGEX = /^(?:neq|ne|notin|nabla|not|natural|nexists|nu|nsubseteq|nsupseteq|nmid|ngtr|nless|nearrow|nwarrow)(?:[^a-zA-Z]|$)/i;
+const LATEX_T_REGEX = /^(?:times|to|tan|tanh|theta|text|textbf|textit|tau|top|triangle|tilde|tfrac|therefore|tag)(?:[^a-zA-Z]|$)/i;
+const LATEX_F_REGEX = /^(?:frac|forall|flat|fbox|footnotesize)(?:[^a-zA-Z]|$)/i;
+const LATEX_B_REGEX = /^(?:bar|begin|beta|binom|bold|boldsymbol|bullet|bot|bmod|bigcap|bigcup|bigvee|bigwedge|big|Big|bigg|Bigg)(?:[^a-zA-Z]|$)/i;
+const LATEX_R_REGEX = /^(?:right|rho|rangle|rightarrow|Rightarrow|real|rfloor|rceil)(?:[^a-zA-Z]|$)/i;
+
+function isLatexControlWord(char: string, remainingSubstr: string): boolean {
+  if (char === 'n') return LATEX_N_REGEX.test(remainingSubstr);
+  if (char === 't') return LATEX_T_REGEX.test(remainingSubstr);
+  if (char === 'f') return LATEX_F_REGEX.test(remainingSubstr);
+  if (char === 'b') return LATEX_B_REGEX.test(remainingSubstr);
+  if (char === 'r') return LATEX_R_REGEX.test(remainingSubstr);
+  return false;
+}
+
 /**
  * Xử lý máy trạng thái (State Machine):
+ * - Quản lý cấu trúc phân cấp bằng Stack cho các cặp ngoặc { } và [ ]
+ *     - Tự động đóng dấu } nếu object con chưa đóng mà đã gặp ] đóng mảng
+ *     - Tự động đóng dấu ] nếu array con chưa đóng mà đã gặp } đóng object
+ *     - Xóa dấu phẩy thừa trước ] và }
+ *     - Bổ sung dấu phẩy thiếu giữa các object: } { => }, { hoặc ] [ => ], [
  * - Bên trong chuỗi ("..."):
  *     - Tự động sửa bad escapes: \frac, \alpha, \sqrt, \Delta, \vec, \times, \pi, \text, \pm, \{, \}, ...
  *     - Chuyển raw newlines / tabs thành \n, \t
- * - Bên ngoài chuỗi:
- *     - Xóa dấu phẩy thừa trước ] và }
- *     - Bổ sung dấu phẩy thiếu giữa các object: } { => }, {
+ *     - Tự động đóng chuỗi nếu bị đứt đoạn
  */
 function processJsonStateMachine(input: string): string {
   let result = '';
   let inString = false;
   let i = 0;
+  const stack: ('{' | '[')[] = [];
 
   while (i < input.length) {
     const char = input[i];
@@ -118,6 +152,55 @@ function processJsonStateMachine(input: string): string {
         inString = true;
         result += '"';
         i++;
+      } else if (char === '{') {
+        stack.push('{');
+        result += '{';
+        i++;
+      } else if (char === '[') {
+        stack.push('[');
+        result += '[';
+        i++;
+      } else if (char === '}') {
+        // Nếu đỉnh stack là '[', nghĩa là mảng con chưa đóng ] trước khi đóng object }
+        while (stack.length > 0 && stack[stack.length - 1] === '[') {
+          stack.pop();
+          result += ']';
+        }
+        if (stack.length > 0 && stack[stack.length - 1] === '{') {
+          stack.pop();
+        }
+        result += '}';
+        i++;
+
+        // Kiểm tra sau } có { tiếp theo mà thiếu dấu phẩy không
+        let lookAhead = i;
+        while (lookAhead < input.length && /\s/.test(input[lookAhead])) {
+          lookAhead++;
+        }
+        if (lookAhead < input.length && input[lookAhead] === '{') {
+          result += ',';
+        }
+      } else if (char === ']') {
+        // TỰ ĐỘNG SỬA: Nếu đỉnh stack là '{', nghĩa là object con chưa đóng } trước khi đóng mảng ]
+        // (Ví dụ phổ biến: option cuối cùng {"id": "D", "text": "0" thiếu dấu } trước ])
+        while (stack.length > 0 && stack[stack.length - 1] === '{') {
+          stack.pop();
+          result += '}';
+        }
+        if (stack.length > 0 && stack[stack.length - 1] === '[') {
+          stack.pop();
+        }
+        result += ']';
+        i++;
+
+        // Kiểm tra sau ] có [ tiếp theo mà thiếu dấu phẩy không
+        let lookAhead = i;
+        while (lookAhead < input.length && /\s/.test(input[lookAhead])) {
+          lookAhead++;
+        }
+        if (lookAhead < input.length && input[lookAhead] === '[') {
+          result += ',';
+        }
       } else if (char === ',') {
         // Kiểm tra xem dấu phẩy này có phải trailing comma trước } hoặc ] không
         let lookAhead = i + 1;
@@ -130,27 +213,6 @@ function processJsonStateMachine(input: string): string {
         } else {
           result += ',';
           i++;
-        }
-      } else if (char === '}') {
-        result += '}';
-        i++;
-        // Kiểm tra xem sau dấu } có dấu { tiếp theo mà thiếu dấu phẩy không
-        let lookAhead = i;
-        while (lookAhead < input.length && /\s/.test(input[lookAhead])) {
-          lookAhead++;
-        }
-        if (lookAhead < input.length && input[lookAhead] === '{') {
-          result += ',';
-        }
-      } else if (char === ']') {
-        result += ']';
-        i++;
-        let lookAhead = i;
-        while (lookAhead < input.length && /\s/.test(input[lookAhead])) {
-          lookAhead++;
-        }
-        if (lookAhead < input.length && input[lookAhead] === '[') {
-          result += ',';
         }
       } else {
         result += char;
@@ -198,11 +260,10 @@ function processJsonStateMachine(input: string): string {
             i += 2;
           }
         } else if (['b', 'f', 'n', 'r', 't'].includes(nextChar)) {
-          // Trong LaTeX, các lệnh \frac, \forall, \bar, \begin, \beta, \text, \theta, \times, \tan, \to, \right, \rho, \neq, \nu...
-          // thường bắt đầu bằng \f, \b, \t, \r, \n theo sau là chữ cái
-          const charAfterNext = input[i + 2];
-          if (charAfterNext && /[a-zA-Z]/.test(charAfterNext)) {
-            // Đây là lệnh LaTeX => Escape \ để bảo toàn công thức toán
+          // Kiểm tra xem có phải lệnh LaTeX bắt đầu bằng \n (\ne, \neq, \notin...), \t (\times, \to...), \f (\frac...), \b (\bar...), \r (\right...)
+          const rest = input.substring(i + 1);
+          if (isLatexControlWord(nextChar, rest)) {
+            // Đây là lệnh LaTeX => Escape \ thành \\ để bảo toàn công thức toán
             result += '\\\\' + nextChar;
             i += 2;
           } else {
@@ -240,41 +301,65 @@ function processJsonStateMachine(input: string): string {
     result += '"';
   }
 
+  // Tự động đóng tất cả các ngoặc nhọn hoặc vuông còn mở trong stack
+  while (stack.length > 0) {
+    const unclosed = stack.pop();
+    result += unclosed === '{' ? '}' : ']';
+  }
+
   return result;
 }
 
 /**
  * Trích xuất từng câu hỏi từ chuỗi văn bản bị hỏng nặng
- * (Dùng làm Fallback cuối cùng nếu JSON.parse vẫn không thành công)
+ * (Dùng thuật toán Balanced Braces Depth Extractor thay vì Regex nông,
+ * đảm bảo bóc tách 100% các câu hỏi có lồng array options / correct_answer object)
  */
 export function extractQuestionsFallback(rawText: string): any[] {
   const questions: any[] = [];
   if (!rawText) return questions;
 
-  // Tìm tất cả các khối dạng { ... } có chứa trường content hoặc type
-  const regex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
-  let match;
+  let inString = false;
+  let depth = 0;
+  let startIdx = -1;
 
-  while ((match = regex.exec(rawText)) !== null) {
-    const chunk = match[0];
-    try {
-      const repairedChunk = repairJsonString(chunk);
-      const obj = JSON.parse(repairedChunk);
-      if (obj && (obj.content || obj.options || obj.question_type || obj.type)) {
-        questions.push(obj);
-      }
-    } catch (e) {
-      try {
-        const cleanChunk = chunk
-          .replace(/```(?:json)?/g, '')
-          .replace(/```/g, '')
-          .trim();
-        const evalObj = new Function(`return (${cleanChunk});`)();
-        if (evalObj && typeof evalObj === 'object') {
-          questions.push(evalObj);
+  for (let i = 0; i < rawText.length; i++) {
+    const char = rawText[i];
+
+    if (char === '"' && (i === 0 || rawText[i - 1] !== '\\')) {
+      inString = !inString;
+    }
+
+    if (!inString) {
+      if (char === '{') {
+        if (depth === 0) {
+          startIdx = i;
         }
-      } catch (errEval) {
-        // Bỏ qua khối không thể phục hồi
+        depth++;
+      } else if (char === '}') {
+        depth--;
+        if (depth === 0 && startIdx !== -1) {
+          const chunk = rawText.substring(startIdx, i + 1);
+          try {
+            const repairedChunk = repairJsonString(chunk);
+            const obj = JSON.parse(repairedChunk);
+            if (obj && (obj.content || obj.options || obj.question_type || obj.type)) {
+              questions.push(obj);
+            }
+          } catch (e) {
+            try {
+              const cleaned = repairJsonString(chunk);
+              const evalObj = new Function(`return (${cleaned});`)();
+              if (evalObj && typeof evalObj === 'object') {
+                questions.push(evalObj);
+              }
+            } catch (errEval) {
+              // Bỏ qua khối không thể phục hồi
+            }
+          }
+          startIdx = -1;
+        }
+        if (depth < 0) depth = 0;
       }
     }
   }
@@ -293,38 +378,39 @@ export function parseAndRepairJson<T = any>(rawInput: string): T {
 
   const cleaned = rawInput.trim();
 
-  // Bước 1: Thử parse trực tiếp (Fast Path)
-  try {
-    return JSON.parse(cleaned);
-  } catch (err1) {
-    // Tiếp tục xử lý sửa lỗi tự động
-  }
-
-  // Bước 2: Chạy bộ lọc sửa lỗi toàn diện (Comprehensive Repair)
+  // Bước 1: Luôn ưu tiên chạy bộ lọc sửa lỗi toàn diện (Comprehensive Repair)
+  // để bảo toàn các lệnh LaTeX (\ne, \neq, \times, \frac, \alpha...) trước khi JSON.parse
+  // có thể nuốt chửng \n thành ký tự xuống dòng và làm hỏng công thức toán
   try {
     const repaired = repairJsonString(cleaned);
-    return JSON.parse(repaired);
-  } catch (err2: any) {
-    // Bước 3: Thử chạy eval Function an toàn cho relaxed JSON
+    const parsed = JSON.parse(repaired);
+    if (parsed) return parsed;
+  } catch (err1) {
+    // Bước 2: Thử parse trực tiếp phòng trường hợp rawInput đã là JSON hoàn hảo
     try {
-      const repaired = repairJsonString(cleaned);
-      const relaxedResult = new Function(`return (${repaired});`)();
-      if (relaxedResult && (Array.isArray(relaxedResult) || typeof relaxedResult === 'object')) {
-        return relaxedResult as T;
-      }
-    } catch (err3) {
-      // Tiếp tục fallback
+      return JSON.parse(cleaned);
+    } catch (errDirect) {
+      // Tiếp tục các bước relaxed eval và fallback bên dưới
     }
-
-    // Bước 4: Fallback bóc tách từng phần tử (Heuristic Extraction)
-    const extractedList = extractQuestionsFallback(cleaned);
-    if (extractedList.length > 0) {
-      return extractedList as unknown as T;
-    }
-
-    // Nếu tất cả đều thất bại, báo lỗi chi tiết
-    throw new Error(
-      `Không thể tự động phân tích cú pháp JSON: ${err2.message || 'Cấu trúc dữ liệu không hợp lệ'}`
-    );
   }
+
+  // Bước 3: Thử chạy eval Function an toàn cho relaxed JSON
+  try {
+    const repaired = repairJsonString(cleaned);
+    const relaxedResult = new Function(`return (${repaired});`)();
+    if (relaxedResult && (Array.isArray(relaxedResult) || typeof relaxedResult === 'object')) {
+      return relaxedResult as T;
+    }
+  } catch (err3) {
+    // Tiếp tục fallback
+  }
+
+  // Bước 4: Fallback bóc tách từng phần tử (Balanced Braces Depth Extraction)
+  const extractedList = extractQuestionsFallback(cleaned);
+  if (extractedList.length > 0) {
+    return extractedList as unknown as T;
+  }
+
+  // Nếu tất cả đều thất bại, báo lỗi chi tiết
+  throw new Error('Không thể tự động phân tích cú pháp JSON: Cấu trúc dữ liệu không hợp lệ');
 }

@@ -19,34 +19,24 @@ export default async function TeacherStudentsPage() {
     redirect('/');
   }
   const teacherId = payload.sub;
-  const teacherEmail = payload.email || '';
 
   const supabase = await getSupabaseServerClient();
 
-  // Xác định ID hồ sơ chuẩn trong CSDL (hỗ trợ cả UID và UUID tạo từ admin)
-  let effectiveTeacherId = teacherId;
-  let profileRole = payload.role || 'teacher';
+  // 0. Lấy profile của giáo viên hiện tại để kiểm tra vai trò
+  const { data: teacherProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', teacherId)
+    .single();
 
-  if (teacherEmail) {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('email', teacherEmail.trim().toLowerCase())
-      .maybeSingle();
-    if (prof) {
-      effectiveTeacherId = prof.id;
-      profileRole = prof.role || profileRole;
-    }
-  }
-
-  const userRole = profileRole;
+  const userRole = teacherProfile?.role || 'teacher';
   const isHOD = userRole === 'head_of_department';
 
   // 1. Xác định môn học phụ trách của Giáo viên / Trưởng bộ môn
   const { data: myTeaching } = await supabase
     .from('teacher_classes')
     .select('subject_id, subjects(*)')
-    .or(`teacher_id.eq.${teacherId},teacher_id.eq.${effectiveTeacherId}`);
+    .eq('teacher_id', teacherId);
 
   const mySubjectId = myTeaching?.[0]?.subject_id || '';
 
@@ -55,7 +45,7 @@ export default async function TeacherStudentsPage() {
   if (isHOD && mySubjectId) {
     assignmentQuery = assignmentQuery.eq('subject_id', mySubjectId);
   } else {
-    assignmentQuery = assignmentQuery.or(`teacher_id.eq.${teacherId},teacher_id.eq.${effectiveTeacherId}`);
+    assignmentQuery = assignmentQuery.eq('teacher_id', teacherId);
   }
 
   let studentQuery = supabase.from('student_details').select('*, classes(*)');
@@ -116,16 +106,16 @@ export default async function TeacherStudentsPage() {
 
   return (
     <div className="space-y-6 w-full animate-fade-in">
-      {/* HEADER QUẢN LÝ HỌC SINH HIỆN ĐẠI */}
-      <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-card p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1.5 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-0.5 text-xs font-bold text-blue-600 dark:text-blue-400 border border-blue-500/20">
+      {/* HEADER QUẢN LÝ HỌC SINH (CHUẨN FPREP BANNER) */}
+      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
+        <div className="space-y-2 max-w-2xl">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
             <Users className="h-3.5 w-3.5" /> Theo dõi & Giám sát Tự học Khối 12
           </div>
-          <h1 className="text-xl sm:text-2xl font-black font-heading text-foreground tracking-tight m-0">
+          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
             Theo Dõi Tiến Trình Học Sinh
           </h1>
-          <p className="text-xs text-muted-foreground font-medium m-0">
+          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
             Quản lý danh sách lớp học, phân công giảng dạy và theo dõi chi tiết điểm số, thời lượng học của từng học sinh.
           </p>
         </div>

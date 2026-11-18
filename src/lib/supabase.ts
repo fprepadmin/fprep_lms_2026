@@ -1,7 +1,10 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const DEFAULT_SUPABASE_URL = 'https://oxkrzvsywlfmavxnwhze.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94a3J6dnN5d2xmbWF2eG53aHplIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1ODY1OTMsImV4cCI6MjEwMTE2MjU5M30.jIhtQJGvKnwYj5qxEVPRBMdOpCv77D0dp5uFchs6vzQ';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 const supabaseServiceRoleKey = 
   (process.env.SUPABASE_SERVICE_ROLE_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('THAY_THE_BANG'))
     ? process.env.SUPABASE_SERVICE_ROLE_KEY 
