@@ -110,8 +110,10 @@ export default async function StudentDashboardPage() {
     supabase.from('study_progress').select('student_id, completed').eq('completed', true),
     // Bảng vàng: Điểm thi tất cả
     supabase.from('exam_results').select('student_id, score'),
-    // Danh sách môn học theo phân ban
-    supabase.from('subjects').select('*').in('group_type', groupType === 'X' ? ['X', 'ENG'] : ['T', 'ENG']).order('name'),
+    // Danh sách môn học theo phân ban (Học sinh lớp tự nhiên được cập nhật thêm môn Tiếng Anh và Lịch Sử)
+    groupType === 'X'
+      ? supabase.from('subjects').select('*').in('group_type', ['X', 'ENG']).order('name')
+      : supabase.from('subjects').select('*').or('group_type.eq.T,group_type.eq.ENG,name.ilike.%sử%').order('name'),
     // Danh sách chương & bài học
     supabase.from('chapters').select('id, subject_id, lessons(id)').order('order_index', { ascending: true }),
     // Danh sách đề thi

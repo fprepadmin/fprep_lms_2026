@@ -2016,11 +2016,11 @@ export default function TeacherStudentsClient({
           </p>
         </div>
 
-        {/* Tab switch: Danh sách lớp học vs Xem nộp bài nhanh */}
-        <div className="flex items-center gap-1.5 bg-muted/70 p-1.5 rounded-xl border border-border self-start sm:self-auto shrink-0">
+        {/* Tab switch: Danh sách lớp học vs Xem nộp bài nhanh vs Bảng xếp hạng */}
+        <div className="flex flex-wrap items-center gap-1.5 bg-muted/70 p-1.5 rounded-xl border border-border self-start sm:self-auto shrink-0">
           <button
             onClick={() => setMainTab('classes')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               mainTab === 'classes'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
@@ -2031,7 +2031,7 @@ export default function TeacherStudentsClient({
 
           <button
             onClick={() => setMainTab('submissions')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               mainTab === 'submissions'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
@@ -2039,6 +2039,13 @@ export default function TeacherStudentsClient({
           >
             <Zap className="h-4 w-4 text-amber-500" /> Xem Nộp Bài Nhanh
           </button>
+
+          <a
+            href="/dashboard/teacher/leaderboard"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 transition-all shadow-sm"
+          >
+            <Trophy className="h-4 w-4 text-amber-400" /> Bảng Xếp Hạng Học Sinh
+          </a>
         </div>
       </div>
 

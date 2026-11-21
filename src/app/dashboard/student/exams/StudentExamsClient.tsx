@@ -121,43 +121,54 @@ export default function StudentExamsClient({
     return (
       <div 
         key={exam.id}
-        className="flat-card flex flex-col justify-between gap-4 hover:border-primary/50 transition-all"
+        className="flat-card flex flex-col justify-between gap-4 hover:border-cyan-400/60 transition-all hover:shadow-[0_8px_30px_rgba(6,182,212,0.15)] group"
       >
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <div className="flex items-start justify-between gap-2">
             <h4 
-              className="font-bold text-[14px] sm:text-[15px] text-[#212529] dark:text-foreground line-clamp-3 break-words m-0 leading-snug"
+              className="font-bold text-[14px] sm:text-[15px] text-white line-clamp-3 break-words m-0 leading-snug group-hover:text-cyan-300 transition-colors"
               title={exam.title}
             >
               {exam.title}
             </h4>
-            {hasTaken && (
-              <span className="badge-success shrink-0">
+            {hasTaken ? (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-black shrink-0">
                 {bestRes?.score}/10
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-[10px] font-bold shrink-0">
+                Mới
               </span>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-[#6c757d] dark:text-muted-foreground font-semibold">
-            <span className="flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5 text-primary" /> {exam.duration_minutes} phút
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-semibold">
+            <span className="flex items-center gap-1 text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/60 text-[11px]">
+              <Clock className="h-3 w-3 text-cyan-400" /> {exam.duration_minutes} phút
             </span>
             {exam.subjects?.name && (
-              <span className="bg-[#f8f9fa] dark:bg-muted px-2 py-0.5 rounded text-[10px] font-bold text-[#495057] dark:text-foreground border border-border">
+              <span className="bg-primary/20 text-blue-300 border border-primary/30 px-2 py-0.5 rounded text-[10px] font-bold">
                 {exam.subjects.name}
+              </span>
+            )}
+            {hasTaken && (
+              <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3 text-emerald-400" /> Đã hoàn thành
               </span>
             )}
           </div>
         </div>
 
-        <div className="pt-2.5 border-t border-border flex items-center justify-between gap-3">
-          <span className="text-[11px] text-[#6c757d] font-semibold">
-            {hasTaken ? 'Đã hoàn thành' : 'Chưa làm bài'}
+        <div className="pt-2.5 border-t border-cyan-500/20 flex items-center justify-between gap-3">
+          <span className="text-[11px] text-slate-400 font-semibold">
+            {hasTaken ? `Đúng ${bestRes?.correct_answers}/${bestRes?.total_questions} câu` : 'Chưa làm bài'}
           </span>
 
           <Link
             href={`/dashboard/student/exams/${exam.id}`}
-            className={hasTaken ? "btn-secondary text-xs py-1.5 px-3.5" : "btn-primary text-xs py-1.5 px-3.5"}
+            className={hasTaken 
+              ? "btn-secondary text-xs py-1.5 px-3.5 flex items-center gap-1.5 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/10 font-bold" 
+              : "btn-primary text-xs py-1.5 px-3.5 flex items-center gap-1.5 font-bold shadow-md shadow-primary/30"}
           >
             {hasTaken ? (
               <>
@@ -175,10 +186,10 @@ export default function StudentExamsClient({
   };
 
   const categories = [
-    { id: 'lesson', label: 'LUYỆN TẬP THEO BÀI', icon: <BookOpen className="h-4 w-4" />, desc: 'Củng cố kiến thức theo từng bài học' },
-    { id: 'test', label: 'KIỂM TRA', icon: <FileCheck className="h-4 w-4" />, desc: 'Đề kiểm tra 15p, 45p, định kỳ' },
-    { id: 'thptqg', label: 'THPTQG', icon: <Target className="h-4 w-4" />, desc: 'Bộ đề thi thử Tốt nghiệp THPT' },
-    { id: 'dgnl', label: 'ĐGNL', icon: <Sparkles className="h-4 w-4" />, desc: 'Đề luyện Đánh giá Năng lực' },
+    { id: 'lesson', label: 'LUYỆN TẬP THEO BÀI', icon: <BookOpen className="h-4 w-4" />, desc: 'Củng cố kiến thức theo từng bài học', count: exams.filter(e => categorizeExam(e) === 'lesson').length },
+    { id: 'test', label: 'KIỂM TRA', icon: <FileCheck className="h-4 w-4" />, desc: 'Đề kiểm tra 15p, 45p, định kỳ', count: exams.filter(e => categorizeExam(e) === 'test').length },
+    { id: 'thptqg', label: 'THI THỬ THPTQG', icon: <Target className="h-4 w-4" />, desc: 'Bộ đề thi thử Tốt nghiệp THPT', count: exams.filter(e => categorizeExam(e) === 'thptqg').length },
+    { id: 'dgnl', label: 'ĐGNL / TSA', icon: <Sparkles className="h-4 w-4" />, desc: 'Đề luyện Đánh giá Năng lực', count: exams.filter(e => categorizeExam(e) === 'dgnl').length },
   ];
 
   return (
@@ -192,25 +203,25 @@ export default function StudentExamsClient({
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id as any)}
-              className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between gap-2.5 ${
+              className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between gap-3 cursor-pointer ${
                 isActive
-                  ? 'bg-white dark:bg-card border-primary ring-2 ring-primary/20 shadow-sm'
-                  : 'bg-white/60 dark:bg-card/60 border-border hover:border-primary/40 hover:bg-white text-muted-foreground'
+                  ? 'bg-gradient-to-br from-cyan-500/20 via-blue-600/15 to-transparent border-cyan-400 shadow-[0_0_25px_rgba(6,182,212,0.25)] ring-1 ring-cyan-400/50'
+                  : 'bg-slate-900/50 border-cyan-500/20 hover:border-cyan-400/40 hover:bg-slate-900/70'
               }`}
             >
               <div className="flex items-center justify-between">
-                <div className={`p-2 rounded-lg border ${isActive ? 'bg-[#e7f1ff] dark:bg-primary/20 text-primary border-[#b6d4fe]' : 'bg-[#f8f9fa] dark:bg-muted text-[#6c757d] border-border'}`}>
+                <div className={`p-2.5 rounded-xl border ${isActive ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40 shadow-xs' : 'bg-slate-800/80 text-slate-400 border-slate-700/60'}`}>
                   {cat.icon}
                 </div>
-                {isActive && (
-                  <span className="h-2 w-2 rounded-full bg-primary" />
-                )}
+                <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${isActive ? 'bg-cyan-400 text-slate-950 shadow-xs' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
+                  {cat.count} đề
+                </span>
               </div>
               <div>
-                <span className={`block text-xs sm:text-[13px] font-bold tracking-wide ${isActive ? 'text-[#212529] dark:text-foreground' : 'text-[#6c757d]'}`}>
+                <span className={`block text-xs sm:text-[13px] font-black tracking-wide ${isActive ? 'text-white' : 'text-slate-300'}`}>
                   {cat.label}
                 </span>
-                <span className="text-[11px] text-[#6c757d] font-semibold line-clamp-1">
+                <span className="text-[11px] text-slate-400 font-semibold line-clamp-1 mt-0.5">
                   {cat.desc}
                 </span>
               </div>
@@ -224,20 +235,28 @@ export default function StudentExamsClient({
         
         {/* Lựa chọn môn học */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
-          <span className="text-xs font-bold text-[#6c757d] uppercase shrink-0 mr-1">Môn học:</span>
+          <span className="text-xs font-black text-cyan-300 uppercase shrink-0 mr-1 flex items-center gap-1.5">
+            <BookOpen className="h-3.5 w-3.5 text-cyan-400" /> Môn học:
+          </span>
           {subjects.map((sub) => {
-            const isMathSub = sub.name.toLowerCase().includes('toán');
+            const isSelected = selectedSubjectId === sub.id;
+            const subExamCount = exams.filter(e => e.subject_id === sub.id).length;
             return (
               <button
                 key={sub.id}
                 onClick={() => setSelectedSubjectId(sub.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
-                  selectedSubjectId === sub.id
-                    ? 'bg-primary text-white border-primary shadow-sm'
-                    : 'bg-[#f8f9fa] dark:bg-muted/40 text-[#495057] dark:text-muted-foreground border-border hover:bg-[#e9ecef]'
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all border flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                  isSelected
+                    ? 'bg-primary text-white border-primary shadow-[0_0_15px_rgba(13,110,253,0.45)] font-black'
+                    : 'bg-slate-800/60 text-slate-300 border-cyan-500/20 hover:border-cyan-400/40 hover:bg-slate-800/90'
                 }`}
               >
                 <span>{sub.name}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isSelected ? 'bg-white/25 text-white' : 'bg-slate-700/60 text-slate-400'
+                }`}>
+                  {subExamCount}
+                </span>
               </button>
             );
           })}
@@ -250,9 +269,9 @@ export default function StudentExamsClient({
             placeholder="Tìm kiếm đề thi..."
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
-            className="w-full bg-[#f8f9fa] dark:bg-muted/40 border border-border rounded-lg px-3 py-1.5 pl-8 text-xs font-semibold focus:outline-none focus:border-primary transition-colors"
+            className="w-full bg-slate-900/60 border border-cyan-500/30 rounded-xl px-3 py-1.5 pl-8 text-xs font-semibold text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-colors"
           />
-          <Search className="h-3.5 w-3.5 text-[#6c757d] absolute left-2.5 top-2.5" />
+          <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
         </div>
 
       </div>
@@ -262,13 +281,13 @@ export default function StudentExamsClient({
       {/* 1. TAB LUYỆN TẬP THEO BÀI (MÔN > CHƯƠNG > BÀI) */}
       {activeCategory === 'lesson' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-border pb-2.5">
+          <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2.5">
             <div>
-              <h3 className="text-base font-bold font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
-                <BookOpen className="h-4.5 w-4.5 text-primary" />
+              <h3 className="text-base font-bold font-heading text-white flex items-center gap-2 m-0">
+                <BookOpen className="h-4.5 w-4.5 text-cyan-400" />
                 Luyện tập môn {selectedSubject?.name} theo Chương & Bài
               </h3>
-              <p className="text-xs text-[#6c757d] font-semibold m-0 mt-0.5">
+              <p className="text-xs text-slate-400 font-semibold m-0 mt-0.5">
                 Chọn chương học và mở từng bài để làm bài tập trắc nghiệm củng cố kiến thức.
               </p>
             </div>
@@ -290,25 +309,25 @@ export default function StudentExamsClient({
                     {/* Header Chương */}
                     <button
                       onClick={() => toggleChapter(chap.id)}
-                      className="w-full p-4 flex items-center justify-between bg-[#f8f9fa] dark:bg-muted/30 hover:bg-[#e9ecef] dark:hover:bg-muted/50 transition-colors text-left"
+                      className="w-full p-4 flex items-center justify-between bg-slate-900/50 hover:bg-slate-800/60 transition-colors text-left cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="w-7 h-7 rounded-lg bg-[#e7f1ff] dark:bg-primary/20 text-primary font-bold text-xs flex items-center justify-center border border-primary/20 shrink-0">
+                        <span className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-300 font-black text-xs flex items-center justify-center border border-cyan-400/30 shrink-0">
                           {chapIdx + 1}
                         </span>
                         <div>
-                          <h4 className="font-bold text-[15px] text-[#212529] dark:text-foreground m-0">{chap.title}</h4>
-                          <span className="text-[11px] text-[#6c757d] dark:text-muted-foreground font-semibold">{lessons.length} Bài học</span>
+                          <h4 className="font-bold text-[15px] text-white m-0">{chap.title}</h4>
+                          <span className="text-[11px] text-slate-400 font-semibold">{lessons.length} Bài học</span>
                         </div>
                       </div>
-                      <div className="p-1 text-[#6c757d]">
-                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      <div className="p-1 text-slate-400">
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-cyan-400" /> : <ChevronDown className="h-4 w-4" />}
                       </div>
                     </button>
 
                     {/* Danh sách Bài học & Đề thi tương ứng */}
                     {isExpanded && (
-                      <div className="p-4 sm:p-5 space-y-4 border-t border-border">
+                      <div className="p-4 sm:p-5 space-y-4 border-t border-cyan-500/20 bg-slate-950/20">
                         {lessons.length === 0 ? (
                           <p className="text-xs text-muted-foreground italic pl-2 m-0">Chưa có bài học trong chương này.</p>
                         ) : (
@@ -316,12 +335,12 @@ export default function StudentExamsClient({
                             const lessonExams = exams.filter(e => e.lesson_id === les.id || (categorizeExam(e) === 'lesson' && e.title.toLowerCase().includes(`bài ${lesIdx + 1}`)));
 
                             return (
-                              <div key={les.id} className="space-y-2.5 pl-3 border-l-2 border-primary/40">
+                              <div key={les.id} className="space-y-2.5 pl-3 border-l-2 border-cyan-400/50">
                                 <div className="flex items-center justify-between">
-                                  <h5 className="font-bold text-[13px] sm:text-[14px] text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
-                                    <span className="text-primary font-bold">Bài {lesIdx + 1}:</span> {les.title}
+                                  <h5 className="font-bold text-[13px] sm:text-[14px] text-white flex items-center gap-2 m-0">
+                                    <span className="text-cyan-400 font-bold">Bài {lesIdx + 1}:</span> {les.title}
                                   </h5>
-                                  <span className="text-[10px] font-bold text-[#6c757d] bg-[#f8f9fa] dark:bg-muted border border-border px-2 py-0.5 rounded">
+                                  <span className="text-[10px] font-bold text-slate-400 bg-slate-800/80 border border-slate-700/60 px-2 py-0.5 rounded">
                                     {lessonExams.length} Đề luyện tập
                                   </span>
                                 </div>
@@ -350,13 +369,13 @@ export default function StudentExamsClient({
       {/* 2. TAB KIỂM TRA ĐỊNH KỲ */}
       {activeCategory === 'test' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-border pb-2.5">
+          <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2.5">
             <div>
-              <h3 className="text-base font-bold font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
-                <FileCheck className="h-4.5 w-4.5 text-primary" />
+              <h3 className="text-base font-bold font-heading text-white flex items-center gap-2 m-0">
+                <FileCheck className="h-4.5 w-4.5 text-cyan-400" />
                 Đề Kiểm Tra Định Kỳ ({selectedSubject?.name})
               </h3>
-              <p className="text-xs text-[#6c757d] font-semibold m-0 mt-0.5">
+              <p className="text-xs text-slate-400 font-semibold m-0 mt-0.5">
                 Bài kiểm tra 15 phút, 1 tiết, đánh giá giữa kỳ và cuối học kỳ.
               </p>
             </div>
@@ -378,13 +397,13 @@ export default function StudentExamsClient({
       {/* 3. TAB THPTQG */}
       {activeCategory === 'thptqg' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-border pb-2.5">
+          <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2.5">
             <div>
-              <h3 className="text-base font-bold font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
-                <Target className="h-4.5 w-4.5 text-primary" />
+              <h3 className="text-base font-bold font-heading text-white flex items-center gap-2 m-0">
+                <Target className="h-4.5 w-4.5 text-cyan-400" />
                 Bộ Đề Luyện Thi Tốt Nghiệp THPT Quốc Gia ({selectedSubject?.name})
               </h3>
-              <p className="text-xs text-[#6c757d] font-semibold m-0 mt-0.5">
+              <p className="text-xs text-slate-400 font-semibold m-0 mt-0.5">
                 Tổng hợp đề thi thử chuẩn cấu trúc và ma trận đề thi chính thức của Bộ Giáo dục & Đào tạo.
               </p>
             </div>
@@ -406,13 +425,13 @@ export default function StudentExamsClient({
       {/* 4. TAB ĐGNL */}
       {activeCategory === 'dgnl' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-border pb-2.5">
+          <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2.5">
             <div>
-              <h3 className="text-base font-bold font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
-                <Sparkles className="h-4.5 w-4.5 text-primary" />
+              <h3 className="text-base font-bold font-heading text-white flex items-center gap-2 m-0">
+                <Sparkles className="h-4.5 w-4.5 text-cyan-400" />
                 Bộ Đề Ôn Luyện Đánh Giá Năng Lực (ĐGNL)
               </h3>
-              <p className="text-xs text-[#6c757d] font-semibold m-0 mt-0.5">
+              <p className="text-xs text-slate-400 font-semibold m-0 mt-0.5">
                 Rèn luyện tư duy logic, định lượng, đọc hiểu và giải quyết vấn đề cho các kỳ thi ĐGNL ĐHQG & ĐHBK.
               </p>
             </div>

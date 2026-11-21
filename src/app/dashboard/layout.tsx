@@ -9,7 +9,7 @@ import {
   GraduationCap, LogOut, BookOpen, User, 
   Menu, X, Sun, Moon, Home, ChevronRight,
   Users, ClipboardList, Activity, Library, MessageSquare,
-  Bell, AlertTriangle, Wrench, Sparkles, Zap, Award, Flame
+  Bell, AlertTriangle, Wrench, Sparkles, Zap, Award, Flame, Trophy
 } from 'lucide-react';
 import Footer from '@/components/Footer';
 import MaintenanceScreen from '@/components/MaintenanceScreen';
@@ -221,6 +221,7 @@ export default function DashboardLayout({
     teacher: [
       { name: 'Trang chủ', path: '/dashboard/teacher', icon: <Home className="h-4.5 w-4.5" /> },
       { name: 'Học sinh', path: '/dashboard/teacher/students', icon: <Users className="h-4.5 w-4.5" /> },
+      { name: 'Xếp hạng', path: '/dashboard/teacher/leaderboard', icon: <Trophy className="h-4.5 w-4.5" /> },
       { name: 'Học liệu', path: '/dashboard/teacher/materials', icon: <Library className="h-4.5 w-4.5" /> },
       { name: 'Đề thi', path: '/dashboard/teacher/exams', icon: <ClipboardList className="h-4.5 w-4.5" /> },
       { name: 'Hỏi đáp', path: '/dashboard/teacher/support', icon: <MessageSquare className="h-4.5 w-4.5" /> }
@@ -228,6 +229,7 @@ export default function DashboardLayout({
     head_of_department: [
       { name: 'Trang chủ', path: '/dashboard/teacher', icon: <Home className="h-4.5 w-4.5" /> },
       { name: 'Học sinh', path: '/dashboard/teacher/students', icon: <Users className="h-4.5 w-4.5" /> },
+      { name: 'Xếp hạng', path: '/dashboard/teacher/leaderboard', icon: <Trophy className="h-4.5 w-4.5" /> },
       { name: 'Phân lớp', path: '/dashboard/admin/users', icon: <Users className="h-4.5 w-4.5" /> },
       { name: 'Học liệu', path: '/dashboard/teacher/materials', icon: <Library className="h-4.5 w-4.5" /> },
       { name: 'Đề thi', path: '/dashboard/teacher/exams', icon: <ClipboardList className="h-4.5 w-4.5" /> },
@@ -267,6 +269,17 @@ export default function DashboardLayout({
     pathname !== '/dashboard/student/exams'
   );
 
+  const isBlueThemeSection = Boolean(
+    (pathname && (
+      pathname.startsWith('/dashboard/teacher') || 
+      pathname.startsWith('/dashboard/admin') ||
+      pathname.startsWith('/dashboard/student/exams')
+    )) ||
+    user?.role === 'teacher' ||
+    user?.role === 'head_of_department' ||
+    user?.role === 'admin'
+  );
+
   if (isExamSession) {
     return (
       <div className="min-h-screen bg-background text-foreground w-full">
@@ -278,8 +291,8 @@ export default function DashboardLayout({
   return (
     <div className={`min-h-screen bg-background text-foreground flex flex-col transition-colors duration-300 relative w-full overflow-x-hidden ${isMaintenance ? 'pt-8' : ''}`} suppressHydrationWarning>
       
-      {/* Background hình ảnh toàn trang dành riêng cho Role Học sinh */}
-      {pathname?.startsWith('/dashboard/student') && (
+      {/* Background hình ảnh toàn trang dành riêng cho Role Học sinh (ngoại trừ phần luyện đề dùng nền xanh công nghệ) */}
+      {pathname?.startsWith('/dashboard/student') && !pathname?.startsWith('/dashboard/student/exams') && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none">
           <img 
             src={profileInfo?.classBackgroundUrl || "/student-banner-bg.jpg"} 
@@ -287,6 +300,19 @@ export default function DashboardLayout({
             className="w-full h-full object-cover object-center opacity-25 dark:opacity-20 transition-opacity duration-500" 
           />
           <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/65 to-background/80" />
+        </div>
+      )}
+
+      {/* Background hình ảnh công nghệ màu xanh dành riêng cho Giáo viên, Quản trị viên & Học sinh luyện đề */}
+      {isBlueThemeSection && (
+        <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none">
+          <img 
+            src="/teacher-bg.jpg" 
+            alt="FPREP Tech Blue Background" 
+            className="w-full h-full object-cover object-center fixed inset-0" 
+          />
+          {/* Lớp phủ gradient và ánh sáng công nghệ hài hòa để chữ và card luôn sắc nét */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#020b1c]/85 via-[#031433]/75 to-[#010816]/90 backdrop-blur-[1px]" />
         </div>
       )}
 
@@ -313,7 +339,7 @@ export default function DashboardLayout({
       )}
 
       {/* 1. TOP NAVIGATION BAR DÀNH CHO DESKTOP CHUẨN ĐẶC SẮC FPREP & FPT */}
-      <header className={`hidden md:flex h-[72px] fixed ${isMaintenance ? 'top-8' : 'top-0'} left-0 right-0 z-40 px-4 sm:px-6 lg:px-8 select-none bg-white/90 dark:bg-[#071328]/90 backdrop-blur-2xl border-b border-border/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_30px_-6px_rgba(0,0,0,0.4)] transition-all`}>
+      <header className={`hidden md:flex h-[72px] fixed ${isMaintenance ? 'top-8' : 'top-0'} left-0 right-0 z-40 px-4 sm:px-6 lg:px-8 select-none ${isBlueThemeSection ? 'teacher-navbar' : 'bg-white/90 dark:bg-[#071328]/90'} backdrop-blur-2xl border-b border-border/80 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_30px_-6px_rgba(0,0,0,0.4)] transition-all`}>
         
         {/* Chỉ viền gradient phát sáng công nghệ sắc nét ở đỉnh */}
         <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-orange-500 via-[#0d6efd] via-sky-400 to-indigo-600 shadow-[0_1px_10px_rgba(13,110,253,0.45)]" />
@@ -493,7 +519,7 @@ export default function DashboardLayout({
       )}
 
       {/* 4. MAIN CONTENT CONTAINER (Stretched to 1400px widescreen layout) */}
-      <div className="flex-1 flex flex-col min-w-0 pt-16 md:pt-[70px] w-full max-w-full relative z-10">
+      <div className={`flex-1 flex flex-col min-w-0 pt-16 md:pt-[70px] w-full max-w-full relative z-10 ${isBlueThemeSection ? 'teacher-workspace admin-workspace student-exams-workspace' : ''}`}>
         <main ref={mainRef} className="w-full max-w-[1400px] mx-auto min-w-0 p-3.5 sm:p-5 lg:p-6 flex-1">
           <div className="w-full max-w-full min-w-0">
             {children}

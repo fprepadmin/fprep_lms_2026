@@ -439,3 +439,178 @@ input:focus, select:focus, textarea:focus {
 img, video, iframe {
   max-width: 100%;
 }
+
+/* ==========================================================================
+   THEME CÔNG NGHỆ NỀN XANH CHUYÊN BIỆT CHO GIÁO VIÊN, ADMIN & LUYỆN ĐỀ (WORKSPACES)
+   Đóng khung kính mờ (Glassmorphism), viền cyan neon phát sáng hài hòa nền xanh
+   ========================================================================== */
+.teacher-workspace,
+.admin-workspace,
+.student-exams-workspace {
+  --background: transparent;
+  --foreground: #f8fafc;
+  --card: rgba(8, 25, 55, 0.82);
+  --card-foreground: #f8fafc;
+  --popover: rgba(8, 25, 55, 0.95);
+  --popover-foreground: #f8fafc;
+  --border: rgba(56, 189, 248, 0.28);
+  --muted: rgba(14, 38, 77, 0.65);
+  --muted-foreground: #94a3b8;
+  color: #f8fafc !important;
+}
+
+.teacher-workspace h1, .admin-workspace h1, .student-exams-workspace h1,
+.teacher-workspace h2, .admin-workspace h2, .student-exams-workspace h2,
+.teacher-workspace h3, .admin-workspace h3, .student-exams-workspace h3,
+.teacher-workspace h4, .admin-workspace h4, .student-exams-workspace h4,
+.teacher-workspace h5, .admin-workspace h5, .student-exams-workspace h5,
+.teacher-workspace h6, .admin-workspace h6, .student-exams-workspace h6 {
+  color: #ffffff !important;
+}
+
+.teacher-workspace .text-foreground, .admin-workspace .text-foreground, .student-exams-workspace .text-foreground,
+.teacher-workspace .text-\[\#212529\], .admin-workspace .text-\[\#212529\], .student-exams-workspace .text-\[\#212529\],
+.teacher-workspace .text-secondary, .admin-workspace .text-secondary, .student-exams-workspace .text-secondary,
+.teacher-workspace .text-slate-900, .admin-workspace .text-slate-900, .student-exams-workspace .text-slate-900,
+.teacher-workspace .text-slate-800, .admin-workspace .text-slate-800, .student-exams-workspace .text-slate-800,
+.teacher-workspace .text-gray-900, .admin-workspace .text-gray-900, .student-exams-workspace .text-gray-900 {
+  color: #f8fafc !important;
+}
+
+.teacher-workspace p.text-muted-foreground, .admin-workspace p.text-muted-foreground, .student-exams-workspace p.text-muted-foreground,
+.teacher-workspace span.text-muted-foreground, .admin-workspace span.text-muted-foreground, .student-exams-workspace span.text-muted-foreground,
+.teacher-workspace div.text-muted-foreground, .admin-workspace div.text-muted-foreground, .student-exams-workspace div.text-muted-foreground,
+.teacher-workspace .text-\[\#6c757d\], .admin-workspace .text-\[\#6c757d\], .student-exams-workspace .text-\[\#6c757d\] {
+  color: #94a3b8 !important;
+}
+
+/* ĐÓNG KHUNG CÁC THẺ CARD TRÊN NỀN XANH CÔNG NGHỆ */
+.teacher-workspace .flat-card, .admin-workspace .flat-card, .student-exams-workspace .flat-card,
+.teacher-workspace .flat-card-interactive, .admin-workspace .flat-card-interactive, .student-exams-workspace .flat-card-interactive,
+.teacher-workspace .bg-card, .admin-workspace .bg-card, .student-exams-workspace .bg-card {
+  background: rgba(8, 26, 58, 0.82) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.28) !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 10, 36, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  border-radius: 1.25rem !important;
+  color: #f8fafc !important;
+}
+
+.teacher-workspace .flat-card:hover, .admin-workspace .flat-card:hover, .student-exams-workspace .flat-card:hover,
+.teacher-workspace .flat-card-interactive:hover, .admin-workspace .flat-card-interactive:hover, .student-exams-workspace .flat-card-interactive:hover {
+  border-color: rgba(56, 189, 248, 0.55) !important;
+  box-shadow: 0 16px 40px -10px rgba(6, 182, 212, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+}
+
+/* XỬ LÝ CÁC PHẦN TỬ CÓ BG TRẮNG TRỞ THÀNH KHUNG KÍNH XANH ĐỒNG BỘ */
+.teacher-workspace .bg-white, .admin-workspace .bg-white, .student-exams-workspace .bg-white {
+  background-color: rgba(8, 26, 58, 0.85) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+
+.teacher-workspace .bg-white\/60, .admin-workspace .bg-white\/60, .student-exams-workspace .bg-white\/60,
+.teacher-workspace .bg-white\/70, .admin-workspace .bg-white\/70, .student-exams-workspace .bg-white\/70,
+.teacher-workspace .bg-white\/80, .admin-workspace .bg-white\/80, .student-exams-workspace .bg-white\/80,
+.teacher-workspace .bg-white\/90, .admin-workspace .bg-white\/90, .student-exams-workspace .bg-white\/90 {
+  background-color: rgba(8, 26, 58, 0.65) !important;
+  border-color: rgba(56, 189, 248, 0.25) !important;
+}
+
+.teacher-workspace .bg-slate-50, .admin-workspace .bg-slate-50, .student-exams-workspace .bg-slate-50,
+.teacher-workspace .bg-slate-100, .admin-workspace .bg-slate-100, .student-exams-workspace .bg-slate-100,
+.teacher-workspace .bg-slate-100\/90, .admin-workspace .bg-slate-100\/90, .student-exams-workspace .bg-slate-100\/90,
+.teacher-workspace .bg-muted\/20, .admin-workspace .bg-muted\/20, .student-exams-workspace .bg-muted\/20,
+.teacher-workspace .bg-muted\/30, .admin-workspace .bg-muted\/30, .student-exams-workspace .bg-muted\/30,
+.teacher-workspace .bg-muted\/40, .admin-workspace .bg-muted\/40, .student-exams-workspace .bg-muted\/40,
+.teacher-workspace .bg-muted, .admin-workspace .bg-muted, .student-exams-workspace .bg-muted {
+  background-color: rgba(14, 38, 77, 0.65) !important;
+  border-color: rgba(56, 189, 248, 0.22) !important;
+  color: #f8fafc !important;
+}
+
+.teacher-workspace .border-border, .admin-workspace .border-border, .student-exams-workspace .border-border {
+  border-color: rgba(56, 189, 248, 0.25) !important;
+}
+
+/* ICON BADGES TRONG THỐNG KÊ (TÀI KHOẢN, QUẢN TRỊ VIÊN, NHẬT KÝ, V.V...) */
+.teacher-workspace .bg-\[\#e7f1ff\], .admin-workspace .bg-\[\#e7f1ff\], .student-exams-workspace .bg-\[\#e7f1ff\],
+.teacher-workspace .bg-\[\#f8d7da\], .admin-workspace .bg-\[\#f8d7da\], .student-exams-workspace .bg-\[\#f8d7da\],
+.teacher-workspace .bg-\[\#fff3cd\], .admin-workspace .bg-\[\#fff3cd\], .student-exams-workspace .bg-\[\#fff3cd\],
+.teacher-workspace .bg-\[\#d1e7dd\], .admin-workspace .bg-\[\#d1e7dd\], .student-exams-workspace .bg-\[\#d1e7dd\],
+.teacher-workspace .bg-\[\#cff4fc\], .admin-workspace .bg-\[\#cff4fc\], .student-exams-workspace .bg-\[\#cff4fc\] {
+  background-color: rgba(14, 38, 77, 0.8) !important;
+  border: 1px solid rgba(56, 189, 248, 0.35) !important;
+}
+
+/* KHUNG THỐNG KÊ SỐ LIỆU NỔI BẬT */
+.teacher-workspace .stat-box-neon, .admin-workspace .stat-box-neon, .student-exams-workspace .stat-box-neon {
+  background: linear-gradient(135deg, rgba(14, 38, 80, 0.88) 0%, rgba(6, 21, 48, 0.88) 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.35) !important;
+  box-shadow: 0 8px 24px -4px rgba(0, 150, 255, 0.25) !important;
+}
+
+/* BẢNG BIỂU (TABLES) TRÊN NỀN XANH CÔNG NGHỆ */
+.teacher-workspace table, .admin-workspace table, .student-exams-workspace table {
+  color: #f1f5f9 !important;
+}
+
+.teacher-workspace table thead th, .admin-workspace table thead th, .student-exams-workspace table thead th {
+  background-color: rgba(14, 38, 80, 0.9) !important;
+  color: #38bdf8 !important;
+  border-bottom: 2px solid rgba(56, 189, 248, 0.35) !important;
+}
+
+.teacher-workspace table tbody tr, .admin-workspace table tbody tr, .student-exams-workspace table tbody tr {
+  border-bottom: 1px solid rgba(56, 189, 248, 0.18) !important;
+  transition: background-color 0.15s ease;
+}
+
+.teacher-workspace table tbody tr:hover, .admin-workspace table tbody tr:hover, .student-exams-workspace table tbody tr:hover {
+  background-color: rgba(56, 189, 248, 0.1) !important;
+}
+
+/* INPUT & SELECT TRÊN NỀN XANH */
+.teacher-workspace input, .admin-workspace input, .student-exams-workspace input,
+.teacher-workspace select, .admin-workspace select, .student-exams-workspace select,
+.teacher-workspace textarea, .admin-workspace textarea, .student-exams-workspace textarea {
+  background-color: rgba(7, 22, 50, 0.85) !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  color: #f8fafc !important;
+}
+
+.teacher-workspace input:focus, .admin-workspace input:focus, .student-exams-workspace input:focus,
+.teacher-workspace select:focus, .admin-workspace select:focus, .student-exams-workspace select:focus,
+.teacher-workspace textarea:focus, .admin-workspace textarea:focus, .student-exams-workspace textarea:focus {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25) !important;
+}
+
+.teacher-workspace input::placeholder, .admin-workspace input::placeholder, .student-exams-workspace input::placeholder,
+.teacher-workspace textarea::placeholder, .admin-workspace textarea::placeholder, .student-exams-workspace textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* MODAL & DIALOG TRÊN NỀN XANH */
+.teacher-workspace .modal-surface, .admin-workspace .modal-surface, .student-exams-workspace .modal-surface,
+.teacher-workspace [role="dialog"] > div, .admin-workspace [role="dialog"] > div, .student-exams-workspace [role="dialog"] > div {
+  background-color: rgba(6, 20, 48, 0.96) !important;
+  border: 1px solid rgba(56, 189, 248, 0.4) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(56, 189, 248, 0.2) !important;
+  color: #f8fafc !important;
+}
+
+/* TOP NAVBAR CHO GIÁO VIÊN TRÊN NỀN XANH */
+.teacher-navbar {
+  background: rgba(4, 15, 36, 0.92) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.28) !important;
+  box-shadow: 0 8px 30px rgba(0, 8, 30, 0.6) !important;
+}
+
+.teacher-navbar nav {
+  background: rgba(8, 25, 58, 0.85) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+

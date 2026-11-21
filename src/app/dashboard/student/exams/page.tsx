@@ -35,13 +35,18 @@ export default async function StudentExamsPage() {
   const groupType = studentDetail?.classes?.group_type || 'T';
 
   // 3. TỐI ƯU TRUY VẤN SONG SONG BẰNG PROMISE.ALL
+  // Học sinh lớp tự nhiên (Ban T) được cập nhật thêm môn Tiếng Anh và Lịch Sử
+  const subjectsQuery = groupType === 'X'
+    ? supabase.from('subjects').select('*').in('group_type', ['X', 'ENG']).order('name')
+    : supabase.from('subjects').select('*').or('group_type.eq.T,group_type.eq.ENG,name.ilike.%sử%').order('name');
+
   const [
     subjectsRes,
     chaptersRes,
     examsRes,
     examResultsRes
   ] = await Promise.all([
-    supabase.from('subjects').select('*').in('group_type', groupType === 'X' ? ['X', 'ENG'] : ['T', 'ENG']).order('name'),
+    subjectsQuery,
     supabase.from('chapters').select('*, lessons(*)').order('order_index', { ascending: true }),
     supabase.from('exams').select('*, subjects(*), lessons(*)'),
     supabase.from('exam_results').select('*, exams(title)').eq('student_id', studentId).order('created_at', { ascending: false })
