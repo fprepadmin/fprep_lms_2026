@@ -39,18 +39,29 @@ export default async function AdminLogsPage() {
 
   return (
     <div className="space-y-6 w-full animate-fade-in">
-      {/* HEADER AUDIT LOGS (CHUẨN FPREP BANNER) */}
-      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
-        <div className="space-y-2 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
-            <ShieldAlert className="h-3.5 w-3.5" /> Giám sát an ninh & Truy vết
+      {/* ==================================================== */}
+      {/* WELCOME BANNER - NHẬT KÝ BẢO MẬT & AUDIT LOGS */}
+      {/* ==================================================== */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1B55] via-[#1746D1] to-[#087CFF] p-6 sm:p-7 text-white shadow-xl shadow-blue-500/10 border border-[#00DFFF]/30">
+        <div className="absolute -right-12 -top-12 h-56 w-56 rounded-full bg-[#00DFFF]/15 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-3 py-0.5 text-xs font-bold text-[#00DFFF] border border-white/15">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              <span>FPT AI LEARNING &bull; GIÁM SÁT AN NINH & TRUY VẾT HỆ THỐNG</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black font-heading text-white m-0 uppercase tracking-tight">
+              Nhật Ký Bảo Mật (Audit Logs)
+            </h1>
+            <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed m-0 font-medium">
+              Bản ghi vết đầy đủ các hành vi tạo, sửa, xóa dữ liệu kèm địa chỉ IP, User-Agent và giá trị sai khác chi tiết.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
-            Nhật Ký Bảo Mật (Audit Logs)
-          </h1>
-          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
-            Bản ghi vết đầy đủ các hành động tạo, sửa, xóa dữ liệu trên hệ thống kèm theo địa chỉ IP và giá trị thay đổi chi tiết.
-          </p>
+
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 text-xs shrink-0 self-start sm:self-center">
+            <span className="font-extrabold text-white">Tổng: {auditLogsRes.data?.length || 0} bản ghi</span>
+          </div>
         </div>
       </div>
 

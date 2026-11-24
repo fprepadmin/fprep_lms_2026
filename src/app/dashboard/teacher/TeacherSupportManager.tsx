@@ -76,14 +76,14 @@ export default function TeacherSupportManager({
   });
 
   return (
-    <div className="flat-card space-y-5 bg-white dark:bg-card">
+    <div className="flat-card space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3.5 gap-3">
-        <h2 className="text-base font-bold font-heading flex items-center gap-2 m-0 text-[#212529] dark:text-foreground">
-          <MessageSquare className="h-4.5 w-4.5 text-primary" /> Yêu Cầu Hỗ Trợ Chuyên Môn Của Học Sinh
+        <h2 className="text-base font-bold font-heading flex items-center gap-2 m-0 text-white">
+          <MessageSquare className="h-4.5 w-4.5 text-cyan-400" /> Yêu Cầu Hỗ Trợ Chuyên Môn Của Học Sinh
         </h2>
         
         {/* Bộ lọc trạng thái dạng Pill FPREP */}
-        <div className="flex items-center gap-1.5 bg-[#f8f9fa] dark:bg-muted/40 border border-border p-1 rounded-xl">
+        <div className="flex items-center gap-1.5 bg-[#081a3a]/80 border border-cyan-500/25 p-1 rounded-xl">
           <button
             onClick={() => setFilter('pending')}
             className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
@@ -145,8 +145,8 @@ export default function TeacherSupportManager({
               </div>
 
               {/* Nội dung câu hỏi */}
-              <div className="text-xs text-[#212529] dark:text-foreground font-semibold bg-[#f8f9fa] dark:bg-muted/30 p-3.5 rounded-xl border border-border">
-                <span className="text-[10px] font-bold text-[#6c757d] uppercase block mb-1">Nội dung thắc mắc:</span>
+              <div className="text-xs text-slate-100 font-semibold bg-[#081a3a]/80 p-3.5 rounded-xl border border-cyan-500/25">
+                <span className="text-[10px] font-bold text-cyan-300 uppercase block mb-1">Nội dung thắc mắc:</span>
                 <p className="whitespace-pre-line leading-relaxed m-0">{req.message}</p>
               </div>
 

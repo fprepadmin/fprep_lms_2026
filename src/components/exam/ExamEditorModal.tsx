@@ -25,19 +25,20 @@ CÁC NGUYÊN TẮC BẮT BUỘC TUYỆT ĐỐI KHÔNG ĐƯỢC VI PHẠM (CRITIC
    - ĐÁP ÁN CỦA ĐỀ GỐC/GIÁO VIÊN LÀ CHÂN LÝ TUYỆT ĐỐI: Bạn PHẢI trích xuất chính xác đáp án giáo viên đã cung cấp trong đề (gạch chân, in đậm, đánh dấu *, khoanh tròn hoặc bảng đáp án ở cuối đề) làm "correct_answer". TUYỆT ĐỐI KHÔNG tự ý giải lại rồi chọn đáp án khác với chỉ định của đề gốc.
    - Lời giải ("explanation") phải lập luận sư phạm logic, chặt chẽ để chứng minh và dẫn về ĐÚNG đáp án mà đề gốc đã chọn.
 
-2. QUY TẮC HÌNH ẢNH HOẶC BẢNG BIỂU / BẢNG BIẾN THIÊN / ĐỒ THỊ:
-   - VỚI BẢNG BIỂU / BẢNG BIẾN THIÊN / BẢNG SỐ LIỆU DẠNG CHỮ HOẶC LATEX: Copy và dán nguyên văn vào đúng vị trí xuất hiện trong "content" hoặc "explanation" (dưới dạng bảng Markdown hoặc ma trận LaTeX chuẩn, ví dụ: \\begin{array}...\\end{array} hoặc bảng Markdown | ... |).
+2. QUY TẮC BẢNG BIẾN THIÊN, ĐỒ THỊ VÀ HÌNH ẢNH:
+   - VỀ BẢNG BIẾN THIÊN: BẢNG BIẾN THIÊN LUÔN LUÔN PHẢI ĐƯA VỀ DẠNG HÌNH ẢNH NHƯ TRONG FILE GỐC (nếu trích xuất trực tiếp được ảnh gốc thì dùng link ảnh hoặc đặt ký hiệu giữ chỗ \`[Hình vẽ: Bảng biến thiên]\`, nếu không được thì giáo viên/AI chụp ảnh/chuyển thành ảnh dán vào). TUYỆT ĐỐI KHÔNG tự ý gõ lại bảng biến thiên bằng bảng text hay ký tự thô sơ để tránh lệch mũi tên và lỗi định dạng.
    - VỚI HÌNH VẼ, ĐỒ THỊ, HÌNH HỌC KHÔNG GIAN, TRANH ẢNH MINH HỌA:
      + TUYỆT ĐỐI KHÔNG tự ý bỏ qua hay tự bịa lời văn mô tả thay thế hình.
      + Đặt đúng vị trí hình ảnh bằng ký hiệu giữ chỗ rõ ràng: \`[Hình vẽ: Mô tả vị trí xuất hiện trong đề]\` (hoặc \`[Đồ thị hàm số]\`, \`[Bảng biến thiên]\`, hoặc nếu có link ảnh thì giữ nguyên \`![Hình vẽ](link_anh)\`).
      + Hình vẽ phải được đặt CHÍNH XÁC tại vị trí xuất hiện trong đề bài hoặc trong các phương án, lời giải. Hệ thống FPREP sẽ tự động nhận diện vị trí này để hiển thị và cắt sát ảnh tương ứng.
 
 3. QUY ƯỚC CÔNG THỨC TOÁN HỌC & LATEX:
+   - VỀ VECTOR: BẮT BUỘC 100% DÙNG \\overrightarrow (ví dụ: \\overrightarrow{a}, \\overrightarrow{b}, \\overrightarrow{AB}, \\overrightarrow{u}), TUYỆT ĐỐI KHÔNG DÙNG \\vec{...} hoặc \\vec a. Mọi ký hiệu \\vec{a} PHẢI LUÔN LUÔN ĐỔI THÀNH \\overrightarrow{a}.
    - VỀ PHÂN SỐ: BẮT BUỘC 100% DÙNG \\dfrac (ví dụ: \\dfrac{a}{b}), TUYỆT ĐỐI KHÔNG DÙNG \\frac để đảm bảo phân số hiển thị to rõ, cân đối và chuẩn thẩm mỹ toán học trên web.
    - VỀ DẤU KHÁC: BẮT BUỘC DÙNG \\neq (ví dụ: $x \\neq 2$), TUYỆT ĐỐI KHÔNG DÙNG \\ne.
    - Mọi công thức toán học PHẢI đặt trong cặp dấu $ cho công thức nội dòng (ví dụ: $y = f(x)$) hoặc $$ cho công thức độc lập.
-   - Vector: \\overrightarrow{AB}, căn bậc hai: \\sqrt{...}, tích vô hướng: \\vec a \\cdot \\vec b.
-   - Trong chuỗi JSON, tất cả dấu gạch chéo ngược LaTeX phải được escape hợp lệ (ví dụ: "\\\\dfrac{1}{2}", "\\\\sqrt{3}", "\\\\overrightarrow{AB}").
+   - Vector: \\overrightarrow{a}, \\overrightarrow{AB}, căn bậc hai: \\sqrt{...}, tích vô hướng: \\overrightarrow{a} \\cdot \\overrightarrow{b}.
+   - Trong chuỗi JSON, tất cả dấu gạch chéo ngược LaTeX phải được escape hợp lệ (ví dụ: "\\\\dfrac{1}{2}", "\\\\sqrt{3}", "\\\\overrightarrow{a}", "\\\\overrightarrow{AB}").
 
 4. ĐỊNH DẠNG XUỐNG DÒNG DỄ ĐỌC TRONG LỜI GIẢI ("explanation"):
    - Các bước giải, lập luận phân tích PHẢI được ngắt dòng rõ ràng bằng ký tự xuống dòng \\n hoặc \\n\\n, không viết dồn thành một khối chữ đặc.
@@ -566,7 +567,9 @@ export default function ExamEditorModal({
         if (!str || typeof str !== 'string') return String(str || '');
         return str
           .replace(/\\frac\b/g, '\\dfrac')
-          .replace(/\\ne\b/g, '\\neq');
+          .replace(/\\ne\b/g, '\\neq')
+          .replace(/\\+vec\{([^}]+)\}/g, '\\overrightarrow{$1}')
+          .replace(/\\+vec\s*([a-zA-Z0-9])/g, '\\overrightarrow{$1}');
       };
 
       const formattedQuestions: QuestionData[] = parsed.map((item: any, idx: number) => {
@@ -759,11 +762,15 @@ export default function ExamEditorModal({
               onChange={(e) => setExamType(e.target.value)}
               className="w-full rounded-xl border border-border bg-background px-3 py-2 font-semibold text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
-              <option value="lesson">Luyện tập theo bài</option>
-              <option value="test">Kiểm tra định kỳ (15p/45p)</option>
-              <option value="thptqg">Luyện thi THPTQG</option>
-              <option value="dgnl">Đánh giá Năng lực (ĐGNL)</option>
+              <option value="topic">Đề luyện theo chủ đề</option>
+              <option value="regular">Kiểm tra thường xuyên</option>
+              <option value="mid_term_1">Kiểm tra giữa kỳ 1</option>
+              <option value="final_term_1">Kiểm tra cuối kỳ 1</option>
+              <option value="mid_term_2">Kiểm tra giữa kỳ 2</option>
+              <option value="final_term_2">Kiểm tra cuối kỳ 2</option>
+              <option value="thptqg">Đề thi thử tốt nghiệp THPT</option>
               <option value="vsat">Kỳ thi VSAT</option>
+              <option value="dgnl">Đánh giá Năng lực (ĐGNL / TSA)</option>
             </select>
           </div>
 

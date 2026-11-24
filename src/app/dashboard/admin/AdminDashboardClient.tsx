@@ -3,11 +3,11 @@
 import React, { useState } from 'react';
 import { createSupabaseClient } from '@/lib/supabase';
 import { 
-  Shield, Users, Activity, Settings, Database, 
+  Shield, ShieldCheck, Users, Activity, Settings, Database, 
   CheckCircle, AlertCircle, RefreshCw, Terminal, Check,
   ChevronRight, Calendar, Info, Building2, GraduationCap, BookOpen, Plus, Trash2, Edit3, Loader2,
   FileSpreadsheet, AlertTriangle, CheckSquare, Square, X, Filter, UserX, FolderX,
-  Image as ImageIcon, UploadCloud, Sparkles, ClipboardList, HelpCircle, TrendingUp, Award, BarChart3, Clock
+  Image as ImageIcon, UploadCloud, Sparkles, ClipboardList, HelpCircle, TrendingUp, Award, BarChart3, Clock, Trophy, Search, Download
 } from 'lucide-react';
 import ExcelImportModal from '@/components/student/ExcelImportModal';
 import { sortClassesNaturally, getTeacherDisplayName, getSubjectColorTheme, CLASS_BACKGROUND_PRESETS, getClassBackgroundUrl } from '@/lib/schoolUtils';
@@ -47,6 +47,10 @@ interface AdminDashboardClientProps {
   exams?: any[];
   questions?: any[];
   examResults?: any[];
+  examMetadataStore?: {
+    assignments: any[];
+    exam_authors: Record<string, string>;
+  };
   token: string;
   currentUserId: string;
   viewMode: 'home' | 'users' | 'logs';
@@ -64,6 +68,7 @@ export default function AdminDashboardClient({
   exams = [],
   questions = [],
   examResults = [],
+  examMetadataStore = { assignments: [], exam_authors: {} },
   token,
   currentUserId,
   viewMode
@@ -236,6 +241,105 @@ export default function AdminDashboardClient({
     if (examStatsSubjectFilter === 'all') return subjectExamStats;
     return subjectExamStats.filter((s: any) => s.subject.id === examStatsSubjectFilter);
   }, [subjectExamStats, examStatsSubjectFilter]);
+
+  // -------------------------------------------------------------
+  // BẢNG VINH DANH GIÁO VIÊN XUẤT SẮC & ĐÓNG GÓP NGÂN HÀNG ĐỀ THI
+  // -------------------------------------------------------------
+  const [teacherSearchKeyword, setTeacherSearchKeyword] = useState('');
+  const [leaderboardSubjectFilter, setLeaderboardSubjectFilter] = useState('all');
+
+  const teacherContributionLeaderboard = React.useMemo(() => {
+    const teachers = profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department');
+    const authorMap = examMetadataStore?.exam_authors || {};
+
+    const categorize = (e: any) => {
+      const rawType = e.exam_type;
+      if (rawType) {
+        if (rawType === 'topic' || rawType === 'lesson') return 'topic';
+        if (rawType === 'thptqg') return 'thptqg';
+        if (rawType === 'vsat') return 'vsat';
+        if (rawType === 'dgnl') return 'dgnl';
+        return 'test';
+      }
+      const title = (e.title || '').toLowerCase();
+      if (title.includes('vsat') || title.includes('v-sat')) return 'vsat';
+      if (title.includes('đgnl') || title.includes('đánh giá năng lực') || title.includes('tsa')) return 'dgnl';
+      if (title.includes('thpt') || title.includes('tốt nghiệp') || title.includes('quốc gia')) return 'thptqg';
+      if (title.includes('chủ đề') || title.includes('bài tập') || e.lesson_id) return 'topic';
+      return 'test';
+    };
+
+    const board = teachers.map(teacher => {
+      // 1. Môn học phụ trách
+      const teachingClasses = initialTeacherClasses.filter((tc: any) => tc.teacher_id === teacher.id);
+      const teachingSubjectIds = Array.from(new Set(teachingClasses.map((tc: any) => tc.subject_id).filter(Boolean)));
+      const teachingSubjects = subjects.filter((s: any) => teachingSubjectIds.includes(s.id));
+
+      // 2. Các đề thi do giáo viên này đóng góp / phụ trách môn
+      const teacherExams = exams.filter((e: any) => {
+        if (authorMap[e.id] && authorMap[e.id] === teacher.id) return true;
+        if (!authorMap[e.id] && teachingSubjectIds.includes(e.subject_id)) return true;
+        return false;
+      });
+
+      const examIdsSet = new Set(teacherExams.map((e: any) => e.id));
+
+      const topicCount = teacherExams.filter(e => categorize(e) === 'topic').length;
+      const testCount = teacherExams.filter(e => categorize(e) === 'test').length;
+      const thptqgCount = teacherExams.filter(e => categorize(e) === 'thptqg').length;
+      const vsatCount = teacherExams.filter(e => categorize(e) === 'vsat').length;
+      const dgnlCount = teacherExams.filter(e => categorize(e) === 'dgnl').length;
+
+      const teacherQuestions = questions.filter((q: any) => examIdsSet.has(q.exam_id));
+      const studentSubmissions = examResults.filter((r: any) => examIdsSet.has(r.exam_id));
+      const assignedCount = (examMetadataStore?.assignments || []).filter((a: any) => examIdsSet.has(a.exam_id) || a.teacher_id === teacher.id).length;
+
+      const teacherNames = getTeacherDisplayName(teacher.email);
+      const displayNameStr = teacherNames?.fullName || teacherNames?.fptName || teacher.email.split('@')[0];
+
+      return {
+        teacher,
+        displayName: displayNameStr,
+        subjects: teachingSubjects,
+        teachingSubjectIds,
+        totalExams: teacherExams.length,
+        topicCount,
+        testCount,
+        thptqgCount,
+        vsatCount,
+        dgnlCount,
+        totalQuestions: teacherQuestions.length,
+        totalStudentAttempts: studentSubmissions.length,
+        assignedCount,
+        exams: teacherExams
+      };
+    });
+
+    // Sắp xếp vinh danh giáo viên xuất sắc theo số đề thi đóng góp
+    board.sort((a, b) => {
+      if (b.totalExams !== a.totalExams) return b.totalExams - a.totalExams;
+      return b.totalQuestions - a.totalQuestions;
+    });
+
+    return board;
+  }, [profiles, exams, questions, examResults, initialTeacherClasses, subjects, examMetadataStore]);
+
+  // Lọc bảng vinh danh theo từ khóa và môn học
+  const filteredTeacherLeaderboard = React.useMemo(() => {
+    return teacherContributionLeaderboard.filter(item => {
+      if (leaderboardSubjectFilter !== 'all') {
+        if (!item.teachingSubjectIds.includes(leaderboardSubjectFilter)) return false;
+      }
+      if (teacherSearchKeyword.trim()) {
+        const kw = teacherSearchKeyword.toLowerCase();
+        const matchName = item.displayName.toLowerCase().includes(kw);
+        const matchEmail = (item.teacher.email || '').toLowerCase().includes(kw);
+        const matchSub = item.subjects.some((s: any) => s.name.toLowerCase().includes(kw));
+        if (!matchName && !matchEmail && !matchSub) return false;
+      }
+      return true;
+    });
+  }, [teacherContributionLeaderboard, leaderboardSubjectFilter, teacherSearchKeyword]);
 
 
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -1048,55 +1152,168 @@ export default function AdminDashboardClient({
       {/* ==================================================== */}
       {activeTab === 'home' && (
         <div className="space-y-6">
-          {/* Widget chỉ số phẳng đồng bộ FPREP */}
-          <div className="grid gap-3.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-            <div className="flat-card flex items-center gap-3 p-3.5">
-              <div className="w-10 h-10 rounded-xl bg-[#e7f1ff] dark:bg-primary/20 text-primary flex items-center justify-center font-bold shrink-0 border border-[#b6d4fe]/40">
-                <Users className="h-5 w-5" />
+          {/* ==================================================== */}
+          {/* 10 THẺ CHỈ SỐ SYSTEM OVERVIEW CHUẨN FUTURE BLUE 2.0 */}
+          {/* ==================================================== */}
+          <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+            {/* Card 1: Tổng tài khoản */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Tài khoản</span>
+                <div className="w-9 h-9 rounded-xl bg-[#1746D1]/10 text-[#1746D1] dark:bg-cyan-500/20 dark:text-cyan-300 flex items-center justify-center font-bold shrink-0 border border-[#1746D1]/20 group-hover:scale-105 transition-transform">
+                  <Users className="h-4.5 w-4.5" />
+                </div>
               </div>
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Tài khoản</span>
-                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{profiles.length}</h4>
-              </div>
-            </div>
-
-            <div className="flat-card flex items-center gap-3 p-3.5">
-              <div className="w-10 h-10 rounded-xl bg-[#f8d7da] dark:bg-red-500/20 text-[#dc3545] flex items-center justify-center font-bold shrink-0 border border-[#f1aeb5]/40">
-                <Shield className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Quản trị viên</span>
-                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{profiles.filter(p => p.role === 'admin').length}</h4>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {profiles.length}
+                </h4>
+                <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">Toàn hệ thống</span>
               </div>
             </div>
 
-            <div className="flat-card flex items-center gap-3 p-3.5">
-              <div className="w-10 h-10 rounded-xl bg-[#fff3cd] dark:bg-amber-500/20 text-[#ffc107] flex items-center justify-center font-bold shrink-0 border border-[#ffe69c]/40">
-                <Activity className="h-5 w-5" />
+            {/* Card 2: Học sinh */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Học sinh THPT</span>
+                <div className="w-9 h-9 rounded-xl bg-[#00DFFF]/15 text-[#087CFF] dark:text-cyan-300 flex items-center justify-center font-bold shrink-0 border border-[#00DFFF]/30 group-hover:scale-105 transition-transform">
+                  <GraduationCap className="h-4.5 w-4.5" />
+                </div>
               </div>
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Nhật ký</span>
-                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{auditLogs.length}</h4>
-              </div>
-            </div>
-
-            <div className="flat-card flex items-center gap-3 p-3.5">
-              <div className="w-10 h-10 rounded-xl bg-[#d1e7dd] dark:bg-emerald-500/20 text-[#198754] flex items-center justify-center font-bold shrink-0 border border-[#a3cfbb]/40">
-                <Activity className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Lượt học hôm nay</span>
-                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{visits.totalAccessesToday}</h4>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {profiles.filter(p => p.role === 'student').length}
+                </h4>
+                <span className="text-[10px] text-[#64748B] dark:text-slate-400 font-bold block mt-0.5">Khối 12 FPT School</span>
               </div>
             </div>
 
-            <div className="flat-card flex items-center gap-3 p-3.5 col-span-2 sm:col-span-1">
-              <div className="w-10 h-10 rounded-xl bg-[#cff4fc] dark:bg-cyan-500/20 text-[#0dcaf0] flex items-center justify-center font-bold shrink-0 border border-[#9eeaf9]/40">
-                <CheckCircle className="h-5 w-5" />
+            {/* Card 3: Giáo viên & HOD */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Giáo viên & HOD</span>
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shrink-0 border border-emerald-500/20 group-hover:scale-105 transition-transform">
+                  <Building2 className="h-4.5 w-4.5" />
+                </div>
               </div>
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold text-[#6c757d] dark:text-muted-foreground uppercase tracking-wider">Đang trực tuyến</span>
-                <h4 className="text-base sm:text-lg font-bold font-heading text-[#212529] dark:text-foreground m-0">{activeUsers.length}</h4>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department').length}
+                </h4>
+                <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">Phụ trách bộ môn</span>
+              </div>
+            </div>
+
+            {/* Card 4: Quản trị viên */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Quản trị viên</span>
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center font-bold shrink-0 border border-purple-500/20 group-hover:scale-105 transition-transform">
+                  <Shield className="h-4.5 w-4.5" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {profiles.filter(p => p.role === 'admin').length}
+                </h4>
+                <span className="text-[10px] text-purple-600 font-bold block mt-0.5">Toàn quyền hệ thống</span>
+              </div>
+            </div>
+
+            {/* Card 5: Lớp học khối 12 */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Lớp học khối 12</span>
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center font-bold shrink-0 border border-indigo-500/20 group-hover:scale-105 transition-transform">
+                  <Users className="h-4.5 w-4.5" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {classes.length}
+                </h4>
+                <span className="text-[10px] text-indigo-600 font-bold block mt-0.5">Ban T / X / K</span>
+              </div>
+            </div>
+
+            {/* Card 6: Môn học */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Môn học đào tạo</span>
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold shrink-0 border border-amber-500/20 group-hover:scale-105 transition-transform">
+                  <BookOpen className="h-4.5 w-4.5" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {subjects.length}
+                </h4>
+                <span className="text-[10px] text-amber-600 font-bold block mt-0.5">Chương trình GD 2018</span>
+              </div>
+            </div>
+
+            {/* Card 7: Đề thi khảo thí */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Ngân hàng Đề thi</span>
+                <div className="w-9 h-9 rounded-xl bg-[#087CFF]/10 text-[#087CFF] flex items-center justify-center font-bold shrink-0 border border-[#087CFF]/20 group-hover:scale-105 transition-transform">
+                  <ClipboardList className="h-4.5 w-4.5" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {exams.length}
+                </h4>
+                <span className="text-[10px] text-[#087CFF] font-bold block mt-0.5">Đề kiểm tra & Luyện thi</span>
+              </div>
+            </div>
+
+            {/* Card 8: Câu hỏi trắc nghiệm */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Ngân hàng Câu hỏi</span>
+                <div className="w-9 h-9 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center font-bold shrink-0 border border-teal-500/20 group-hover:scale-105 transition-transform">
+                  <HelpCircle className="h-4.5 w-4.5" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {questions.length}
+                </h4>
+                <span className="text-[10px] text-teal-600 font-bold block mt-0.5">MCQ / Đúng-Sai / Điền số</span>
+              </div>
+            </div>
+
+            {/* Card 9: Tổng lượt nộp bài */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Lượt làm bài</span>
+                <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center font-bold shrink-0 border border-rose-500/20 group-hover:scale-105 transition-transform">
+                  <TrendingUp className="h-4.5 w-4.5" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {examResults.length}
+                </h4>
+                <span className="text-[10px] text-rose-600 font-bold block mt-0.5">Toàn thời gian</span>
+              </div>
+            </div>
+
+            {/* Card 10: Đang trực tuyến */}
+            <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-4.5 shadow-2xs hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between gap-3 group">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">Đang trực tuyến</span>
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold shrink-0 border border-emerald-500/30 group-hover:scale-105 transition-transform">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping mr-1" />
+                  <Activity className="h-4 w-4" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-2xl sm:text-3xl font-black font-heading text-[#14213D] dark:text-white m-0 tracking-tight">
+                  {activeUsers.length}
+                </h4>
+                <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">10 phút gần nhất</span>
               </div>
             </div>
           </div>
@@ -1104,30 +1321,30 @@ export default function AdminDashboardClient({
           {/* ========================================================================= */}
           {/* PHÂN HỆ THỐNG KÊ KHẢO THÍ CHUYÊN SÂU THEO MÔN & THỜI GIAN (ADMIN) */}
           {/* ========================================================================= */}
-          <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-5">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border pb-4">
+          <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E2E8F0] dark:border-[#1B317A] pb-4">
               <div>
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary mb-1">
-                  <BarChart3 className="h-3.5 w-3.5" /> Báo cáo Khảo thí & Luyện đề
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-[#1746D1]/10 px-2.5 py-0.5 text-[11px] font-bold text-[#1746D1] dark:text-cyan-300 mb-1">
+                  <BarChart3 className="h-3.5 w-3.5" /> Báo cáo Khảo thí & Luyện đề Toàn trường
                 </div>
-                <h3 className="font-extrabold text-base sm:text-lg text-foreground tracking-tight m-0 flex items-center gap-2">
+                <h3 className="font-extrabold font-heading text-base sm:text-lg text-[#14213D] dark:text-white tracking-tight m-0 flex items-center gap-2">
                   Thống kê Ngân hàng đề, Câu hỏi & Lượt làm bài theo Môn học
                 </h3>
-                <p className="text-xs text-muted-foreground m-0">
-                  Dữ liệu thời gian thực giúp quản trị viên và ban giám hiệu đánh giá học liệu và mức độ tương tác của học sinh.
+                <p className="text-xs text-[#64748B] dark:text-slate-300 m-0">
+                  Dữ liệu thời gian thực giúp ban giám hiệu và tổ chuyên môn đánh giá học liệu và chất lượng tự học của học sinh.
                 </p>
               </div>
 
               {/* Bộ lọc thời gian & bộ lọc môn */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* Bộ lọc thời gian */}
-                <div className="flex items-center bg-muted/60 p-1 rounded-xl border border-border text-xs font-bold">
+                <div className="flex items-center bg-[#F8FAFC] dark:bg-[#0D226B] p-1 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] text-xs font-bold">
                   <button
                     onClick={() => setExamStatsTimeRange('today')}
                     className={`px-3 py-1.5 rounded-lg transition-all ${
                       examStatsTimeRange === 'today'
-                        ? 'bg-background text-foreground shadow-xs'
-                        : 'text-muted-foreground hover:text-foreground'
+                        ? 'bg-white dark:bg-[#1746D1] text-[#14213D] dark:text-white shadow-xs font-black'
+                        : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D]'
                     }`}
                   >
                     Hôm nay
@@ -1136,8 +1353,8 @@ export default function AdminDashboardClient({
                     onClick={() => setExamStatsTimeRange('week')}
                     className={`px-3 py-1.5 rounded-lg transition-all ${
                       examStatsTimeRange === 'week'
-                        ? 'bg-background text-primary shadow-xs'
-                        : 'text-muted-foreground hover:text-foreground'
+                        ? 'bg-white dark:bg-[#1746D1] text-[#1746D1] dark:text-white shadow-xs font-black'
+                        : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D]'
                     }`}
                   >
                     Trong tuần (7 ngày)
@@ -1146,8 +1363,8 @@ export default function AdminDashboardClient({
                     onClick={() => setExamStatsTimeRange('month')}
                     className={`px-3 py-1.5 rounded-lg transition-all ${
                       examStatsTimeRange === 'month'
-                        ? 'bg-background text-foreground shadow-xs'
-                        : 'text-muted-foreground hover:text-foreground'
+                        ? 'bg-white dark:bg-[#1746D1] text-[#14213D] dark:text-white shadow-xs font-black'
+                        : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D]'
                     }`}
                   >
                     Trong tháng (30 ngày)
@@ -1156,8 +1373,8 @@ export default function AdminDashboardClient({
                     onClick={() => setExamStatsTimeRange('all')}
                     className={`px-3 py-1.5 rounded-lg transition-all ${
                       examStatsTimeRange === 'all'
-                        ? 'bg-background text-foreground shadow-xs'
-                        : 'text-muted-foreground hover:text-foreground'
+                        ? 'bg-white dark:bg-[#1746D1] text-[#14213D] dark:text-white shadow-xs font-black'
+                        : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D]'
                     }`}
                   >
                     Tất cả
@@ -1168,7 +1385,7 @@ export default function AdminDashboardClient({
                 <select
                   value={examStatsSubjectFilter}
                   onChange={(e) => setExamStatsSubjectFilter(e.target.value)}
-                  className="rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground focus:outline-none"
+                  className="rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0D226B] px-3 py-1.5 text-xs font-bold text-[#14213D] dark:text-white focus:outline-none"
                 >
                   <option value="all">Tất cả môn học ({subjects.length})</option>
                   {subjects.map((s: any) => (
@@ -1180,39 +1397,39 @@ export default function AdminDashboardClient({
 
             {/* 4 Thẻ tổng quan nhanh về Khảo thí */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-              <div className="p-3.5 rounded-xl border border-border bg-muted/20">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tổng số đề thi</span>
+              <div className="p-4 rounded-xl border border-orange-500/30 bg-orange-500/10 dark:bg-orange-950/20">
+                <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider block">Tổng số đề thi</span>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <h4 className="text-xl font-black text-foreground m-0">{totalStatsSummary.totalExams}</h4>
-                  <span className="text-[11px] text-muted-foreground font-semibold">đề đã tạo</span>
+                  <h4 className="text-xl sm:text-2xl font-black font-heading text-[#14213D] dark:text-white m-0">{totalStatsSummary.totalExams}</h4>
+                  <span className="text-[11px] text-[#64748B] dark:text-slate-300 font-semibold">đề đã tạo</span>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-border bg-muted/20">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tổng số câu hỏi</span>
+              <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10 dark:bg-cyan-950/20">
+                <span className="text-[10px] font-bold text-[#087CFF] dark:text-cyan-300 uppercase tracking-wider block">Tổng số câu hỏi</span>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <h4 className="text-xl font-black text-primary m-0">{totalStatsSummary.totalQuestions}</h4>
-                  <span className="text-[11px] text-muted-foreground font-semibold">câu trắc nghiệm</span>
+                  <h4 className="text-xl sm:text-2xl font-black font-heading text-[#14213D] dark:text-cyan-300 m-0">{totalStatsSummary.totalQuestions}</h4>
+                  <span className="text-[11px] text-[#64748B] dark:text-slate-300 font-semibold">câu trắc nghiệm</span>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
-                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block flex items-center gap-1">
+              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/20">
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block flex items-center gap-1">
                   <TrendingUp className="h-3 w-3" /> Lượt làm ({examStatsTimeRange === 'today' ? 'Hôm nay' : examStatsTimeRange === 'week' ? '7 ngày' : examStatsTimeRange === 'month' ? '30 ngày' : 'Toàn thời gian'})
                 </span>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <h4 className="text-xl font-black text-emerald-600 dark:text-emerald-400 m-0">{totalStatsSummary.totalAttemptsInPeriod}</h4>
-                  <span className="text-[11px] text-muted-foreground font-semibold">lượt nộp bài</span>
+                  <h4 className="text-xl sm:text-2xl font-black font-heading text-[#14213D] dark:text-emerald-400 m-0">{totalStatsSummary.totalAttemptsInPeriod}</h4>
+                  <span className="text-[11px] text-[#64748B] dark:text-slate-300 font-semibold">lượt nộp bài</span>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-purple-500/20 bg-purple-500/5">
-                <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider block flex items-center gap-1">
+              <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-500/10 dark:bg-purple-950/20">
+                <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block flex items-center gap-1">
                   <Users className="h-3 w-3" /> Học sinh tham gia
                 </span>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <h4 className="text-xl font-black text-purple-600 dark:text-purple-400 m-0">{totalStatsSummary.totalUniqueStudentsInPeriod}</h4>
-                  <span className="text-[11px] text-muted-foreground font-semibold">học sinh tích cực</span>
+                  <h4 className="text-xl sm:text-2xl font-black font-heading text-[#14213D] dark:text-purple-300 m-0">{totalStatsSummary.totalUniqueStudentsInPeriod}</h4>
+                  <span className="text-[11px] text-[#64748B] dark:text-slate-300 font-semibold">học sinh tích cực</span>
                 </div>
               </div>
             </div>
@@ -1327,35 +1544,289 @@ export default function AdminDashboardClient({
             </div>
           </div>
 
+          {/* ========================================================================= */}
+          {/* PHÂN HỆ VINH DANH GIÁO VIÊN XUẤT SẮC & ĐÓNG GÓP NGÂN HÀNG ĐỀ THI (ADMIN) */}
+          {/* ========================================================================= */}
+          <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
+            
+            {/* Header Phân Hệ */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#E2E8F0] dark:border-[#1B317A] pb-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-0.5 text-[11px] font-black text-amber-600 dark:text-amber-400 mb-1">
+                  <Trophy className="h-3.5 w-3.5 text-amber-500 animate-pulse" /> Bảng Vinh Danh Khảo Thí & Sư Phạm Xuất Sắc
+                </div>
+                <h3 className="font-extrabold font-heading text-base sm:text-xl text-[#14213D] dark:text-white tracking-tight m-0 flex items-center gap-2">
+                  Tổng Hợp Số Lượng Đề Thi Giáo Viên Upload & Vinh Danh Giáo Viên Xuất Sắc
+                </h3>
+                <p className="text-xs text-[#64748B] dark:text-slate-300 m-0 mt-0.5">
+                  Hệ thống tự động thống kê số đề thi, câu hỏi từng Thầy/Cô đã biên soạn và đóng góp vào Ngân hàng đề thi để Quản trị viên theo dõi và khen thưởng.
+                </p>
+              </div>
+
+              {/* Bộ lọc & Tìm kiếm Giáo viên */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="relative min-w-[200px]">
+                  <input
+                    type="text"
+                    placeholder="Tìm tên Thầy/Cô hoặc email..."
+                    value={teacherSearchKeyword}
+                    onChange={(e) => setTeacherSearchKeyword(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0D226B] text-xs font-semibold text-[#14213D] dark:text-white focus:outline-none focus:border-[#087CFF]"
+                  />
+                  <Search className="h-3.5 w-3.5 text-[#64748B] absolute left-2.5 top-2.5" />
+                </div>
+
+                <select
+                  value={leaderboardSubjectFilter}
+                  onChange={(e) => setLeaderboardSubjectFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0D226B] text-xs font-bold text-[#14213D] dark:text-white focus:outline-none"
+                >
+                  <option value="all">Tất cả môn học</option>
+                  {subjects.map((sub: any) => (
+                    <option key={sub.id} value={sub.id}>{sub.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Chỉ Số Nhanh Về Đóng Góp Của Giáo Viên */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D226B]/50 border border-[#E2E8F0] dark:border-[#1B317A] flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Giáo viên tham gia</span>
+                  <div className="text-base sm:text-lg font-black font-heading text-[#14213D] dark:text-white">{teacherContributionLeaderboard.length} Thầy/Cô</div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D226B]/50 border border-[#E2E8F0] dark:border-[#1B317A] flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                  <ClipboardList className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Đề thi đã upload</span>
+                  <div className="text-base sm:text-lg font-black font-heading text-[#14213D] dark:text-cyan-400">{exams.length} đề thi</div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D226B]/50 border border-[#E2E8F0] dark:border-[#1B317A] flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <BookOpen className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Câu hỏi trắc nghiệm</span>
+                  <div className="text-base sm:text-lg font-black font-heading text-[#14213D] dark:text-emerald-400">{questions.length} câu</div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/15 via-[#F8FAFC] to-[#F8FAFC] dark:via-[#0D226B]/50 dark:to-[#0D226B]/50 border border-amber-500/40 flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-400/40">
+                  <Trophy className="h-5 w-5 text-amber-500" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-300 uppercase">Top 1 Đóng góp</span>
+                  <div className="text-sm font-black font-heading text-[#14213D] dark:text-amber-300 truncate" title={teacherContributionLeaderboard[0]?.displayName || 'Chưa có'}>
+                    {teacherContributionLeaderboard[0]?.displayName || 'Chưa có'} ({teacherContributionLeaderboard[0]?.totalExams || 0} đề)
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bảng Xếp Hạng & Danh Hiệu Giáo Viên Xuất Sắc */}
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-muted/40 border-b border-border text-foreground font-bold">
+                    <th className="p-3 text-center w-14">Hạng</th>
+                    <th className="p-3">Giáo viên</th>
+                    <th className="p-3">Môn học phụ trách</th>
+                    <th className="p-3 text-center">Tổng Đề Upload</th>
+                    <th className="p-3 text-center hidden md:table-cell">Phân loại đề</th>
+                    <th className="p-3 text-center">Tổng Câu Hỏi</th>
+                    <th className="p-3 text-center hidden lg:table-cell">Lượt học sinh thi</th>
+                    <th className="p-3 text-center">Danh hiệu Vinh danh</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredTeacherLeaderboard.map((item, idx) => {
+                    const isTop1 = idx === 0 && item.totalExams > 0;
+                    const isTop2 = idx === 1 && item.totalExams > 0;
+                    const isTop3 = idx === 2 && item.totalExams > 0;
+
+                    let rankBadge = (
+                      <span className="font-bold text-muted-foreground">#{idx + 1}</span>
+                    );
+                    let awardTitle = 'Giáo viên Tích cực';
+                    let awardBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+
+                    if (isTop1) {
+                      rankBadge = (
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/25 border border-amber-400 text-amber-300 font-black text-xs shadow-[0_0_12px_rgba(251,191,36,0.5)]">
+                          🥇 1
+                        </span>
+                      );
+                      awardTitle = 'Nhà giáo Xuất sắc & Chuyên gia Khảo thí Kim Cương';
+                      awardBadgeClass = 'bg-amber-500/20 text-amber-300 border-amber-400/50 shadow-[0_0_10px_rgba(251,191,36,0.3)] font-black';
+                    } else if (isTop2) {
+                      rankBadge = (
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300/25 border border-slate-300 text-slate-100 font-black text-xs shadow-xs">
+                          🥈 2
+                        </span>
+                      );
+                      awardTitle = 'Nhà giáo Tiêu biểu & Chuyên gia Khảo thí Vàng';
+                      awardBadgeClass = 'bg-slate-300/20 text-slate-200 border-slate-300/50 font-black';
+                    } else if (isTop3) {
+                      rankBadge = (
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/25 border border-amber-600 text-amber-400 font-black text-xs shadow-xs">
+                          🥉 3
+                        </span>
+                      );
+                      awardTitle = 'Nhà giáo Tích cực & Chuyên gia Khảo thí Bạc';
+                      awardBadgeClass = 'bg-amber-700/20 text-amber-300 border-amber-600/50 font-bold';
+                    } else if (item.totalExams >= 5) {
+                      awardTitle = 'Đại sứ Đóng góp Đề thi FPREP';
+                      awardBadgeClass = 'bg-cyan-500/15 text-cyan-300 border-cyan-400/30 font-bold';
+                    }
+
+                    return (
+                      <tr 
+                        key={item.teacher.id} 
+                        className={`hover:bg-muted/30 transition-colors ${isTop1 ? 'bg-amber-500/5' : ''}`}
+                      >
+                        {/* Thứ hạng */}
+                        <td className="p-3 text-center align-middle">
+                          {rankBadge}
+                        </td>
+
+                        {/* Thông tin giáo viên */}
+                        <td className="p-3 align-middle">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                              isTop1 ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'bg-primary/20 text-primary border border-primary/30'
+                            }`}>
+                              {item.displayName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-extrabold text-foreground block text-xs hover:text-primary transition-colors">
+                                {item.displayName}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground block truncate max-w-[180px]">
+                                {item.teacher.email}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Môn học phụ trách */}
+                        <td className="p-3 align-middle">
+                          <div className="flex flex-wrap gap-1">
+                            {item.subjects.length > 0 ? (
+                              item.subjects.map((s: any) => (
+                                <span key={s.id} className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
+                                  {s.name}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground italic text-[10px]">Chưa gán môn</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Tổng Đề Upload */}
+                        <td className="p-3 text-center align-middle">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black ${
+                            item.totalExams > 0 ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-400/30 shadow-xs' : 'text-muted-foreground'
+                          }`}>
+                            <ClipboardList className="h-3 w-3" />
+                            <strong>{item.totalExams}</strong> đề
+                          </span>
+                        </td>
+
+                        {/* Phân loại đề */}
+                        <td className="p-3 text-center align-middle hidden md:table-cell">
+                          <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
+                            <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded" title="Đề chủ đề">
+                              CĐ: {item.topicCount}
+                            </span>
+                            <span className="bg-blue-900/40 text-blue-300 px-1.5 py-0.5 rounded" title="Kiểm tra">
+                              KT: {item.testCount}
+                            </span>
+                            <span className="bg-purple-900/40 text-purple-300 px-1.5 py-0.5 rounded" title="THPTQG">
+                              THPT: {item.thptqgCount}
+                            </span>
+                            {(item.vsatCount > 0 || item.dgnlCount > 0) && (
+                              <span className="bg-amber-900/40 text-amber-300 px-1.5 py-0.5 rounded" title="VSAT / ĐGNL">
+                                ĐG: {item.vsatCount + item.dgnlCount}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Tổng Câu Hỏi */}
+                        <td className="p-3 text-center align-middle font-bold text-foreground">
+                          <span className="text-emerald-400 font-extrabold">{item.totalQuestions}</span> câu
+                        </td>
+
+                        {/* Lượt học sinh thi */}
+                        <td className="p-3 text-center align-middle font-bold text-muted-foreground hidden lg:table-cell">
+                          {item.totalStudentAttempts} lượt
+                        </td>
+
+                        {/* Danh hiệu Vinh danh */}
+                        <td className="p-3 text-center align-middle">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] border ${awardBadgeClass}`}>
+                            <Award className="h-3 w-3 shrink-0" />
+                            <span>{awardTitle}</span>
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {filteredTeacherLeaderboard.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-muted-foreground italic text-xs">
+                        Không tìm thấy giáo viên nào phù hợp với bộ lọc tìm kiếm.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+
           <div className="grid gap-6 md:grid-cols-12 items-start">
             {/* Cột Trái: Bảo trì hệ thống & Khởi tạo lớp */}
             <div className="md:col-span-6 space-y-4">
 
               {/* KHỞI TẠO LỚP HỌC MỚI (Admin) */}
-              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                <h3 className="font-extrabold text-sm border-b border-border pb-2 flex items-center gap-1.5 text-foreground/80">
-                  <Users className="h-4.5 w-4.5 text-primary" /> Khởi tạo lớp học mới
+              <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 shadow-sm space-y-4">
+                <h3 className="font-extrabold font-heading text-sm border-b border-[#E2E8F0] dark:border-[#1B317A] pb-2 flex items-center gap-1.5 text-[#14213D] dark:text-white">
+                  <Users className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Khởi tạo lớp học mới
                 </h3>
                 
                 <div className="space-y-3 text-xs">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên lớp học</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Tên lớp học</label>
                     <input
                       type="text"
                       placeholder="Ví dụ: 12T8, 12X5, 12K2..."
                       value={newClassName}
                       onChange={(e) => setNewClassName(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-bold text-foreground"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B] px-3 py-2 focus:outline-none font-bold text-[#14213D] dark:text-white"
                     />
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Ban đào tạo</label>
+                      <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Ban đào tạo</label>
                       <select
                         value={newClassGroup}
                         onChange={(e) => setNewClassGroup(e.target.value as any)}
-                        className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
+                        className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B] px-2.5 py-2 focus:outline-none font-bold text-[#1746D1] dark:text-cyan-400"
                       >
                         <option value="T">Ban Tự nhiên (T)</option>
                         <option value="X">Ban Xã hội (X)</option>
@@ -1364,19 +1835,19 @@ export default function AdminDashboardClient({
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Niên khóa</label>
+                      <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Niên khóa</label>
                       <input
                         type="text"
                         placeholder="2026-2027"
                         value={newClassYear}
                         onChange={(e) => setNewClassYear(e.target.value)}
-                        className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none text-foreground font-semibold"
+                        className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B] px-3 py-2 focus:outline-none text-[#14213D] dark:text-white font-semibold"
                       />
                     </div>
                   </div>
 
                   {createClassMessage && (
-                    <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 p-2.5 text-[10px] font-bold text-primary">
+                    <div className="flex items-center gap-2 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-2.5 text-[11px] font-bold text-[#1746D1] dark:text-cyan-300">
                       <Info className="h-3.5 w-3.5" />
                       <span>{createClassMessage}</span>
                     </div>
@@ -1385,7 +1856,7 @@ export default function AdminDashboardClient({
                   <button
                     onClick={handleCreateClass}
                     disabled={creatingClass}
-                    className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-black text-xs hover:opacity-95 shadow-md shadow-primary/20 transition-all text-center uppercase tracking-wider disabled:opacity-50"
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] text-white font-black text-xs hover:shadow-md transition-all text-center uppercase tracking-wider disabled:opacity-50 cursor-pointer"
                   >
                     {creatingClass ? 'Đang khởi tạo...' : 'Khởi tạo lớp học'}
                   </button>
@@ -1393,33 +1864,33 @@ export default function AdminDashboardClient({
               </div>
 
               {/* DANH SÁCH LỚP HỌC & CRUD */}
-              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                <h3 className="font-extrabold text-sm border-b border-border pb-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-foreground/80">
-                    <Users className="h-4.5 w-4.5 text-primary" /> Quản lý danh sách lớp học ({classes.length})
+              <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 shadow-sm space-y-4">
+                <h3 className="font-extrabold font-heading text-sm border-b border-[#E2E8F0] dark:border-[#1B317A] pb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[#14213D] dark:text-white">
+                    <Users className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Quản lý danh sách lớp học ({classes.length})
                   </span>
                 </h3>
 
                 {editingClassId ? (
                   /* Form sửa lớp */
-                  <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3 text-xs">
-                    <p className="font-bold text-primary">Đang chỉnh sửa lớp học</p>
+                  <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-3 text-xs">
+                    <p className="font-bold text-[#1746D1] dark:text-cyan-400">Đang chỉnh sửa lớp học</p>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-muted-foreground uppercase">Tên lớp</label>
+                      <label className="text-[9px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Tên lớp</label>
                       <input
                         type="text"
                         value={editingClassName}
                         onChange={(e) => setEditingClassName(e.target.value)}
-                        className="w-full rounded border border-border bg-background px-3 py-1.5 text-xs font-bold focus:outline-none"
+                        className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0D226B] px-3 py-1.5 text-xs font-bold focus:outline-none"
                       />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-muted-foreground uppercase">Ban</label>
+                        <label className="text-[9px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Ban</label>
                         <select
                           value={editingClassGroup}
                           onChange={(e) => setEditingClassGroup(e.target.value as any)}
-                          className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs font-bold focus:outline-none"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0D226B] px-2.5 py-1.5 text-xs font-bold focus:outline-none"
                         >
                           <option value="T">Tự nhiên (T)</option>
                           <option value="X">Xã hội (X)</option>
@@ -1427,25 +1898,25 @@ export default function AdminDashboardClient({
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-muted-foreground uppercase">Niên khóa</label>
+                        <label className="text-[9px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Niên khóa</label>
                         <input
                           type="text"
                           value={editingClassYear}
                           onChange={(e) => setEditingClassYear(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-1.5 text-xs focus:outline-none"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0D226B] px-3 py-1.5 text-xs focus:outline-none"
                         />
                       </div>
                     </div>
                     <div className="flex gap-2 justify-end pt-1">
                       <button
                         onClick={() => setEditingClassId(null)}
-                        className="px-3 py-1.5 rounded-lg border border-border font-bold text-muted-foreground hover:bg-background"
+                        className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] dark:border-[#1B317A] font-bold text-[#64748B] hover:bg-white cursor-pointer"
                       >
                         Hủy
                       </button>
                       <button
                         onClick={handleUpdateClass}
-                        className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-bold"
+                        className="px-3 py-1.5 rounded-lg bg-[#1746D1] text-white font-bold cursor-pointer"
                       >
                         Lưu
                       </button>
@@ -1455,26 +1926,26 @@ export default function AdminDashboardClient({
 
                 <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
                   {loadingClasses ? (
-                    <p className="text-xs text-muted-foreground italic text-center py-4">Đang tải danh sách lớp...</p>
+                    <p className="text-xs text-[#64748B] italic text-center py-4">Đang tải danh sách lớp...</p>
                   ) : classes.map(cls => (
-                    <div key={cls.id} className="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/10 text-xs">
+                    <div key={cls.id} className="flex items-center justify-between p-3 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/40 text-xs">
                       <div>
-                        <p className="font-extrabold text-foreground">{cls.name}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          Ban: <span className="font-bold text-primary">{cls.group_type === 'T' ? 'Tự nhiên' : cls.group_type === 'X' ? 'Xã hội' : 'Khai phóng'}</span>
+                        <p className="font-extrabold text-[#14213D] dark:text-white">{cls.name}</p>
+                        <p className="text-[10px] text-[#64748B] dark:text-slate-400">
+                          Ban: <span className="font-bold text-[#1746D1] dark:text-cyan-400">{cls.group_type === 'T' ? 'Tự nhiên' : cls.group_type === 'X' ? 'Xã hội' : 'Khai phóng'}</span>
                           {' | '} Niên khóa: <span className="font-semibold">{cls.academic_year}</span>
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           onClick={() => startEditClass(cls)}
-                          className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
+                          className="px-2.5 py-1 rounded-lg border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0B1B55] hover:bg-[#F1F5F9] font-bold text-[#1746D1] dark:text-cyan-400 transition-all text-[11px] cursor-pointer"
                         >
                           Sửa
                         </button>
                         <button
                           onClick={() => handleDeleteClass(cls.id)}
-                          className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
+                          className="px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-900 bg-white dark:bg-[#0B1B55] hover:bg-red-50 font-bold text-red-500 transition-all text-[11px] cursor-pointer"
                         >
                           Xóa
                         </button>
@@ -1482,7 +1953,7 @@ export default function AdminDashboardClient({
                     </div>
                   ))}
                   {classes.length === 0 && !loadingClasses && (
-                    <p className="text-xs text-muted-foreground italic text-center py-4">Chưa có lớp học nào được khởi tạo.</p>
+                    <p className="text-xs text-[#64748B] italic text-center py-4">Chưa có lớp học nào được khởi tạo.</p>
                   )}
                 </div>
               </div>
@@ -1492,59 +1963,59 @@ export default function AdminDashboardClient({
             <div className="md:col-span-6 space-y-6">
               
               {/* THÀNH VIÊN ĐANG TỰ HỌC */}
-              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                <h3 className="font-extrabold text-sm border-b border-border pb-2 flex items-center gap-1.5 text-emerald-600">
+              <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 shadow-sm space-y-4">
+                <h3 className="font-extrabold font-heading text-sm border-b border-[#E2E8F0] dark:border-[#1B317A] pb-2 flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                   <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" /> Thành viên đang tự học ({activeUsers.length})
                 </h3>
 
                 <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
                   {activeUsers.map((user) => (
-                    <div key={user.studentId} className="flex gap-3 items-start border-b border-border/50 pb-3 last:border-b-0 last:pb-0 text-xs">
+                    <div key={user.studentId} className="flex gap-3 items-start border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3 last:border-b-0 last:pb-0 text-xs">
                       <div className="h-7 w-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-500 shrink-0 mt-0.5">
                         <Activity className="h-3.5 w-3.5 animate-pulse" />
                       </div>
                       <div className="min-w-0 space-y-1 font-semibold">
-                        <p className="text-foreground">{user.studentName} <span className="text-[10px] text-muted-foreground">({user.mshs})</span></p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {user.actionType}: <strong className="text-primary">{user.lessonTitle}</strong>
+                        <p className="text-[#14213D] dark:text-white">{user.studentName} <span className="text-[10px] text-[#64748B] dark:text-slate-400">({user.mshs})</span></p>
+                        <p className="text-[10px] text-[#64748B] dark:text-slate-400">
+                          {user.actionType}: <strong className="text-[#1746D1] dark:text-cyan-400">{user.lessonTitle}</strong>
                         </p>
-                        <span className="block text-[8px] text-muted-foreground">
+                        <span className="block text-[8px] text-[#64748B] dark:text-slate-500">
                           Lúc: {user.lastActivityTime}
                         </span>
                       </div>
                     </div>
                   ))}
                   {activeUsers.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic text-center py-6">Hiện không có học sinh nào đang hoạt động tự học.</p>
+                    <p className="text-xs text-[#64748B] italic text-center py-6">Hiện không có học sinh nào đang hoạt động tự học.</p>
                   )}
                 </div>
               </div>
 
               {/* Lịch sử thao tác bảo mật gần đây */}
-              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                <h3 className="font-extrabold text-sm border-b border-border pb-2 flex items-center gap-1.5">
-                  <Activity className="h-4.5 w-4.5 text-secondary" /> Lịch sử thao tác bảo mật gần đây
+              <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 shadow-sm space-y-4">
+                <h3 className="font-extrabold font-heading text-sm border-b border-[#E2E8F0] dark:border-[#1B317A] pb-2 flex items-center gap-1.5 text-[#14213D] dark:text-white">
+                  <Activity className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Lịch sử thao tác bảo mật gần đây
                 </h3>
 
                 <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
                   {auditLogs.slice(0, 5).map(log => (
-                    <div key={log.id} className="flex gap-3 items-start border-b border-border/50 pb-3 last:border-b-0 last:pb-0 text-xs">
-                      <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 mt-0.5 font-bold">
+                    <div key={log.id} className="flex gap-3 items-start border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3 last:border-b-0 last:pb-0 text-xs">
+                      <div className="h-7 w-7 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[#1746D1] dark:text-cyan-400 shrink-0 mt-0.5 font-bold">
                         A
                       </div>
                       <div className="min-w-0 space-y-1 font-semibold">
-                        <p className="text-foreground truncate">{log.actor?.email || 'Hệ thống'}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          Hành động: <strong className="text-primary font-mono">{log.action}</strong> trên bảng <strong className="font-mono">{log.target_table}</strong>
+                        <p className="text-[#14213D] dark:text-white truncate">{log.actor?.email || 'Hệ thống'}</p>
+                        <p className="text-[10px] text-[#64748B] dark:text-slate-400 truncate">
+                          Hành động: <strong className="text-[#1746D1] dark:text-cyan-400 font-mono">{log.action}</strong> trên bảng <strong className="font-mono">{log.target_table}</strong>
                         </p>
-                        <span className="text-[9px] text-muted-foreground">
+                        <span className="text-[9px] text-[#64748B] dark:text-slate-500">
                           {safeDateTimeFormat(log.created_at)}
                         </span>
                       </div>
                     </div>
                   ))}
                   {auditLogs.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic text-center py-6">Chưa có nhật ký hoạt động bảo mật.</p>
+                    <p className="text-xs text-[#64748B] italic text-center py-6">Chưa có nhật ký hoạt động bảo mật.</p>
                   )}
                 </div>
               </div>
@@ -1556,39 +2027,37 @@ export default function AdminDashboardClient({
       {/* ==================================================== */}
       {/* 2. CHẾ ĐỘ QUẢN LÝ PHÂN QUYỀN (USERS VIEW) */}
       {/* ==================================================== */}
-      {/* 2. CHẾ ĐỘ QUẢN LÝ PHÂN QUYỀN (USERS VIEW) */}
-      {/* ==================================================== */}
       {activeTab === 'users' && (
         <div className="space-y-6 animate-fade-in">
           
           {/* THANH ĐIỀU HƯỚNG 3 MỤC QUẢN LÝ DÀNH RIÊNG CHO ADMIN */}
-          <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+          <div className="flex flex-wrap gap-2 border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3">
             <button
               onClick={() => { setAdminSubTab('classes'); setEditingUserId(null); }}
-              className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
                 adminSubTab === 'classes' 
-                  ? 'bg-primary text-primary-foreground border-primary shadow-xs' 
-                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
+                  ? 'bg-[#1746D1] text-white border-transparent shadow-md font-extrabold' 
+                  : 'bg-white dark:bg-[#0B1B55]/80 border-[#E2E8F0] dark:border-[#1B317A] text-[#14213D] dark:text-slate-300 hover:bg-[#F8FAFC]'
               }`}
             >
               <Building2 className="h-4 w-4" /> 1. Quản lý Lớp học & Phân công môn
             </button>
             <button
               onClick={() => { setAdminSubTab('teachers'); setEditingUserId(null); setNewUserRole('teacher'); }}
-              className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
                 adminSubTab === 'teachers' 
-                  ? 'bg-primary text-primary-foreground border-primary shadow-xs' 
-                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
+                  ? 'bg-[#1746D1] text-white border-transparent shadow-md font-extrabold' 
+                  : 'bg-white dark:bg-[#0B1B55]/80 border-[#E2E8F0] dark:border-[#1B317A] text-[#14213D] dark:text-slate-300 hover:bg-[#F8FAFC]'
               }`}
             >
               <Users className="h-4 w-4" /> 2. Quản lý Giáo viên & HOD
             </button>
             <button
               onClick={() => { setAdminSubTab('students'); setEditingUserId(null); setNewUserRole('student'); }}
-              className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
                 adminSubTab === 'students' 
-                  ? 'bg-primary text-primary-foreground border-primary shadow-xs' 
-                  : 'bg-background border-border text-muted-foreground hover:bg-muted'
+                  ? 'bg-[#1746D1] text-white border-transparent shadow-md font-extrabold' 
+                  : 'bg-white dark:bg-[#0B1B55]/80 border-[#E2E8F0] dark:border-[#1B317A] text-[#14213D] dark:text-slate-300 hover:bg-[#F8FAFC]'
               }`}
             >
               <GraduationCap className="h-4 w-4" /> 3. Quản lý Học sinh & Xếp lớp
@@ -1602,19 +2071,19 @@ export default function AdminDashboardClient({
             <div className="grid gap-6 md:grid-cols-12 items-start">
               
               {/* BẢNG DANH SÁCH LỚP HỌC */}
-              <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm space-y-0">
-                <div className="p-4 border-b border-border bg-muted/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="md:col-span-8 bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl overflow-hidden shadow-sm space-y-0">
+                <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <h3 className="font-extrabold text-sm flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-primary" /> Danh sách Lớp học Khối 12 ({classes.length} lớp)
+                    <h3 className="font-extrabold text-sm flex items-center gap-2 m-0 text-[#14213D] dark:text-white">
+                      <Building2 className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Danh sách Lớp học Khối 12 ({classes.length} lớp)
                     </h3>
-                    <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Sắp xếp chuẩn Ban đào tạo & Phân công giáo viên bộ môn</p>
+                    <p className="text-[11px] text-[#64748B] dark:text-slate-400 font-semibold mt-0.5 m-0">Sắp xếp chuẩn Ban đào tạo & Phân công giáo viên bộ môn</p>
                   </div>
 
                   {/* THANH THAO TÁC HÀNG LOẠT LỚP HỌC */}
                   {selectedClassIds.length > 0 && (
-                    <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 px-3 py-1.5 rounded-xl">
-                      <span className="text-xs font-bold text-destructive">Đã chọn: {selectedClassIds.length} lớp</span>
+                    <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-xl">
+                      <span className="text-xs font-bold text-red-600 dark:text-red-400">Đã chọn: {selectedClassIds.length} lớp</span>
                       <button
                         onClick={() => handleOpenBatchModal({
                           title: `Xóa ${selectedClassIds.length} Lớp học đã chọn`,
@@ -1624,13 +2093,13 @@ export default function AdminDashboardClient({
                           payload: { classIds: selectedClassIds },
                           requiresTextConfirm: false
                         })}
-                        className="inline-flex items-center gap-1 bg-destructive hover:bg-destructive/90 text-white font-bold text-xs px-2.5 py-1 rounded-lg transition-colors shadow-xs"
+                        className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-2.5 py-1 rounded-lg transition-colors shadow-xs"
                       >
                         <Trash2 className="h-3.5 w-3.5" /> Xóa lớp đã chọn
                       </button>
                       <button
                         onClick={() => setSelectedClassIds([])}
-                        className="text-xs font-semibold text-muted-foreground hover:text-foreground px-1.5 py-0.5"
+                        className="text-xs font-semibold text-[#64748B] dark:text-slate-400 hover:text-[#14213D] dark:hover:text-white px-1.5 py-0.5"
                       >
                         Bỏ chọn
                       </button>
@@ -1639,81 +2108,81 @@ export default function AdminDashboardClient({
                 </div>
 
                 {/* THANH BỘ LỌC BAN & TÌM KIẾM LỚP HỌC */}
-                <div className="p-3 border-b border-border bg-background flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="p-3.5 border-b border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0B1B55]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-1.5 overflow-x-auto">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase shrink-0 mr-1">Ban:</span>
+                    <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase shrink-0 mr-1">Ban:</span>
                     <button
                       onClick={() => setClassFilterGroup('all')}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                      className={`px-3 py-1 rounded-lg font-bold transition-all ${
                         classFilterGroup === 'all'
-                          ? 'bg-primary text-primary-foreground shadow-xs'
-                          : 'bg-muted/40 text-muted-foreground hover:bg-muted'
+                          ? 'bg-[#1746D1] text-white shadow-xs'
+                          : 'bg-[#F1F5F9] dark:bg-[#0D226B]/40 text-[#64748B] dark:text-slate-300 hover:bg-[#E2E8F0]'
                       }`}
                     >
                       Tất cả ({classes.length})
                     </button>
                     <button
                       onClick={() => setClassFilterGroup('T')}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                      className={`px-3 py-1 rounded-lg font-bold transition-all ${
                         classFilterGroup === 'T'
-                          ? 'bg-blue-500 text-white shadow-xs'
-                          : 'bg-blue-500/10 text-blue-600 hover:bg-blue-500/20'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20'
                       }`}
                     >
                       Ban Tự nhiên (T) ({classes.filter(c => c.group_type === 'T').length})
                     </button>
                     <button
                       onClick={() => setClassFilterGroup('X')}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                      className={`px-3 py-1 rounded-lg font-bold transition-all ${
                         classFilterGroup === 'X'
-                          ? 'bg-emerald-500 text-white shadow-xs'
-                          : 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
                       }`}
                     >
                       Ban Xã hội (X) ({classes.filter(c => c.group_type === 'X').length})
                     </button>
                     <button
                       onClick={() => setClassFilterGroup('K')}
-                      className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                      className={`px-3 py-1 rounded-lg font-bold transition-all ${
                         classFilterGroup === 'K'
-                          ? 'bg-purple-500 text-white shadow-xs'
-                          : 'bg-purple-500/10 text-purple-600 hover:bg-purple-500/20'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20'
                       }`}
                     >
                       Khai phóng (K) ({classes.filter(c => c.group_type === 'K').length})
                     </button>
                   </div>
 
-                  <div className="relative sm:w-48">
+                  <div className="relative sm:w-52">
                     <input
                       type="text"
                       placeholder="Tìm theo tên lớp..."
                       value={classSearchTerm}
                       onChange={(e) => setClassSearchTerm(e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-1 text-xs font-semibold focus:outline-none focus:border-primary"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#087CFF] text-[#14213D] dark:text-white"
                     />
                   </div>
                 </div>
 
                 {editingClassId && (
-                  <div className="p-4 border-b border-border bg-primary/5 space-y-3">
-                    <h4 className="font-bold text-xs text-primary">Chỉnh sửa Lớp học</h4>
+                  <div className="p-4 border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F0F7FF] dark:bg-[#1746D1]/10 space-y-3">
+                    <h4 className="font-bold text-xs text-[#1746D1] dark:text-cyan-400 m-0">Chỉnh sửa Lớp học</h4>
                     <div className="grid gap-3 sm:grid-cols-3 text-xs">
                       <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-muted-foreground uppercase">Tên lớp</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Tên lớp</label>
                         <input
                           type="text"
                           value={editingClassName}
                           onChange={(e) => setEditingClassName(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-1.5 font-bold focus:outline-none"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-1.5 font-bold focus:outline-none text-[#14213D] dark:text-white"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-muted-foreground uppercase">Ban</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Ban</label>
                         <select
                           value={editingClassGroup}
                           onChange={(e) => setEditingClassGroup(e.target.value as any)}
-                          className="w-full rounded border border-border bg-background px-2.5 py-1.5 font-bold text-primary focus:outline-none"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-2.5 py-1.5 font-bold text-[#1746D1] dark:text-cyan-400 focus:outline-none"
                         >
                           <option value="T">Tự nhiên (T)</option>
                           <option value="X">Xã hội (X)</option>
@@ -1721,25 +2190,25 @@ export default function AdminDashboardClient({
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-muted-foreground uppercase">Niên khóa</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Niên khóa</label>
                         <input
                           type="text"
                           value={editingClassYear}
                           onChange={(e) => setEditingClassYear(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-1.5 font-semibold focus:outline-none"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-1.5 font-semibold focus:outline-none text-[#14213D] dark:text-white"
                         />
                       </div>
                     </div>
                     <div className="flex gap-2 justify-end pt-1">
                       <button
                         onClick={() => setEditingClassId(null)}
-                        className="px-3 py-1.5 rounded-lg border border-border font-bold text-muted-foreground hover:bg-background text-xs"
+                        className="px-3.5 py-1.5 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] font-bold text-[#64748B] dark:text-slate-400 hover:bg-white dark:hover:bg-[#0B1B55] text-xs transition-colors"
                       >
                         Hủy
                       </button>
                       <button
                         onClick={handleUpdateClass}
-                        className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-bold text-xs"
+                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] text-white font-bold text-xs hover:shadow-md transition-all"
                       >
                         Lưu thay đổi
                       </button>
@@ -1750,41 +2219,41 @@ export default function AdminDashboardClient({
                 {/* MODAL PHÂN CÔNG GIÁO VIÊN BỘ MÔN CHO LỚP */}
                 {assigningClass && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-                    <div className="bg-card border border-border rounded-2xl max-w-xl w-full p-5 space-y-4 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                      <div className="flex items-center justify-between border-b border-border pb-3">
+                    <div className="bg-white dark:bg-[#0B1B55] border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl max-w-xl w-full p-5 sm:p-6 space-y-4 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                      <div className="flex items-center justify-between border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3">
                         <div>
-                          <h3 className="font-extrabold text-base text-foreground flex items-center gap-2">
-                            <BookOpen className="h-5 w-5 text-primary" />
+                          <h3 className="font-extrabold text-base text-[#14213D] dark:text-white flex items-center gap-2 m-0">
+                            <BookOpen className="h-5 w-5 text-[#1746D1] dark:text-cyan-400" />
                             Phân công Giáo viên - Lớp {assigningClass.name}
                           </h3>
-                          <p className="text-xs text-muted-foreground font-semibold mt-0.5">
+                          <p className="text-xs text-[#64748B] dark:text-slate-400 font-semibold mt-0.5 m-0">
                             Ban {assigningClass.group_type === 'T' ? 'Tự nhiên (T)' : assigningClass.group_type === 'X' ? 'Xã hội (X)' : 'Khai phóng (K)'} &bull; Niên khóa {assigningClass.academic_year}
                           </p>
                         </div>
                         <button
                           onClick={() => setAssigningClass(null)}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                          className="p-1.5 rounded-lg text-[#64748B] hover:text-[#14213D] dark:hover:text-white hover:bg-[#F1F5F9] dark:hover:bg-[#0D226B] transition-colors"
                         >
                           <X className="h-5 w-5" />
                         </button>
                       </div>
 
                       <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-                        <p className="text-xs text-muted-foreground font-medium">
+                        <p className="text-xs text-[#64748B] dark:text-slate-300 font-medium m-0">
                           Chọn giáo viên phụ trách từng môn học cho lớp <strong>{assigningClass.name}</strong>. Các thay đổi sẽ được cập nhật trực tiếp vào cơ sở dữ liệu:
                         </p>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           {classAssignmentsDraft.map((draft, idx) => {
                             const sub = subjects.find(s => s.id === draft.subjectId);
                             const theme = getSubjectColorTheme(sub?.name || '');
                             const teacherList = profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department');
 
                             return (
-                              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-background border border-border">
+                              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-[#F8FAFC] dark:bg-[#0D226B]/40 border border-[#E2E8F0] dark:border-[#1B317A]">
                                 <div className="flex items-center gap-2 min-w-[140px]">
-                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold border ${theme.badgeBg} ${theme.badgeText} ${theme.badgeBorder}`}>
-                                    <span className={`h-1.5 w-1.5 rounded-full ${theme.dotColor}`} />
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${theme.badgeBg} ${theme.badgeText} ${theme.badgeBorder}`}>
+                                    <span className={`h-2 w-2 rounded-full ${theme.dotColor}`} />
                                     {sub?.name || 'Môn học'}
                                   </span>
                                 </div>
@@ -1796,7 +2265,7 @@ export default function AdminDashboardClient({
                                       const val = e.target.value;
                                       setClassAssignmentsDraft(prev => prev.map((item, i) => i === idx ? { ...item, teacherId: val } : item));
                                     }}
-                                    className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-primary text-foreground"
+                                    className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#087CFF] text-[#14213D] dark:text-white"
                                   >
                                     <option value="">-- Chưa phân công --</option>
                                     {teacherList.map(t => {
@@ -1815,17 +2284,17 @@ export default function AdminDashboardClient({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                      <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E2E8F0] dark:border-[#1B317A]">
                         <button
                           onClick={() => setAssigningClass(null)}
-                          className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-muted"
+                          className="px-4 py-2 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] text-xs font-bold text-[#64748B] dark:text-slate-400 hover:bg-[#F8FAFC] dark:hover:bg-[#0D226B] transition-colors"
                         >
                           Hủy bỏ
                         </button>
                         <button
                           onClick={handleSaveClassAssignments}
                           disabled={isSavingAssignments}
-                          className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-50"
+                          className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] text-white text-xs font-bold hover:shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
                         >
                           {isSavingAssignments && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                           {isSavingAssignments ? 'Đang lưu...' : 'Lưu phân công'}
@@ -1838,7 +2307,7 @@ export default function AdminDashboardClient({
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      <tr className="border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/50 text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">
                         <th className="p-4 w-10 text-center">
                           <input
                             type="checkbox"
@@ -1850,7 +2319,7 @@ export default function AdminDashboardClient({
                                 setSelectedClassIds([]);
                               }
                             }}
-                            className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                            className="rounded border-[#E2E8F0] text-[#1746D1] focus:ring-[#087CFF] h-4 w-4 cursor-pointer"
                           />
                         </th>
                         <th className="p-4">Tên Lớp học</th>
@@ -1873,7 +2342,7 @@ export default function AdminDashboardClient({
                         if (sorted.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={8} className="p-8 text-center text-xs text-muted-foreground italic">
+                              <td colSpan={8} className="p-8 text-center text-xs text-[#64748B] dark:text-slate-400 italic">
                                 Không tìm thấy lớp học nào phù hợp với bộ lọc hiện tại.
                               </td>
                             </tr>
@@ -1887,7 +2356,7 @@ export default function AdminDashboardClient({
                           const classBg = getClassBackgroundUrl(cls, auditLogs);
 
                           return (
-                            <tr key={cls.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                            <tr key={cls.id} className={`border-b border-[#E2E8F0] dark:border-[#1B317A] hover:bg-[#F1F5F9]/60 dark:hover:bg-[#0D226B]/30 transition-colors ${isSelected ? 'bg-[#1746D1]/5' : ''}`}>
                               <td className="p-4 text-center">
                                 <input
                                   type="checkbox"
@@ -1899,15 +2368,15 @@ export default function AdminDashboardClient({
                                       setSelectedClassIds(prev => prev.filter(id => id !== cls.id));
                                     }
                                   }}
-                                  className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                  className="rounded border-[#E2E8F0] text-[#1746D1] focus:ring-[#087CFF] h-4 w-4 cursor-pointer"
                                 />
                               </td>
-                              <td className="p-4 font-black text-sm text-foreground">{cls.name}</td>
+                              <td className="p-4 font-black text-sm text-[#14213D] dark:text-white">{cls.name}</td>
                               <td className="p-4">
                                 {classBg ? (
                                   <div 
                                     onClick={() => openBackgroundModal(cls)}
-                                    className="group relative h-10 w-20 rounded-xl overflow-hidden border border-border/80 cursor-pointer shadow-2xs hover:ring-2 hover:ring-primary hover:border-transparent transition-all"
+                                    className="group relative h-10 w-20 rounded-xl overflow-hidden border border-[#E2E8F0] dark:border-[#1B317A] cursor-pointer shadow-2xs hover:ring-2 hover:ring-[#087CFF] hover:border-transparent transition-all"
                                     title="Bấm để xem & đổi ảnh nền lớp"
                                   >
                                     <img src={classBg} alt={cls.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
@@ -1918,28 +2387,28 @@ export default function AdminDashboardClient({
                                 ) : (
                                   <button
                                     onClick={() => openBackgroundModal(cls)}
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-dashed border-border/80 bg-muted/20 hover:bg-muted font-bold text-[10px] text-muted-foreground hover:text-primary hover:border-primary/50 transition-all cursor-pointer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-dashed border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/20 hover:bg-[#EEF4FF] dark:hover:bg-[#0D226B]/50 font-bold text-[10px] text-[#64748B] dark:text-slate-400 hover:text-[#1746D1] dark:hover:text-cyan-400 hover:border-[#1746D1]/50 transition-all cursor-pointer"
                                     title="Tải ảnh nền cho lớp này"
                                   >
-                                    <UploadCloud className="h-3.5 w-3.5 text-primary" />
+                                    <UploadCloud className="h-3.5 w-3.5 text-[#1746D1] dark:text-cyan-400" />
                                     <span>Tải ảnh</span>
                                   </button>
                                 )}
                               </td>
                               <td className="p-4">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                  cls.group_type === 'T' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
-                                  cls.group_type === 'X' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                                  'bg-purple-500/10 text-purple-500 border border-purple-500/20'
+                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase ${
+                                  cls.group_type === 'T' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20' :
+                                  cls.group_type === 'X' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' :
+                                  'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
                                 }`}>
                                   {cls.group_type === 'T' ? 'Tự nhiên' : cls.group_type === 'X' ? 'Xã hội' : 'Khai phóng'}
                                 </span>
                               </td>
-                              <td className="p-4 font-semibold text-muted-foreground">{cls.academic_year}</td>
-                              <td className="p-4 font-bold text-foreground">{classStudentsCount} học sinh</td>
+                              <td className="p-4 font-semibold text-[#64748B] dark:text-slate-400">{cls.academic_year}</td>
+                              <td className="p-4 font-bold text-[#14213D] dark:text-white">{classStudentsCount} học sinh</td>
                               <td className="p-4">
                                 {classAssignments.length === 0 ? (
-                                  <span className="text-[10px] text-muted-foreground italic bg-muted/40 px-2 py-1 rounded">Chưa phân công giáo viên</span>
+                                  <span className="text-[10px] text-[#64748B] dark:text-slate-400 italic bg-[#F1F5F9] dark:bg-[#0D226B]/30 px-2 py-1 rounded">Chưa phân công giáo viên</span>
                                 ) : (
                                   <div className="flex flex-wrap gap-1 max-w-sm">
                                     {classAssignments.map((ca: any, caIdx: number) => {
@@ -1966,27 +2435,27 @@ export default function AdminDashboardClient({
                                 <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     onClick={() => openBackgroundModal(cls)}
-                                    className="px-2 py-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 font-bold text-indigo-600 dark:text-indigo-400 transition-all text-[10px] flex items-center gap-1"
+                                    className="px-2.5 py-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 font-bold text-indigo-600 dark:text-indigo-400 transition-all text-[10px] flex items-center gap-1 cursor-pointer"
                                     title="Cá nhân hóa ảnh nền của riêng lớp này"
                                   >
                                     <ImageIcon className="h-3 w-3" /> Ảnh nền
                                   </button>
                                   <button
                                     onClick={() => openAssignModal(cls)}
-                                    className="px-2 py-1 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/20 font-bold text-primary transition-all text-[10px] flex items-center gap-1"
+                                    className="px-2.5 py-1 rounded-lg border border-[#1746D1]/30 bg-[#1746D1]/10 hover:bg-[#1746D1]/20 font-bold text-[#1746D1] dark:text-cyan-400 transition-all text-[10px] flex items-center gap-1 cursor-pointer"
                                     title="Phân công giáo viên bộ môn cho lớp này"
                                   >
                                     <BookOpen className="h-3 w-3" /> Phân công
                                   </button>
                                   <button
                                     onClick={() => startEditClass(cls)}
-                                    className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-foreground transition-all text-[10px]"
+                                    className="px-2 py-1 rounded-lg border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] hover:bg-[#F8FAFC] dark:hover:bg-[#0D226B] font-bold text-[#14213D] dark:text-white transition-all text-[10px] cursor-pointer"
                                   >
                                     Sửa
                                   </button>
                                   <button
                                     onClick={() => handleDeleteClass(cls.id)}
-                                    className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
+                                    className="px-2 py-1 rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 font-bold text-red-600 dark:text-red-400 transition-all text-[10px] cursor-pointer"
                                   >
                                     Xóa
                                   </button>
@@ -2003,29 +2472,29 @@ export default function AdminDashboardClient({
 
 
               {/* TẠO LỚP HỌC MỚI */}
-              <div className="md:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
-                  <Plus className="h-4.5 w-4.5 text-primary" /> Khởi tạo Lớp học mới
+              <div className="md:col-span-4 bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+                <h4 className="font-extrabold text-sm border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3 flex items-center gap-2 text-[#14213D] dark:text-white m-0">
+                  <Plus className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Khởi tạo Lớp học mới
                 </h4>
                 
-                <div className="space-y-3 text-xs">
+                <div className="space-y-3.5 text-xs">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên lớp học</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Tên lớp học</label>
                     <input
                       type="text"
                       placeholder="VD: 12T7, 12X5, 12K2..."
                       value={newClassName}
                       onChange={(e) => setNewClassName(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-bold text-foreground"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-bold text-[#14213D] dark:text-white"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Ban đào tạo</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Ban đào tạo</label>
                     <select
                       value={newClassGroup}
                       onChange={(e) => setNewClassGroup(e.target.value as any)}
-                      className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-2.5 py-2 focus:outline-none focus:border-[#087CFF] font-bold text-[#1746D1] dark:text-cyan-400"
                     >
                       <option value="T">Ban Tự nhiên (T)</option>
                       <option value="X">Ban Xã hội (X)</option>
@@ -2034,24 +2503,24 @@ export default function AdminDashboardClient({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Niên khóa</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Niên khóa</label>
                     <input
                       type="text"
                       placeholder="2026-2027"
                       value={newClassYear}
                       onChange={(e) => setNewClassYear(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none text-foreground font-semibold"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] text-[#14213D] dark:text-white font-semibold"
                     />
                   </div>
 
                   {createClassMessage && (
-                    <p className="text-[11px] font-bold text-green-600 bg-green-500/10 p-2 rounded border border-green-500/20">{createClassMessage}</p>
+                    <p className="text-[11px] font-bold text-green-600 bg-green-500/10 p-2.5 rounded-xl border border-green-500/20">{createClassMessage}</p>
                   )}
 
                   <button
                     onClick={handleCreateClass}
                     disabled={creatingClass}
-                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] py-2.5 text-xs font-bold text-white hover:shadow-md transition-all disabled:opacity-50 cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" /> {creatingClass ? 'Đang tạo...' : 'Tạo lớp học mới'}
                   </button>
@@ -2068,14 +2537,14 @@ export default function AdminDashboardClient({
             <div className="grid gap-6 md:grid-cols-12 items-start">
               
               {/* BẢNG DANH SÁCH GIÁO VIÊN & HOD */}
-              <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-border bg-muted/10 space-y-3">
+              <div className="md:col-span-8 bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/40 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h3 className="font-extrabold text-sm flex items-center gap-2">
-                        <Users className="h-4 w-4 text-primary" /> Danh sách Giáo viên & Trưởng bộ môn ({profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department').length})
+                      <h3 className="font-extrabold text-sm flex items-center gap-2 m-0 text-[#14213D] dark:text-white">
+                        <Users className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Danh sách Giáo viên & Trưởng bộ môn ({profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department').length})
                       </h3>
-                      <p className="text-[11px] text-muted-foreground font-semibold mt-0.5">Phân công môn học và các lớp giảng dạy phụ trách</p>
+                      <p className="text-[11px] text-[#64748B] dark:text-slate-400 font-semibold mt-0.5 m-0">Phân công môn học và các lớp giảng dạy phụ trách</p>
                     </div>
 
                     {/* NÚT XOÁ TOÀN BỘ GIÁO VIÊN KHỎI DB */}
@@ -2089,7 +2558,7 @@ export default function AdminDashboardClient({
                         requiresTextConfirm: true,
                         confirmKeyword: 'XOA'
                       })}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-destructive hover:bg-destructive/10 border border-destructive/20 px-3 py-1.5 rounded-xl transition-colors self-start sm:self-auto"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 hover:bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-xl transition-colors self-start sm:self-auto cursor-pointer"
                     >
                       <UserX className="h-3.5 w-3.5" /> Xóa TOÀN BỘ Giáo viên (DB)
                     </button>
@@ -2098,11 +2567,11 @@ export default function AdminDashboardClient({
                   {/* BỘ LỌC MÔN HỌC & THANH XOÁ BATCH */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                     <div className="flex items-center gap-2 flex-1 max-w-xs">
-                      <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Filter className="h-3.5 w-3.5 text-[#64748B] dark:text-slate-400" />
                       <select
                         value={teacherSubjectFilter}
                         onChange={(e) => setTeacherSubjectFilter(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold focus:outline-none"
+                        className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#087CFF] text-[#14213D] dark:text-white"
                       >
                         <option value="all">Tất cả bộ môn ({profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department').length})</option>
                         {subjects.map(s => {
@@ -2115,8 +2584,8 @@ export default function AdminDashboardClient({
                     {/* CÁC THAO TÁC XOÁ BATCH THEO LỰA CHỌN HOẶC BỘ LỌC */}
                     <div className="flex flex-wrap items-center gap-2">
                       {selectedTeacherIds.length > 0 && (
-                        <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 px-2.5 py-1 rounded-xl">
-                          <span className="text-xs font-bold text-destructive">Đã chọn: {selectedTeacherIds.length}</span>
+                        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-2.5 py-1 rounded-xl">
+                          <span className="text-xs font-bold text-red-600 dark:text-red-400">Đã chọn: {selectedTeacherIds.length}</span>
                           <button
                             onClick={() => handleOpenBatchModal({
                               title: `Xóa ${selectedTeacherIds.length} Giáo viên đã chọn`,
@@ -2126,13 +2595,13 @@ export default function AdminDashboardClient({
                               payload: { userIds: selectedTeacherIds },
                               requiresTextConfirm: false
                             })}
-                            className="inline-flex items-center gap-1 bg-destructive hover:bg-destructive/90 text-white font-bold text-xs px-2 py-0.5 rounded-lg transition-colors shadow-xs"
+                            className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-2 py-0.5 rounded-lg transition-colors shadow-xs"
                           >
                             <Trash2 className="h-3 w-3" /> Xóa đã chọn
                           </button>
                           <button
                             onClick={() => setSelectedTeacherIds([])}
-                            className="text-[11px] font-semibold text-muted-foreground hover:text-foreground px-1"
+                            className="text-[11px] font-semibold text-[#64748B] dark:text-slate-400 hover:text-[#14213D] dark:hover:text-white px-1"
                           >
                             Bỏ
                           </button>
@@ -2154,7 +2623,7 @@ export default function AdminDashboardClient({
                               confirmKeyword: 'XOA'
                             });
                           }}
-                          className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-2.5 py-1.5 rounded-xl transition-colors"
+                          className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" /> Xóa GV theo môn đang lọc
                         </button>
@@ -2164,44 +2633,44 @@ export default function AdminDashboardClient({
                 </div>
 
                 {editingUserId && (
-                  <div className="p-5 border-b border-border bg-primary/5 space-y-4">
-                    <h4 className="font-extrabold text-sm text-primary">Chỉnh sửa thông tin Giáo viên / Trưởng bộ môn</h4>
+                  <div className="p-5 border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F0F7FF] dark:bg-[#1746D1]/10 space-y-4">
+                    <h4 className="font-extrabold text-sm text-[#1746D1] dark:text-cyan-400 m-0">Chỉnh sửa thông tin Giáo viên / Trưởng bộ môn</h4>
                     <div className="grid gap-3 sm:grid-cols-2 text-xs">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên giáo viên</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Họ và Tên giáo viên</label>
                         <input
                           type="text"
                           placeholder="VD: Thầy Nguyễn Thế Chinh..."
                           value={editingUserFullName}
                           onChange={(e) => setEditingUserFullName(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none font-semibold text-foreground"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 text-xs focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / Mã GV</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Tên FPT / Mã GV</label>
                         <input
                           type="text"
                           placeholder="VD: CHINH10"
                           value={editingUserFptName}
                           onChange={(e) => setEditingUserFptName(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none font-bold uppercase text-foreground"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 text-xs focus:outline-none focus:border-[#087CFF] font-bold uppercase text-[#14213D] dark:text-white"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Email tài khoản</label>
                         <input
                           type="email"
                           value={editingUserEmail}
                           onChange={(e) => setEditingUserEmail(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-2 text-xs focus:outline-none font-semibold"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 text-xs focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Vai trò chuyên môn</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Vai trò chuyên môn</label>
                         <select
                           value={editingUserRole}
                           onChange={(e) => setEditingUserRole(e.target.value as any)}
-                          className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none font-semibold text-primary"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-2.5 py-2 text-xs focus:outline-none focus:border-[#087CFF] font-semibold text-[#1746D1] dark:text-cyan-400"
                         >
                           <option value="teacher">Giáo viên bộ môn (Teacher)</option>
                           <option value="head_of_department">Trưởng bộ môn (HOD)</option>
@@ -2212,11 +2681,11 @@ export default function AdminDashboardClient({
 
                     <div className="space-y-3 text-xs">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Môn học giảng dạy</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase block mb-1">Môn học giảng dạy</label>
                         <select
                           value={editingUserSubjectId}
                           onChange={(e) => setEditingUserSubjectId(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-2.5 py-2 text-xs focus:outline-none text-primary font-bold"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 text-xs focus:outline-none focus:border-[#087CFF] text-[#1746D1] dark:text-cyan-400 font-bold"
                         >
                           <option value="">-- Chưa phân công môn --</option>
                           {subjects.map((sub: any) => (
@@ -2226,12 +2695,12 @@ export default function AdminDashboardClient({
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 border border-border rounded-xl p-3 bg-background max-h-[140px] overflow-y-auto">
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 border border-[#E2E8F0] dark:border-[#1B317A] rounded-xl p-3 bg-white dark:bg-[#081736] max-h-[140px] overflow-y-auto">
                           {sortClassesNaturally(classes).map((cls: any) => {
                             const isChecked = editingUserClassIds.includes(cls.id);
                             return (
-                              <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
+                              <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none text-[#14213D] dark:text-white">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
@@ -2242,7 +2711,7 @@ export default function AdminDashboardClient({
                                       setEditingUserClassIds(editingUserClassIds.filter(id => id !== cls.id));
                                     }
                                   }}
-                                  className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
+                                  className="rounded border-[#E2E8F0] text-[#1746D1] focus:ring-[#087CFF] h-3.5 w-3.5"
                                 />
                                 {cls.name}
                               </label>
@@ -2255,13 +2724,13 @@ export default function AdminDashboardClient({
                     <div className="flex justify-end gap-2 text-xs pt-1">
                       <button
                         onClick={() => setEditingUserId(null)}
-                        className="px-4 py-2 rounded-lg border border-border font-bold text-muted-foreground hover:bg-background transition-colors"
+                        className="px-4 py-2 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] font-bold text-[#64748B] dark:text-slate-400 hover:bg-white dark:hover:bg-[#0B1B55] transition-colors"
                       >
                         Hủy
                       </button>
                       <button
                         onClick={handleUpdateUser}
-                        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-extrabold hover:opacity-90 transition-opacity"
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] text-white font-extrabold hover:shadow-md transition-all"
                       >
                         Lưu thay đổi
                       </button>
@@ -2285,7 +2754,7 @@ export default function AdminDashboardClient({
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                          <tr className="border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/50 text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">
                             <th className="p-4 w-10 text-center">
                               <input
                                 type="checkbox"
@@ -2297,7 +2766,7 @@ export default function AdminDashboardClient({
                                     setSelectedTeacherIds(selectedTeacherIds.filter(id => !selectableTeacherIds.includes(id)));
                                   }
                                 }}
-                                className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                className="rounded border-[#E2E8F0] text-[#1746D1] focus:ring-[#087CFF] h-4 w-4 cursor-pointer"
                               />
                             </th>
                             <th className="p-4">Giáo viên & Mã FPT</th>
@@ -2320,7 +2789,7 @@ export default function AdminDashboardClient({
                             const tDisplay = getTeacherDisplayName(p, auditLogs);
 
                             return (
-                              <tr key={p.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                              <tr key={p.id} className={`border-b border-[#E2E8F0] dark:border-[#1B317A] hover:bg-[#F1F5F9]/60 dark:hover:bg-[#0D226B]/30 transition-colors ${isSelected ? 'bg-[#1746D1]/5' : ''}`}>
                                 <td className="p-4 text-center">
                                   <input
                                     type="checkbox"
@@ -2333,31 +2802,31 @@ export default function AdminDashboardClient({
                                         setSelectedTeacherIds(prev => prev.filter(id => id !== p.id));
                                       }
                                     }}
-                                    className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-30"
+                                    className="rounded border-[#E2E8F0] text-[#1746D1] focus:ring-[#087CFF] h-4 w-4 cursor-pointer disabled:opacity-30"
                                   />
                                 </td>
-                                <td className="p-4 font-bold text-foreground">
-                                  <div className="text-sm font-extrabold text-foreground">{tDisplay.fullName}</div>
-                                  <div className="text-xs text-muted-foreground font-normal">{p.email}</div>
-                                  <span className="inline-block text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-muted border border-border text-primary mt-1">
+                                <td className="p-4">
+                                  <div className="text-sm font-extrabold text-[#14213D] dark:text-white">{tDisplay.fullName}</div>
+                                  <div className="text-xs text-[#64748B] dark:text-slate-400 font-normal">{p.email}</div>
+                                  <span className="inline-block text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#1746D1]/10 text-[#1746D1] dark:bg-cyan-500/20 dark:text-cyan-300 border border-[#1746D1]/20 mt-1">
                                     Mã GV: {tDisplay.fptName}
                                   </span>
                                 </td>
                                 <td className="p-4">{getRoleBadge(p.role)}</td>
-                                <td className="p-4 font-bold text-primary">{teacherSubject || <span className="text-muted-foreground italic font-normal">Chưa gán môn</span>}</td>
-                                <td className="p-4 font-semibold text-xs text-foreground">{sortedClassesNames || <span className="text-muted-foreground italic font-normal">Chưa phân lớp</span>}</td>
+                                <td className="p-4 font-bold text-[#1746D1] dark:text-cyan-400">{teacherSubject || <span className="text-[#64748B] dark:text-slate-400 italic font-normal">Chưa gán môn</span>}</td>
+                                <td className="p-4 font-semibold text-xs text-[#14213D] dark:text-white">{sortedClassesNames || <span className="text-[#64748B] dark:text-slate-400 italic font-normal">Chưa phân lớp</span>}</td>
                                 <td className="p-4 text-center">
                                   <div className="flex items-center justify-center gap-1.5">
                                     <button
                                       onClick={() => startEditUser(p)}
-                                      className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
+                                      className="px-2.5 py-1 rounded-lg border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] hover:bg-[#F8FAFC] dark:hover:bg-[#0D226B] font-bold text-[#1746D1] dark:text-cyan-400 transition-all text-[10px] cursor-pointer"
                                     >
                                       Sửa
                                     </button>
                                     <button
                                       onClick={() => handleDeleteUser(p.id)}
                                       disabled={isProtected}
-                                      className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px] disabled:opacity-50"
+                                      className="px-2.5 py-1 rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 font-bold text-red-600 dark:text-red-400 transition-all text-[10px] disabled:opacity-50 cursor-pointer"
                                     >
                                       Xóa
                                     </button>
@@ -2375,36 +2844,36 @@ export default function AdminDashboardClient({
               </div>
 
               {/* THÊM TÀI KHOẢN GIÁO VIÊN / HOD MỚI */}
-              <div className="md:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
-                  <Users className="h-4.5 w-4.5 text-primary" /> Thêm Giáo viên / Trưởng bộ môn
+              <div className="md:col-span-4 bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+                <h4 className="font-extrabold text-sm border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3 flex items-center gap-2 text-[#14213D] dark:text-white m-0">
+                  <Users className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Thêm Giáo viên / Trưởng bộ môn
                 </h4>
 
-                <div className="space-y-3 text-xs">
+                <div className="space-y-3.5 text-xs">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Họ và Tên</label>
                     <input
                       type="text"
                       placeholder="VD: Thầy / Cô Nguyễn Văn A..."
                       value={newUserFullName}
                       onChange={(e) => setNewUserFullName(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / Mã GV</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Tên FPT / Mã GV</label>
                     <input
                       type="text"
                       placeholder="VD: NhanV5..."
                       value={newUserFptName}
                       onChange={(e) => setNewUserFptName(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Email tài khoản</label>
                     <input
                       type="email"
                       placeholder="VD: giaovien.vatly@fpt.edu.vn..."
@@ -2416,16 +2885,16 @@ export default function AdminDashboardClient({
                           setNewUserFptName(email.split('@')[0].toUpperCase());
                         }
                       }}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block">Vai trò khởi tạo</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase block">Vai trò khởi tạo</label>
                     <select
                       value={newUserRole === 'head_of_department' ? 'head_of_department' : 'teacher'}
                       onChange={(e) => setNewUserRole(e.target.value as any)}
-                      className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-semibold text-primary"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-2.5 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#1746D1] dark:text-cyan-400"
                     >
                       <option value="teacher">Giáo viên bộ môn (Teacher)</option>
                       <option value="head_of_department">Trưởng bộ môn (HOD)</option>
@@ -2433,11 +2902,11 @@ export default function AdminDashboardClient({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Môn học giảng dạy</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase block mb-1">Môn học giảng dạy</label>
                     <select
                       value={newUserSubjectId}
                       onChange={(e) => setNewUserSubjectId(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none text-primary font-bold"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-2.5 py-2 focus:outline-none focus:border-[#087CFF] text-[#1746D1] dark:text-cyan-400 font-bold"
                     >
                       <option value="">-- Chọn môn học --</option>
                       {subjects.map((sub: any) => (
@@ -2447,12 +2916,12 @@ export default function AdminDashboardClient({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-border rounded-xl p-2.5 bg-background max-h-[110px] overflow-y-auto">
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase block mb-1">Lớp dạy học (Chọn nhiều)</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-[#E2E8F0] dark:border-[#1B317A] rounded-xl p-2.5 bg-[#F8FAFC] dark:bg-[#081736] max-h-[110px] overflow-y-auto">
                       {classes.map((cls: any) => {
                         const isChecked = newUserClassIds.includes(cls.id);
                         return (
-                          <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none">
+                          <label key={cls.id} className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer select-none text-[#14213D] dark:text-white">
                             <input
                               type="checkbox"
                               checked={isChecked}
@@ -2463,7 +2932,7 @@ export default function AdminDashboardClient({
                                   setNewUserClassIds(newUserClassIds.filter(id => id !== cls.id));
                                 }
                               }}
-                              className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
+                              className="rounded border-[#E2E8F0] text-[#1746D1] focus:ring-[#087CFF] h-3.5 w-3.5"
                             />
                             {cls.name}
                           </label>
@@ -2478,7 +2947,7 @@ export default function AdminDashboardClient({
                       handleCreateUser(roleToUse);
                     }}
                     disabled={isCreatingUser}
-                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] py-2.5 text-xs font-bold text-white hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {isCreatingUser ? (
                       <>
@@ -2503,17 +2972,17 @@ export default function AdminDashboardClient({
             <div className="grid gap-6 md:grid-cols-12 items-start">
               
               {/* BẢNG DANH SÁCH HỌC SINH */}
-              <div className="md:col-span-8 bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-border bg-muted/10 space-y-3">
+              <div className="md:col-span-8 bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/40 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <h3 className="font-extrabold text-sm flex items-center gap-2 m-0">
-                      <GraduationCap className="h-4 w-4 text-primary" /> Danh sách Học sinh ({profiles.filter(p => p.role === 'student').length})
+                    <h3 className="font-extrabold text-sm flex items-center gap-2 m-0 text-[#14213D] dark:text-white">
+                      <GraduationCap className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Danh sách Học sinh ({profiles.filter(p => p.role === 'student').length})
                     </h3>
 
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={() => setShowExcelModal(true)}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition-colors self-start sm:self-auto"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl shadow-xs transition-colors self-start sm:self-auto cursor-pointer"
                       >
                         <FileSpreadsheet className="h-3.5 w-3.5" /> Nhập Excel (.xlsx)
                       </button>
@@ -2529,7 +2998,7 @@ export default function AdminDashboardClient({
                           requiresTextConfirm: true,
                           confirmKeyword: 'XOA'
                         })}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-destructive hover:bg-destructive/10 border border-destructive/20 px-3 py-1.5 rounded-xl transition-colors self-start sm:self-auto"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 hover:bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-xl transition-colors self-start sm:self-auto cursor-pointer"
                       >
                         <UserX className="h-3.5 w-3.5" /> Xóa TOÀN BỘ Học sinh (DB)
                       </button>
@@ -2544,14 +3013,14 @@ export default function AdminDashboardClient({
                         placeholder="Tìm kiếm họ tên, email, tên FPT/MSHS..."
                         value={userSearchTerm}
                         onChange={(e) => setUserSearchTerm(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-background px-3 py-1.5 focus:outline-none font-semibold"
+                        className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                       />
                     </div>
                     <div className="sm:col-span-5">
                       <select
                         value={userClassFilter}
                         onChange={(e) => setUserClassFilter(e.target.value)}
-                        className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 focus:outline-none font-semibold"
+                        className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                       >
                         <option value="all">Tất cả lớp ({profiles.filter(p => p.role === 'student').length})</option>
                         <option value="unassigned">Chưa xếp lớp ({localStudentDetails.filter(s => !s.class_id).length})</option>
@@ -2590,10 +3059,10 @@ export default function AdminDashboardClient({
                     const isFiltered = userClassFilter !== 'all' || userSearchTerm.trim() !== '';
 
                     return (
-                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/50">
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#E2E8F0] dark:border-[#1B317A]">
                         {selectedStudentIds.length > 0 && (
-                          <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 px-2.5 py-1 rounded-xl">
-                            <span className="text-xs font-bold text-destructive">Đã chọn: {selectedStudentIds.length} HS</span>
+                          <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 px-2.5 py-1 rounded-xl">
+                            <span className="text-xs font-bold text-red-600 dark:text-red-400">Đã chọn: {selectedStudentIds.length} HS</span>
                             <button
                               onClick={() => handleOpenBatchModal({
                                 title: `Xóa ${selectedStudentIds.length} Học sinh đã chọn`,
@@ -2603,13 +3072,13 @@ export default function AdminDashboardClient({
                                 payload: { userIds: selectedStudentIds },
                                 requiresTextConfirm: false
                               })}
-                              className="inline-flex items-center gap-1 bg-destructive hover:bg-destructive/90 text-white font-bold text-xs px-2 py-0.5 rounded-lg transition-colors shadow-xs"
+                              className="inline-flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-2 py-0.5 rounded-lg transition-colors shadow-xs"
                             >
                               <Trash2 className="h-3 w-3" /> Xóa đã chọn
                             </button>
                             <button
                               onClick={() => setSelectedStudentIds([])}
-                              className="text-[11px] font-semibold text-muted-foreground hover:text-foreground px-1"
+                              className="text-[11px] font-semibold text-[#64748B] dark:text-slate-400 hover:text-[#14213D] dark:hover:text-white px-1"
                             >
                               Bỏ
                             </button>
@@ -2633,7 +3102,7 @@ export default function AdminDashboardClient({
                                 confirmKeyword: 'XOA'
                               });
                             }}
-                            className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-xl transition-colors"
+                            className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
                           >
                             <Trash2 className="h-3.5 w-3.5" /> Xóa {filteredStudents.length} HS theo bộ lọc hiện tại
                           </button>
@@ -2644,33 +3113,33 @@ export default function AdminDashboardClient({
                 </div>
 
                 {editingUserId && (
-                  <div className="p-5 border-b border-border bg-primary/5 space-y-4">
-                    <h4 className="font-extrabold text-sm text-primary">Chỉnh sửa thông tin Học sinh</h4>
+                  <div className="p-5 border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F0F7FF] dark:bg-[#1746D1]/10 space-y-4">
+                    <h4 className="font-extrabold text-sm text-[#1746D1] dark:text-cyan-400 m-0">Chỉnh sửa thông tin Học sinh</h4>
                     <div className="grid gap-3 sm:grid-cols-3 text-xs">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Họ và Tên</label>
                         <input
                           type="text"
                           value={editingUserFullName}
                           onChange={(e) => setEditingUserFullName(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / MSHS</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Tên FPT / MSHS</label>
                         <input
                           type="text"
                           value={editingUserFptName}
                           onChange={(e) => setEditingUserFptName(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Xếp lớp học</label>
+                        <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase block mb-1">Xếp lớp học</label>
                         <select
                           value={editingUserClassId}
                           onChange={(e) => setEditingUserClassId(e.target.value)}
-                          className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
+                          className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-2.5 py-2 focus:outline-none focus:border-[#087CFF] font-bold text-[#1746D1] dark:text-cyan-400"
                         >
                           <option value="">-- Chưa xếp lớp --</option>
                           {sortClassesNaturally(classes).map((cls: any) => (
@@ -2682,13 +3151,13 @@ export default function AdminDashboardClient({
                     <div className="flex justify-end gap-2 text-xs pt-1">
                       <button
                         onClick={() => setEditingUserId(null)}
-                        className="px-4 py-2 rounded-lg border border-border font-bold text-muted-foreground hover:bg-background transition-colors"
+                        className="px-4 py-2 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] font-bold text-[#64748B] dark:text-slate-400 hover:bg-white dark:hover:bg-[#0B1B55] transition-colors"
                       >
                         Hủy
                       </button>
                       <button
                         onClick={handleUpdateUser}
-                        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-extrabold hover:opacity-90 transition-opacity"
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] text-white font-extrabold hover:shadow-md transition-all"
                       >
                         Lưu thay đổi
                       </button>
@@ -2725,7 +3194,7 @@ export default function AdminDashboardClient({
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                          <tr className="border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/50 text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">
                             <th className="p-4 w-10 text-center">
                               <input
                                 type="checkbox"
@@ -2739,7 +3208,7 @@ export default function AdminDashboardClient({
                                     setSelectedStudentIds(selectedStudentIds.filter(id => !filteredIdSet.has(id)));
                                   }
                                 }}
-                                className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                className="rounded border-[#E2E8F0] text-[#1746D1] focus:ring-[#087CFF] h-4 w-4 cursor-pointer"
                               />
                             </th>
                             <th className="p-4">Họ và Tên</th>
@@ -2752,7 +3221,7 @@ export default function AdminDashboardClient({
                         <tbody>
                           {filteredStudents.length === 0 ? (
                             <tr>
-                              <td colSpan={6} className="p-8 text-center text-muted-foreground italic font-semibold">
+                              <td colSpan={6} className="p-8 text-center text-[#64748B] dark:text-slate-400 italic font-semibold">
                                 Không tìm thấy học sinh nào phù hợp bộ lọc.
                               </td>
                             </tr>
@@ -2763,7 +3232,7 @@ export default function AdminDashboardClient({
                               const isSelected = selectedStudentIds.includes(p.id);
 
                               return (
-                                <tr key={p.id} className={`border-b border-border hover:bg-muted/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                                <tr key={p.id} className={`border-b border-[#E2E8F0] dark:border-[#1B317A] hover:bg-[#F1F5F9]/60 dark:hover:bg-[#0D226B]/30 transition-colors ${isSelected ? 'bg-[#1746D1]/5' : ''}`}>
                                   <td className="p-4 text-center">
                                     <input
                                       type="checkbox"
@@ -2775,30 +3244,30 @@ export default function AdminDashboardClient({
                                           setSelectedStudentIds(prev => prev.filter(id => id !== p.id));
                                         }
                                       }}
-                                      className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                      className="rounded border-[#E2E8F0] text-[#1746D1] focus:ring-[#087CFF] h-4 w-4 cursor-pointer"
                                     />
                                   </td>
-                                  <td className="p-4 font-black text-foreground">{details?.full_name || 'Chưa cập nhật'}</td>
-                                  <td className="p-4 font-bold text-primary">{details?.mshs || 'N/A'}</td>
-                                  <td className="p-4 font-semibold text-muted-foreground">{p.email}</td>
+                                  <td className="p-4 font-black text-sm text-[#14213D] dark:text-white">{details?.full_name || 'Chưa cập nhật'}</td>
+                                  <td className="p-4 font-bold text-[#1746D1] dark:text-cyan-400 font-mono">{details?.mshs || 'N/A'}</td>
+                                  <td className="p-4 font-semibold text-[#64748B] dark:text-slate-400">{p.email}</td>
                                   <td className="p-4">
                                     {cls ? (
-                                      <span className="font-bold text-foreground bg-muted/30 px-2 py-0.5 rounded border border-border/50">{cls.name}</span>
+                                      <span className="font-bold text-[#1746D1] dark:text-cyan-300 bg-[#E7F1FF] dark:bg-cyan-500/20 px-2.5 py-1 rounded-lg border border-[#B6D4FE] dark:border-cyan-400/30 text-xs">{cls.name}</span>
                                     ) : (
-                                      <span className="text-muted-foreground italic text-[11px]">Chưa xếp lớp</span>
+                                      <span className="text-[#64748B] dark:text-slate-400 italic text-[11px]">Chưa xếp lớp</span>
                                     )}
                                   </td>
                                   <td className="p-4 text-center">
                                     <div className="flex items-center justify-center gap-1.5">
                                       <button
                                         onClick={() => startEditUser(p)}
-                                        className="px-2 py-1 rounded border border-border bg-background hover:bg-muted font-bold text-primary transition-all text-[10px]"
+                                        className="px-2.5 py-1 rounded-lg border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] hover:bg-[#F8FAFC] dark:hover:bg-[#0D226B] font-bold text-[#1746D1] dark:text-cyan-400 transition-all text-[10px] cursor-pointer"
                                       >
                                         Sửa
                                       </button>
                                       <button
                                         onClick={() => handleDeleteUser(p.id)}
-                                        className="px-2 py-1 rounded border border-destructive/20 bg-background hover:bg-destructive/5 font-bold text-destructive transition-all text-[10px]"
+                                        className="px-2.5 py-1 rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 font-bold text-red-600 dark:text-red-400 transition-all text-[10px] cursor-pointer"
                                       >
                                         Xóa
                                       </button>
@@ -2816,51 +3285,51 @@ export default function AdminDashboardClient({
               </div>
 
               {/* THÊM HỌC SINH MỚI */}
-              <div className="md:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-sm space-y-4">
-                <h4 className="font-extrabold text-sm border-b border-border pb-2.5 flex items-center gap-1.5 text-foreground/80">
-                  <GraduationCap className="h-4.5 w-4.5 text-primary" /> Thêm tài khoản Học sinh
+              <div className="md:col-span-4 bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+                <h4 className="font-extrabold text-sm border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3 flex items-center gap-2 text-[#14213D] dark:text-white m-0">
+                  <GraduationCap className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Thêm tài khoản Học sinh
                 </h4>
 
-                <div className="space-y-3 text-xs">
+                <div className="space-y-3.5 text-xs">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Họ và Tên</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Họ và Tên</label>
                     <input
                       type="text"
                       placeholder="VD: Nguyễn Văn A..."
                       value={newUserFullName}
                       onChange={(e) => setNewUserFullName(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Tên FPT / MSHS</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Tên FPT / MSHS</label>
                     <input
                       type="text"
                       placeholder="VD: NamNP12..."
                       value={newUserFptName}
                       onChange={(e) => setNewUserFptName(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Email tài khoản</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Email tài khoản</label>
                     <input
                       type="email"
                       placeholder="VD: hocsinh@fpt.edu.vn..."
                       value={newUserEmail}
                       onChange={(e) => setNewUserEmail(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-3 py-2 focus:outline-none font-semibold"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 focus:outline-none focus:border-[#087CFF] font-semibold text-[#14213D] dark:text-white"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Xếp lớp học</label>
+                    <label className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase block mb-1">Xếp lớp học</label>
                     <select
                       value={newUserClassId}
                       onChange={(e) => setNewUserClassId(e.target.value)}
-                      className="w-full rounded border border-border bg-background px-2.5 py-2 focus:outline-none font-bold text-primary"
+                      className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#081736] px-2.5 py-2 focus:outline-none focus:border-[#087CFF] font-bold text-[#1746D1] dark:text-cyan-400"
                     >
                       <option value="">-- Chưa xếp lớp --</option>
                       {sortClassesNaturally(classes).map((cls: any) => (
@@ -2875,7 +3344,7 @@ export default function AdminDashboardClient({
                       handleCreateUser('student');
                     }}
                     disabled={isCreatingUser}
-                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    className="w-full text-center flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] py-2.5 text-xs font-bold text-white hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {isCreatingUser ? (
                       <>
@@ -2900,15 +3369,23 @@ export default function AdminDashboardClient({
       {/* 3. CHẾ ĐỘ NHẬT KÝ BẢO MẬT (LOGS VIEW) */}
       {/* ==================================================== */}
       {activeTab === 'logs' && (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm animate-fade-in">
-          <div className="p-4 border-b border-border bg-muted/10">
-            <h3 className="font-extrabold text-sm">Nhật ký hoạt động bảo mật (Audit Logs)</h3>
+        <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl overflow-hidden shadow-sm animate-fade-in">
+          <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/40 flex items-center justify-between">
+            <div>
+              <h3 className="font-extrabold text-sm flex items-center gap-2 m-0 text-[#14213D] dark:text-white">
+                <ShieldCheck className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Nhật ký hoạt động bảo mật (Audit Logs)
+              </h3>
+              <p className="text-[11px] text-[#64748B] dark:text-slate-400 font-semibold mt-0.5 m-0">Ghi nhận toàn bộ thao tác thêm, sửa, xóa dữ liệu trên hệ thống</p>
+            </div>
+            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-[#1746D1]/10 text-[#1746D1] dark:bg-cyan-500/20 dark:text-cyan-300 border border-[#1746D1]/20">
+              {auditLogs.length} sự kiện
+            </span>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-border bg-muted/20 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                <tr className="border-b border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/50 text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase tracking-wider">
                   <th className="p-4">Người thực hiện (Actor)</th>
                   <th className="p-4">Hành động</th>
                   <th className="p-4">Bảng tác động</th>
@@ -2919,25 +3396,25 @@ export default function AdminDashboardClient({
               <tbody>
                 {auditLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-muted-foreground font-semibold">Chưa có nhật ký bảo mật nào được ghi nhận.</td>
+                    <td colSpan={5} className="p-8 text-center text-[#64748B] dark:text-slate-400 font-semibold italic">Chưa có nhật ký bảo mật nào được ghi nhận.</td>
                   </tr>
                 ) : (
                   auditLogs.map(log => (
-                    <tr key={log.id} className="border-b border-border hover:bg-muted/5 transition-colors text-xs">
-                      <td className="p-4 font-bold text-foreground">{log.actor?.email || 'Hệ thống tự động'}</td>
+                    <tr key={log.id} className="border-b border-[#E2E8F0] dark:border-[#1B317A] hover:bg-[#F1F5F9]/60 dark:hover:bg-[#0D226B]/30 transition-colors text-xs">
+                      <td className="p-4 font-bold text-[#14213D] dark:text-white">{log.actor?.email || 'Hệ thống tự động'}</td>
                       <td className="p-4">
-                        <span className="bg-primary/5 text-primary border border-primary/20 px-2 py-0.5 rounded font-mono font-bold">
+                        <span className="bg-[#1746D1]/10 text-[#1746D1] dark:bg-cyan-500/20 dark:text-cyan-300 border border-[#1746D1]/20 px-2.5 py-1 rounded-lg font-mono font-bold text-xs inline-block">
                           {log.action}
                         </span>
                       </td>
-                      <td className="p-4 font-mono text-muted-foreground">{log.target_table}</td>
+                      <td className="p-4 font-mono text-[#64748B] dark:text-slate-400 font-bold">{log.target_table}</td>
                       <td className="p-4 space-y-1">
-                        <div className="bg-muted/30 p-2 rounded border border-border font-mono max-w-sm overflow-x-auto text-[10px]">
-                          <div><strong className="text-red-500">Cũ:</strong> {JSON.stringify(log.old_values)}</div>
-                          <div className="mt-1"><strong className="text-green-500">Mới:</strong> {JSON.stringify(log.new_values)}</div>
+                        <div className="bg-[#F8FAFC] dark:bg-[#081736] p-2.5 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] font-mono max-w-sm overflow-x-auto text-[10px]">
+                          <div><strong className="text-red-500 font-bold">Cũ:</strong> {JSON.stringify(log.old_values)}</div>
+                          <div className="mt-1"><strong className="text-emerald-500 font-bold">Mới:</strong> {JSON.stringify(log.new_values)}</div>
                         </div>
                       </td>
-                      <td className="p-4 whitespace-nowrap text-muted-foreground font-semibold">
+                      <td className="p-4 whitespace-nowrap text-[#64748B] dark:text-slate-400 font-semibold">
                         {safeDateTimeFormat(log.created_at)}
                       </td>
                     </tr>
@@ -2954,34 +3431,34 @@ export default function AdminDashboardClient({
       {/* ==================================================== */}
       {batchModalOpen && batchModalConfig && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-card border border-destructive/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
+          <div className="bg-white dark:bg-[#0B1B55] border border-red-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-in">
             <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center text-destructive shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0">
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <h3 className="text-base font-extrabold text-foreground">{batchModalConfig.title}</h3>
-                <span className="inline-block mt-1 text-[11px] font-bold bg-destructive/10 text-destructive border border-destructive/20 px-2 py-0.5 rounded-full">
+                <h3 className="text-base font-extrabold text-[#14213D] dark:text-white m-0">{batchModalConfig.title}</h3>
+                <span className="inline-block mt-1 text-[11px] font-bold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full">
                   Ảnh hưởng: {batchModalConfig.count} bản ghi trong DB
                 </span>
               </div>
               <button
                 onClick={() => { setBatchModalOpen(false); setBatchModalConfig(null); }}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+                className="text-[#64748B] hover:text-[#14213D] dark:hover:text-white p-1 rounded-lg hover:bg-[#F1F5F9] dark:hover:bg-[#0D226B] transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <p className="text-xs text-[#64748B] dark:text-slate-300 leading-relaxed m-0">
               {batchModalConfig.description}
             </p>
 
-            <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-3 text-xs text-destructive font-semibold space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
+            <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-3 text-xs text-red-600 dark:text-red-400 font-semibold space-y-1">
+              <p className="font-bold flex items-center gap-1.5 m-0">
                 <AlertCircle className="h-4 w-4 shrink-0" /> Thao tác này sẽ xoá vĩnh viễn:
               </p>
-              <ul className="list-disc list-inside text-[11px] text-destructive/90 space-y-0.5">
+              <ul className="list-disc list-inside text-[11px] text-red-600/90 dark:text-red-400/90 space-y-0.5 m-0 pl-1">
                 <li>Tài khoản người dùng (profiles)</li>
                 <li>Hồ sơ chi tiết (student_details / teacher_classes)</li>
                 <li>Lịch sử học tập, nhật ký và điểm số thi thử</li>
@@ -2990,26 +3467,26 @@ export default function AdminDashboardClient({
 
             {batchModalConfig.requiresTextConfirm && (
               <div className="space-y-1.5 pt-1">
-                <label className="text-[11px] font-bold text-foreground block">
-                  Nhập chính xác chữ <span className="font-mono text-destructive font-extrabold bg-destructive/10 px-1.5 py-0.5 rounded">{batchModalConfig.confirmKeyword || 'XOA'}</span> để xác nhận:
+                <label className="text-[11px] font-bold text-[#14213D] dark:text-white block">
+                  Nhập chính xác chữ <span className="font-mono text-red-600 dark:text-red-400 font-extrabold bg-red-500/10 px-2 py-0.5 rounded-md">{batchModalConfig.confirmKeyword || 'XOA'}</span> để xác nhận:
                 </label>
                 <input
                   type="text"
                   placeholder="Gõ XOA vào đây..."
                   value={batchConfirmInput}
                   onChange={(e) => setBatchConfirmInput(e.target.value)}
-                  className="w-full rounded-xl border border-destructive/30 bg-background px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:border-destructive text-destructive"
+                  className="w-full rounded-xl border border-red-500/40 bg-[#F8FAFC] dark:bg-[#081736] px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:border-red-600 text-red-600 dark:text-red-400"
                   autoFocus
                 />
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#E2E8F0] dark:border-[#1B317A]">
               <button
                 type="button"
                 disabled={isDeletingBatch}
                 onClick={() => { setBatchModalOpen(false); setBatchModalConfig(null); }}
-                className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-muted transition-colors"
+                className="px-4 py-2 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] text-xs font-bold text-[#64748B] dark:text-slate-400 hover:bg-[#F8FAFC] dark:hover:bg-[#0D226B] transition-colors"
               >
                 Hủy bỏ
               </button>
@@ -3017,7 +3494,7 @@ export default function AdminDashboardClient({
                 type="button"
                 disabled={isDeletingBatch || (batchModalConfig.requiresTextConfirm && batchConfirmInput.trim().toUpperCase() !== (batchModalConfig.confirmKeyword || 'XOA'))}
                 onClick={handleExecuteBatchDelete}
-                className="px-4 py-2 rounded-xl bg-destructive hover:bg-destructive/90 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
               >
                 {isDeletingBatch ? (
                   <>
@@ -3039,30 +3516,30 @@ export default function AdminDashboardClient({
       {/* ==================================================== */}
       {backgroundModalClass && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-card border border-border rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-scale-in max-h-[92vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#0B1B55] border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-scale-in max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#E2E8F0] dark:border-[#1B317A]">
               <div className="flex items-center gap-3">
-                <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                <div className="h-11 w-11 rounded-xl bg-[#1746D1]/10 border border-[#1746D1]/20 flex items-center justify-center text-[#1746D1] dark:text-cyan-400 shrink-0">
                   <ImageIcon className="h-6 w-6" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-extrabold text-foreground">
+                    <h3 className="text-base font-extrabold text-[#14213D] dark:text-white m-0">
                       Cá nhân hóa Ảnh nền - Lớp {backgroundModalClass.name}
                     </h3>
-                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                    <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-[#1746D1]/10 text-[#1746D1] dark:bg-cyan-500/20 dark:text-cyan-300 border border-[#1746D1]/20">
                       {backgroundModalClass.academic_year || '2024-2027'}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="text-xs text-[#64748B] dark:text-slate-400 mt-0.5 m-0">
                     Đặt ảnh nền banner và không gian riêng biệt cho học sinh thuộc lớp này
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setBackgroundModalClass(null)}
-                className="text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                className="text-[#64748B] hover:text-[#14213D] dark:hover:text-white p-1.5 rounded-lg hover:bg-[#F1F5F9] dark:hover:bg-[#0D226B] transition-colors cursor-pointer"
                 title="Đóng modal"
               >
                 <X className="h-5 w-5" />
@@ -3072,18 +3549,17 @@ export default function AdminDashboardClient({
             {/* Live Preview Banner */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-foreground flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" /> Xem trước hiển thị giao diện học sinh (Live Preview)
+                <span className="font-bold text-[#14213D] dark:text-white flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-[#1746D1] dark:text-cyan-400" /> Xem trước hiển thị giao diện học sinh (Live Preview)
                 </span>
-                <span className="text-[11px] text-muted-foreground">Tỷ lệ rộng 16:9 banner</span>
+                <span className="text-[11px] text-[#64748B] dark:text-slate-400">Tỷ lệ rộng 16:9 banner</span>
               </div>
-              <div className="relative h-44 rounded-xl overflow-hidden border border-border/80 shadow-md bg-muted/40 group">
+              <div className="relative h-44 rounded-xl overflow-hidden border border-[#E2E8F0] dark:border-[#1B317A] shadow-md bg-slate-900 group">
                 <img
                   src={selectedBgUrl || '/student-banner-bg.jpg'}
                   alt={`Xem trước ảnh nền Lớp ${backgroundModalClass.name}`}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   onError={(e) => {
-                    // Fallback nếu link ảnh lỗi
                     (e.target as HTMLImageElement).src = '/student-banner-bg.jpg';
                   }}
                 />
@@ -3091,14 +3567,14 @@ export default function AdminDashboardClient({
                 
                 <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
                   <div className="text-white space-y-1">
-                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/80 backdrop-blur-xs text-[10px] font-extrabold uppercase tracking-wide">
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#1746D1]/80 backdrop-blur-xs text-[10px] font-extrabold uppercase tracking-wide">
                       <GraduationCap className="h-3 w-3" /> Không gian riêng của Lớp
                     </div>
-                    <h4 className="text-lg font-black tracking-tight drop-shadow-md">
+                    <h4 className="text-lg font-black tracking-tight drop-shadow-md m-0">
                       LỚP {backgroundModalClass.name}
                     </h4>
-                    <p className="text-[11px] text-white/80 font-medium">
-                      FPT School · Khối {backgroundModalClass.name.replace(/\D/g, '') || '10'} · Niên khóa {backgroundModalClass.academic_year || '2024-2027'}
+                    <p className="text-[11px] text-white/80 font-medium m-0">
+                      FPT School &bull; Khối {backgroundModalClass.name.replace(/\D/g, '') || '10'} &bull; Niên khóa {backgroundModalClass.academic_year || '2024-2027'}
                     </p>
                   </div>
                   <div className="hidden sm:block text-right">
@@ -3116,7 +3592,7 @@ export default function AdminDashboardClient({
                 className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
                   bgMessage.type === 'success'
                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-destructive/10 border-destructive/30 text-destructive'
+                    : 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400'
                 }`}
               >
                 {bgMessage.type === 'success' ? (
@@ -3131,12 +3607,12 @@ export default function AdminDashboardClient({
             {/* Các tùy chọn thiết lập ảnh */}
             <div className="space-y-4 pt-1">
               {/* Tùy chọn 1: Tải ảnh từ máy tính */}
-              <div className="bg-muted/20 border border-border rounded-xl p-4 space-y-2.5">
+              <div className="bg-[#F8FAFC] dark:bg-[#0D226B]/30 border border-[#E2E8F0] dark:border-[#1B317A] rounded-xl p-4 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-extrabold text-foreground flex items-center gap-1.5">
-                    <UploadCloud className="h-4 w-4 text-primary" /> Cách 1: Tải ảnh trực tiếp từ máy tính
+                  <label className="text-xs font-extrabold text-[#14213D] dark:text-white flex items-center gap-1.5">
+                    <UploadCloud className="h-4 w-4 text-[#1746D1] dark:text-cyan-400" /> Cách 1: Tải ảnh trực tiếp từ máy tính
                   </label>
-                  <span className="text-[10px] text-muted-foreground">Định dạng JPG, PNG, WebP (Tối đa 8MB)</span>
+                  <span className="text-[10px] text-[#64748B] dark:text-slate-400">Định dạng JPG, PNG, WebP (Tối đa 8MB)</span>
                 </div>
 
                 <input
@@ -3152,7 +3628,7 @@ export default function AdminDashboardClient({
                     type="button"
                     onClick={() => bgFileInputRef.current?.click()}
                     disabled={isUploadingBg || isSavingBg}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#1746D1]/10 hover:bg-[#1746D1]/20 text-[#1746D1] dark:text-cyan-400 border border-[#1746D1]/30 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer"
                   >
                     {isUploadingBg ? (
                       <>
@@ -3164,7 +3640,7 @@ export default function AdminDashboardClient({
                       </>
                     )}
                   </button>
-                  <span className="text-[11px] text-muted-foreground italic">
+                  <span className="text-[11px] text-[#64748B] dark:text-slate-400 italic">
                     Tự động lưu trữ tối ưu trên đám mây CDN
                   </span>
                 </div>
@@ -3172,7 +3648,7 @@ export default function AdminDashboardClient({
 
               {/* Tùy chọn 2: Nhập URL ảnh */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground block">
+                <label className="text-xs font-bold text-[#14213D] dark:text-white block">
                   Cách 2: Nhập hoặc dán liên kết URL ảnh trực tiếp
                 </label>
                 <div className="flex items-center gap-2">
@@ -3184,7 +3660,7 @@ export default function AdminDashboardClient({
                       setCustomBgInput(e.target.value);
                       setSelectedBgUrl(e.target.value);
                     }}
-                    className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-primary"
+                    className="flex-1 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#081736] px-3 py-2 text-xs font-mono text-[#14213D] dark:text-white focus:outline-none focus:border-[#087CFF]"
                   />
                   {customBgInput && (
                     <button
@@ -3193,7 +3669,7 @@ export default function AdminDashboardClient({
                         setCustomBgInput('');
                         setSelectedBgUrl('');
                       }}
-                      className="px-2.5 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border rounded-xl hover:bg-muted"
+                      className="px-2.5 py-2 text-xs font-semibold text-[#64748B] dark:text-slate-400 hover:text-[#14213D] dark:hover:text-white border border-[#E2E8F0] dark:border-[#1B317A] rounded-xl hover:bg-[#F8FAFC] dark:hover:bg-[#0D226B]"
                     >
                       Xóa
                     </button>
@@ -3203,7 +3679,7 @@ export default function AdminDashboardClient({
 
               {/* Tùy chọn 3: Thư viện Preset FPT tuyển chọn */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-foreground block">
+                <label className="text-xs font-bold text-[#14213D] dark:text-white block">
                   Cách 3: Hoặc chọn nhanh ảnh mẫu chất lượng cao
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -3219,22 +3695,22 @@ export default function AdminDashboardClient({
                         }}
                         className={`group relative rounded-xl overflow-hidden border-2 text-left transition-all cursor-pointer ${
                           isSelected
-                            ? 'border-primary ring-2 ring-primary/20 shadow-md'
-                            : 'border-border/70 hover:border-border hover:shadow-xs'
+                            ? 'border-[#087CFF] ring-2 ring-[#087CFF]/30 shadow-md'
+                            : 'border-[#E2E8F0] dark:border-[#1B317A] hover:border-[#087CFF]/50 hover:shadow-xs'
                         }`}
                       >
-                        <div className="h-18 w-full overflow-hidden bg-muted">
+                        <div className="h-18 w-full overflow-hidden bg-slate-800">
                           <img
                             src={preset.url}
                             alt={preset.title}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                           />
                         </div>
-                        <div className="p-1.5 bg-card/90">
-                          <p className="text-[10px] font-bold text-foreground line-clamp-1">{preset.title}</p>
+                        <div className="p-2 bg-white dark:bg-[#0B1B55]">
+                          <p className="text-[10px] font-bold text-[#14213D] dark:text-white line-clamp-1 m-0">{preset.title}</p>
                         </div>
                         {isSelected && (
-                          <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] shadow">
+                          <div className="absolute top-1.5 right-1.5 h-4 w-4 rounded-full bg-[#087CFF] text-white flex items-center justify-center text-[10px] shadow">
                             <Check className="h-2.5 w-2.5" />
                           </div>
                         )}
@@ -3246,12 +3722,12 @@ export default function AdminDashboardClient({
             </div>
 
             {/* Footer Buttons */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[#E2E8F0] dark:border-[#1B317A]">
               <button
                 type="button"
                 onClick={handleRemoveClassBackground}
                 disabled={isSavingBg || isUploadingBg}
-                className="px-3 py-2 rounded-xl border border-destructive/30 text-destructive hover:bg-destructive/10 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Khôi phục mặc định
               </button>
@@ -3261,7 +3737,7 @@ export default function AdminDashboardClient({
                   type="button"
                   disabled={isSavingBg || isUploadingBg}
                   onClick={() => setBackgroundModalClass(null)}
-                  className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] text-xs font-bold text-[#64748B] dark:text-slate-400 hover:bg-[#F8FAFC] dark:hover:bg-[#0D226B] transition-colors cursor-pointer"
                 >
                   Đóng
                 </button>
@@ -3269,7 +3745,7 @@ export default function AdminDashboardClient({
                   type="button"
                   disabled={isSavingBg || isUploadingBg}
                   onClick={handleSaveClassBackground}
-                  className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-extrabold transition-all shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] text-white text-xs font-extrabold transition-all shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                 >
                   {isSavingBg ? (
                     <>

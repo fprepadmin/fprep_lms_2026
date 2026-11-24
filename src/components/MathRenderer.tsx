@@ -79,6 +79,8 @@ export function cleanMathContent(content: any): string {
       .replace(/\t\s*heta\b/g, ' \\theta ')
       .replace(/\f\s*rac\b/g, ' \\dfrac ')
       .replace(/\\frac\b/g, '\\dfrac')
+      .replace(/\\+vec\{([^}]+)\}/g, '\\overrightarrow{$1}')
+      .replace(/\\+vec\s*([a-zA-Z0-9])/g, '\\overrightarrow{$1}')
       .replace(/\f\s*orall\b/g, ' \\forall ')
       .replace(/[\b]\s*ar\b/g, ' \\bar ')
       .replace(/[\b]\s*egin\b/g, ' \\begin ')
@@ -88,11 +90,13 @@ export function cleanMathContent(content: any): string {
     return `$${healed}$`;
   });
 
-  // 5. Chuẩn hóa ký hiệu "khác" (≠, \ne, \neq, !=) ngoài công thức toán ($...$)
+  // 5. Chuẩn hóa ký hiệu vector (\vec -> \overrightarrow) và ký hiệu "khác" (≠, \ne, \neq, !=) ngoài công thức toán ($...$)
   const parts = text.split(/(\$[^\$]+\$|\$\$[^\$]+\$\$)/g);
   text = parts.map((part, index) => {
     if (index % 2 === 1) return part;
     return part
+      .replace(/\\+vec\{([^}]+)\}/g, '$\\overrightarrow{$1}$')
+      .replace(/\\+vec\s*([a-zA-Z0-9])/g, '$\\overrightarrow{$1}$')
       .replace(/\\(?:ne|neq)\b/g, '≠')
       .replace(/(?<=[a-zA-Z0-9\s])!=(?=[a-zA-Z0-9\s])/g, '≠');
   }).join('');

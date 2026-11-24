@@ -40,57 +40,48 @@ export default async function TeacherLeaderboardPage() {
   const mySubjectId = myTeaching?.[0]?.subject_id || '';
   const mySubjectName = (myTeaching?.[0] as any)?.subjects?.name || 'Toán học';
 
-  // 3. Phân công & Lớp học
+  // 3. Phân công & Lớp học & Môn học
   let assignmentQuery = supabase.from('teacher_classes').select('*, classes(*), subjects(*)');
   if (isHOD && mySubjectId) {
     assignmentQuery = assignmentQuery.eq('subject_id', mySubjectId);
-  } else {
+  } else if (!['admin', 'head_of_department'].includes(userRole)) {
     assignmentQuery = assignmentQuery.eq('teacher_id', teacherId);
   }
 
   const [
+    subjectsRes,
     assignmentsRes,
     allClassesRes,
     allExamsRes
   ] = await Promise.all([
+    supabase.from('subjects').select('*').order('name'),
     assignmentQuery,
     supabase.from('classes').select('*').order('name'),
     supabase.from('exams').select('*, subjects(*)').order('created_at', { ascending: false })
   ]);
 
+  const allSubjects = subjectsRes.data || [];
   const assignments = assignmentsRes.data || [];
   const allClasses = allClassesRes.data || [];
   const allExams = allExamsRes.data || [];
 
   const classIds = assignments.map((a: any) => a.class_id).filter(Boolean);
 
-  // 4. Lấy danh sách học sinh thuộc các lớp phụ trách
-  let studentQuery = supabase.from('student_details').select('*, classes(*)');
-  if (classIds.length > 0) {
-    studentQuery = studentQuery.in('class_id', classIds);
-  }
-  const { data: students } = await studentQuery;
+  // 4. Lấy danh sách toàn bộ học sinh để hỗ trợ bảng vàng theo từng môn toàn khối
+  const { data: students } = await supabase.from('student_details').select('*, classes(*)');
   const studentList = students || [];
   const studentUserIds = studentList.map((s: any) => s.student_id);
 
-  // 5. Lấy kết quả thi và profile học sinh
-  let examResultsQuery = supabase
-    .from('exam_results')
-    .select('*, exams(*)')
-    .order('created_at', { ascending: false });
-
-  let profilesQuery = supabase
-    .from('profiles')
-    .select('*')
-    .in('id', studentUserIds.length > 0 ? studentUserIds : [crypto.randomUUID()]);
-
-  if (!isHOD && studentUserIds.length > 0) {
-    examResultsQuery = examResultsQuery.in('student_id', studentUserIds);
-  }
-
+  // 5. Lấy kết quả thi và profile học sinh kèm thông tin đề thi và môn học
   const [examResultsRes, profilesRes] = await Promise.all([
-    examResultsQuery,
-    profilesQuery
+    supabase
+      .from('exam_results')
+      .select('*, exams(id, title, subject_id, exam_type, exam_category)')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('profiles')
+      .select('*')
+      .in('id', studentUserIds.length > 0 ? studentUserIds : [crypto.randomUUID()])
   ]);
 
   const examResults = examResultsRes.data || [];
@@ -101,7 +92,10 @@ export default async function TeacherLeaderboardPage() {
       <TeacherLeaderboardClient
         teacherId={teacherId}
         subjectName={mySubjectName}
+        mySubjectId={mySubjectId}
+        allSubjects={allSubjects}
         isHOD={isHOD}
+        userRole={userRole}
         classes={allClasses}
         assignedClassIds={classIds}
         students={studentList}

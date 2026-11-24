@@ -468,19 +468,31 @@ export default function StudentDashboardClient({
   return (
     <div className="space-y-6 animate-fade-in w-full pb-10">
       
-      {/* HEADER MÔN HỌC (NỀN XANH CHUẨN FPREP & FPT) */}
-      <div className="rounded-3xl border-2 border-[#b6d4fe] dark:border-blue-900/60 bg-gradient-to-br from-[#d9ebff] via-[#e7f1ff] to-[#f0f7ff] dark:from-[#0c224a] dark:via-[#081836] dark:to-[#040e21] p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden shadow-sm">
+      {/* HEADER MÔN HỌC (FUTURE BLUE 2.0 - DEEP NAVY TO ELECTRIC BLUE) */}
+      <div className="rounded-[22px] border border-[#00DFFF]/30 bg-gradient-to-br from-[#0B1B55] via-[#1746D1] to-[#087CFF] p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden shadow-[0_12px_40px_-5px_rgba(23,70,209,0.28)] text-white">
         <div className="space-y-2 max-w-2xl relative z-10">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/95 dark:bg-[#071735]/90 px-3.5 py-1 text-xs font-black text-[#0d6efd] dark:text-blue-400 border border-[#b6d4fe] dark:border-blue-700/50 shadow-2xs backdrop-blur-md">
-            <BookOpen className="h-3.5 w-3.5" /> Chương trình học chính thức Khối 12
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3.5 py-1 text-xs font-black text-white border border-white/20 shadow-2xs backdrop-blur-md">
+            <BookOpen className="h-3.5 w-3.5 text-[#00DFFF]" /> Chương trình học chính thức Khối 12
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black font-heading text-[#052c65] dark:text-white tracking-tight m-0">
-            Học Liệu & Môn Học
+          <h1 className="text-2xl sm:text-3xl font-black font-heading text-white tracking-tight m-0">
+            Học Liệu & Môn Học Khối 12
           </h1>
-          <p className="text-xs sm:text-sm text-[#084298] dark:text-blue-100 font-semibold m-0">
+          <p className="text-xs sm:text-sm text-blue-100 font-medium m-0 font-body">
             Bấm chọn môn học để xem chi tiết các chương bài giảng, sơ đồ lý thuyết và bài tập rèn luyện.
           </p>
         </div>
+
+        {/* Nút truy cập nhanh Bảng Vàng Vinh Danh */}
+        <Link
+          href="/dashboard/student/leaderboard"
+          className="relative z-10 px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs flex items-center gap-2.5 shadow-[0_4px_20px_rgba(251,191,36,0.4)] transition-all cursor-pointer active:scale-95 border border-amber-300 shrink-0"
+        >
+          <Award className="h-5 w-5 text-slate-950 animate-bounce" />
+          <div className="text-left font-body">
+            <span className="block text-[10px] uppercase font-bold text-slate-900/80">Vinh Danh Tuần & Tháng</span>
+            <span className="text-xs font-black text-slate-950">Xem Bảng Vàng Khảo Thí &rarr;</span>
+          </div>
+        </Link>
       </div>
 
       {/* CÁC TAB LỰA CHỌN PHÂN BAN */}

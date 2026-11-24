@@ -19,6 +19,7 @@ export default async function AdminUsersPage() {
     redirect('/');
   }
   const currentUserId = payload.sub;
+  const adminEmail = payload.email || 'Admin';
 
   const supabase = await getSupabaseServerClient();
 
@@ -41,18 +42,29 @@ export default async function AdminUsersPage() {
 
   return (
     <div className="space-y-6 w-full animate-fade-in">
-      {/* HEADER QUẢN TRỊ NGƯỜI DÙNG (CHUẨN FPREP BANNER) */}
-      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
-        <div className="space-y-2 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-3 py-0.5 text-xs font-bold text-red-500 border border-red-500/20">
-            <Users className="h-3.5 w-3.5" /> Quản trị Tài khoản & Phân quyền
+      {/* ==================================================== */}
+      {/* WELCOME BANNER - QUẢN LÝ NGƯỜI DÙNG & HỌC THUẬT */}
+      {/* ==================================================== */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1B55] via-[#1746D1] to-[#087CFF] p-6 sm:p-7 text-white shadow-xl shadow-blue-500/10 border border-[#00DFFF]/30">
+        <div className="absolute -right-12 -top-12 h-56 w-56 rounded-full bg-[#00DFFF]/15 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-3 py-0.5 text-xs font-bold text-[#00DFFF] border border-white/15">
+              <Users className="h-3.5 w-3.5" />
+              <span>FPT AI LEARNING &bull; QUẢN TRỊ TÀI KHOẢN & HỌC THUẬT</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black font-heading text-white m-0 uppercase tracking-tight">
+              Quản Lý Tài Khoản & Phân Quyền
+            </h1>
+            <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed m-0 font-medium">
+              Quản lý danh sách người dùng, phân cấp quyền hạn (Học sinh / Giáo viên / Trưởng bộ môn / Admin), tổ chức lớp học và phân công giảng dạy.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
-            Quản Lý Tài Khoản & Phân Quyền
-          </h1>
-          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
-            Thêm tài khoản mới, phân quyền (Học sinh / Giáo viên / Trưởng bộ môn / Admin) và xếp lớp học.
-          </p>
+
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 text-xs shrink-0 self-start sm:self-center">
+            <span className="font-extrabold text-white">Tổng: {profilesRes.data?.length || 0} tài khoản</span>
+          </div>
         </div>
       </div>
 

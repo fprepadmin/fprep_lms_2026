@@ -32,7 +32,9 @@ export default function AnnouncementManager({
   allProfiles = []
 }: AnnouncementManagerProps) {
   const supabase = createSupabaseClient(token);
-  const [announcements, setAnnouncements] = useState<Announcement[]>(initialAnnouncements);
+  const [announcements, setAnnouncements] = useState<Announcement[]>(
+    (initialAnnouncements || []).filter(a => !a.title?.startsWith('__'))
+  );
   const [showForm, setShowForm] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
@@ -137,15 +139,15 @@ export default function AnnouncementManager({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center border-b border-border pb-3">
-        <h2 className="text-base font-bold font-heading flex items-center gap-2 m-0 text-[#212529] dark:text-foreground">
-          <Bell className="h-4.5 w-4.5 text-primary" /> Bảng tin Thông báo Nội bộ
+      <div className="flex justify-between items-center border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3">
+        <h2 className="text-base font-bold font-heading flex items-center gap-2 m-0 text-[#14213D] dark:text-white">
+          <Bell className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400" /> Bảng tin Thông báo Nội bộ
         </h2>
 
         {canCreate && (
           <button
             onClick={() => setShowForm(!showForm)}
-            className="btn-primary py-1.5 px-3 text-xs"
+            className="py-1.5 px-3.5 text-xs font-bold rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] text-white hover:shadow-md transition-all flex items-center gap-1.5"
           >
             {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             <span>{showForm ? 'Đóng form' : 'Đăng tin mới'}</span>
@@ -327,11 +329,11 @@ export default function AnnouncementManager({
           return (
             <div 
               key={ann.id} 
-              className="p-4 rounded-xl border border-border hover:border-primary/40 bg-[#ffffff] dark:bg-card/80 hover:bg-[#f8f9fa] dark:hover:bg-muted/20 transition-all cursor-pointer space-y-2 group shadow-sm"
+              className="p-4 sm:p-5 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D226B]/40 hover:bg-[#EEF4FF] dark:hover:bg-[#0D226B] hover:border-[#087CFF] dark:hover:border-cyan-400/50 transition-all cursor-pointer space-y-2 group shadow-2xs"
               onClick={() => setSelectedAnnouncement(ann)}
             >
               <div className="flex justify-between items-start gap-3">
-                <h3 className="font-bold text-[14px] font-heading text-[#212529] dark:text-foreground group-hover:text-primary transition-colors m-0">
+                <h3 className="font-bold text-[14px] font-heading text-[#14213D] dark:text-white group-hover:text-[#1746D1] dark:group-hover:text-cyan-300 transition-colors m-0">
                   {ann.title}
                 </h3>
                 
@@ -339,25 +341,25 @@ export default function AnnouncementManager({
                   {userRole === 'admin' && (
                     <div className="flex items-center gap-1">
                       {ann.target_type === 'teachers' && (
-                        <span className="badge-primary">Chỉ Thầy Cô</span>
+                        <span className="bg-[#1746D1]/10 text-[#1746D1] border border-[#1746D1]/20 px-2 py-0.5 rounded-full text-[10px] font-bold">Chỉ Thầy Cô</span>
                       )}
                       {ann.target_type === 'individual' && (
-                        <span className="badge-warning">
+                        <span className="bg-amber-500/10 text-amber-600 border border-amber-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold">
                           Gửi riêng: {allProfiles?.find(p => p.id === ann.target_user_id)?.email || 'Tài khoản'}
                         </span>
                       )}
                       {(!ann.target_type || ann.target_type === 'all') && (
-                        <span className="badge-info">Tất cả</span>
+                        <span className="bg-[#087CFF]/10 text-[#087CFF] border border-[#087CFF]/20 px-2 py-0.5 rounded-full text-[10px] font-bold">Tất cả</span>
                       )}
                     </div>
                   )}
-                  <span className="text-[11px] text-[#6c757d] dark:text-muted-foreground font-semibold flex items-center gap-1">
-                    <Calendar className="h-3 w-3" /> {ann.date} &bull; {ann.sender}
+                  <span className="text-[11px] text-[#64748B] dark:text-slate-300 font-semibold flex items-center gap-1">
+                    <Calendar className="h-3 w-3 text-[#1746D1] dark:text-cyan-400" /> {ann.date} &bull; {ann.sender}
                   </span>
                   {canCreate && (
                     <button
                       onClick={() => handleDeleteAnnouncement(ann.id)}
-                      className="text-[#dc3545] hover:bg-[#f8d7da] p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="text-red-500 hover:bg-red-50 p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                       title="Xóa thông báo"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -367,18 +369,18 @@ export default function AnnouncementManager({
               </div>
 
               {/* RENDER NỘI DUNG TÓM TẮT TRONG LIST */}
-              <p className="text-xs text-[#6c757d] dark:text-muted-foreground leading-relaxed font-medium m-0">
+              <p className="text-xs text-[#475569] dark:text-slate-200 leading-relaxed font-normal m-0">
                 {truncated}
               </p>
 
               <div className="flex justify-between items-center pt-1">
-                <span className="text-[11px] text-primary font-bold hover:underline inline-flex items-center gap-0.5">
+                <span className="text-[11px] text-[#1746D1] dark:text-cyan-400 font-bold hover:underline inline-flex items-center gap-0.5">
                   Xem chi tiết &rarr;
                 </span>
                 
                 {ann.image_url && (
-                  <span className="badge-secondary flex items-center gap-1">
-                    <ImageIcon className="h-3 w-3" /> Có ảnh đính kèm
+                  <span className="bg-[#1746D1]/10 text-[#1746D1] dark:bg-cyan-500/20 dark:text-cyan-300 border border-[#1746D1]/20 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                    <ImageIcon className="h-3 w-3 text-[#1746D1] dark:text-cyan-400" /> Có ảnh đính kèm
                   </span>
                 )}
               </div>
@@ -387,34 +389,34 @@ export default function AnnouncementManager({
         })}
 
         {announcements.length === 0 && (
-          <p className="text-xs text-[#6c757d] italic text-center py-6 m-0">Chưa có thông báo nào được đăng tải.</p>
+          <p className="text-xs text-[#64748B] italic text-center py-6 m-0">Chưa có thông báo nào được đăng tải.</p>
         )}
       </div>
 
       {/* POPUP MODAL XEM CHI TIẾT THÔNG BÁO (CHUẨN FPREP MODAL) */}
       {selectedAnnouncement && (
         <div 
-          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in"
+          className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fade-in"
           onClick={() => setSelectedAnnouncement(null)}
         >
           <div 
-            className="bg-white dark:bg-card border border-border max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 relative overflow-hidden flex flex-col max-h-[88vh]"
+            className="bg-white dark:bg-[#0B1B55] border border-[#E2E8F0] dark:border-[#1B317A] max-w-xl w-full rounded-2xl p-6 shadow-2xl space-y-4 relative overflow-hidden flex flex-col max-h-[88vh] text-[#14213D] dark:text-slate-100"
             onClick={(e) => e.stopPropagation()}
           >
             
             {/* Header Modal */}
-            <div className="flex justify-between items-start border-b border-border pb-3 shrink-0 gap-3">
+            <div className="flex justify-between items-start border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3 shrink-0 gap-3">
               <div className="min-w-0 flex-1">
-                <h3 className="font-bold text-base font-heading text-[#212529] dark:text-foreground flex items-center gap-2 m-0">
-                  <Bell className="h-4.5 w-4.5 text-primary shrink-0" /> {selectedAnnouncement.title}
+                <h3 className="font-bold text-base font-heading text-[#14213D] dark:text-white flex items-center gap-2 m-0">
+                  <Bell className="h-4.5 w-4.5 text-[#1746D1] dark:text-cyan-400 shrink-0" /> {selectedAnnouncement.title}
                 </h3>
-                <p className="text-[11px] text-[#6c757d] dark:text-muted-foreground font-semibold mt-1 m-0">
+                <p className="text-[11px] text-[#64748B] dark:text-slate-300 font-semibold mt-1 m-0">
                   Đăng ngày: {selectedAnnouncement.date} &bull; Người gửi: {selectedAnnouncement.sender}
                 </p>
               </div>
               <button 
                 onClick={() => setSelectedAnnouncement(null)}
-                className="p-1.5 hover:bg-muted border border-border bg-background rounded-lg transition-colors shrink-0"
+                className="p-1.5 hover:bg-[#F1F5F9] dark:hover:bg-[#0D226B] border border-[#E2E8F0] dark:border-[#1B317A] rounded-lg transition-colors shrink-0 text-[#64748B] dark:text-slate-300"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -424,7 +426,7 @@ export default function AnnouncementManager({
             <div className="flex-1 overflow-y-auto pr-1 space-y-4 text-xs">
               <div 
                 dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content }} 
-                className="text-xs text-[#212529] dark:text-foreground leading-relaxed font-medium space-y-2 whitespace-pre-line"
+                className="text-xs text-[#334155] dark:text-slate-200 leading-relaxed font-normal space-y-2 whitespace-pre-line"
               />
 
               {selectedAnnouncement.image_url && (
@@ -432,7 +434,7 @@ export default function AnnouncementManager({
                   <img 
                     src={selectedAnnouncement.image_url} 
                     alt={selectedAnnouncement.title} 
-                    className="w-full rounded-xl border border-border object-cover max-h-96 shadow-md"
+                    className="w-full rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] object-cover max-h-96 shadow-md"
                     onError={(e) => { (e.target as any).style.display = 'none'; }}
                   />
                 </div>
@@ -440,10 +442,10 @@ export default function AnnouncementManager({
             </div>
 
             {/* Footer Modal */}
-            <div className="border-t border-border pt-3 flex justify-end shrink-0">
+            <div className="border-t border-[#E2E8F0] dark:border-[#1B317A] pt-3 flex justify-end shrink-0">
               <button 
                 onClick={() => setSelectedAnnouncement(null)}
-                className="btn-primary py-2 px-5 text-xs"
+                className="py-2 px-6 text-xs font-bold rounded-xl bg-gradient-to-r from-[#1746D1] to-[#087CFF] text-white hover:shadow-md transition-all"
               >
                 Đóng
               </button>

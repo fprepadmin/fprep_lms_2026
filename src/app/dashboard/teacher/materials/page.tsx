@@ -98,7 +98,7 @@ export default async function TeacherMaterialsPage() {
   return (
     <div className="space-y-5 w-full animate-fade-in">
       {/* HEADER BIÊN SOẠN HỌC LIỆU CHUẨN LMS */}
-      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 relative overflow-hidden bg-white dark:bg-card">
+      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 relative overflow-hidden">
         <div className="space-y-1 max-w-2xl">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-0.5 text-xs font-bold text-primary">
             <BookOpen className="h-3.5 w-3.5" />

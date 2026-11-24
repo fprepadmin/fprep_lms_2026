@@ -2006,24 +2006,24 @@ export default function TeacherStudentsClient({
   return (
     <div className="space-y-6 animate-fade-in">
       {/* HEADER VÀ THANH CHUYỂN TAB CHÍNH */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="space-y-1">
-          <h2 className="text-xl sm:text-2xl font-black text-foreground flex items-center gap-2.5">
-            <Users className="h-6 w-6 text-primary" /> Quản Lý Học Sinh & Lớp Học
+          <h2 className="text-xl sm:text-2xl font-black font-heading text-[#14213D] dark:text-white flex items-center gap-2.5">
+            <Users className="h-6 w-6 text-[#1746D1] dark:text-cyan-400" /> Quản Lý Học Sinh & Lớp Học
           </h2>
-          <p className="text-xs text-muted-foreground font-semibold">
+          <p className="text-xs text-[#64748B] dark:text-slate-300 font-semibold">
             Theo dõi tiến độ học tập, nộp bài đề thi và quản lý danh sách học sinh theo từng lớp học
           </p>
         </div>
 
         {/* Tab switch: Danh sách lớp học vs Xem nộp bài nhanh vs Bảng xếp hạng */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-muted/70 p-1.5 rounded-xl border border-border self-start sm:self-auto shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 bg-[#F8FAFC] dark:bg-[#0D226B] p-1.5 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A] self-start sm:self-auto shrink-0">
           <button
             onClick={() => setMainTab('classes')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               mainTab === 'classes'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-[#1746D1] text-white shadow-sm'
+                : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D]'
             }`}
           >
             <Users className="h-4 w-4" /> Danh Sách Lớp Học
@@ -2033,8 +2033,8 @@ export default function TeacherStudentsClient({
             onClick={() => setMainTab('submissions')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               mainTab === 'submissions'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-[#1746D1] text-white shadow-sm'
+                : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D]'
             }`}
           >
             <Zap className="h-4 w-4 text-amber-500" /> Xem Nộp Bài Nhanh
@@ -2123,7 +2123,7 @@ export default function TeacherStudentsClient({
             return (
               <div 
                 key={c.id}
-                className={`group rounded-2xl border border-border bg-card p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-all flex flex-col justify-between space-y-6 relative overflow-hidden bg-gradient-to-br from-muted/20 via-card to-card ${isSecondary ? 'opacity-80' : ''}`}
+                className={`group rounded-2xl border border-[#E2E8F0] dark:border-[#1B317A] bg-white dark:bg-[#0B1B55]/90 p-5 shadow-sm hover:shadow-md hover:border-[#087CFF] transition-all flex flex-col justify-between space-y-6 relative overflow-hidden ${isSecondary ? 'opacity-80' : ''}`}
               >
                 <div className={`absolute -top-4 -right-4 w-28 h-28 rounded-full blur-2xl pointer-events-none -z-10 group-hover:scale-125 transition-transform duration-500 ${isT ? 'bg-blue-500/10' : isX ? 'bg-emerald-500/10' : 'bg-purple-500/10'}`} />
                 <div className={`absolute -bottom-10 -left-10 w-24 h-24 rounded-full blur-2xl pointer-events-none -z-10 ${isT ? 'bg-blue-500/5' : isX ? 'bg-emerald-500/5' : 'bg-purple-500/5'}`} />
@@ -2167,24 +2167,24 @@ export default function TeacherStudentsClient({
                   </div>
                   
                   <div>
-                    <h3 className="font-black text-xl text-foreground flex items-center gap-2">
+                    <h3 className="font-black font-heading text-xl text-[#14213D] dark:text-white flex items-center gap-2">
                       Lớp {c.name}
                       {getGroupBadge(c.group_type)}
                     </h3>
-                    <p className="text-[10px] text-muted-foreground font-semibold mt-1">
+                    <p className="text-[11px] text-[#64748B] dark:text-slate-300 font-semibold mt-1">
                       Niên khóa: {c.academic_year} &bull; Sĩ số: {analytics.studentsCount} học sinh
                     </p>
-                    <span className="block text-[9px] text-muted-foreground font-bold mt-1.5">
+                    <span className="block text-[10px] text-[#64748B] dark:text-slate-400 font-bold mt-1.5">
                       Môn học: {assignedSub} &bull; GV: {assignedTeacherEmail || 'Chưa phân công'}
                     </span>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border/50 flex flex-wrap gap-2 justify-between items-center text-xs z-10">
+                <div className="pt-4 border-t border-[#E2E8F0] dark:border-[#1B317A] flex flex-wrap gap-2 justify-between items-center text-xs z-10">
                   <div className="space-y-1">
-                    <p className="font-bold text-foreground">{analytics.avgPercent}% tiến độ học</p>
-                    <div className="w-20 bg-muted rounded-full h-1">
-                      <div className="bg-primary h-1 rounded-full" style={{ width: `${analytics.avgPercent}%` }} />
+                    <p className="font-bold text-[#14213D] dark:text-white">{analytics.avgPercent}% tiến độ học</p>
+                    <div className="w-24 bg-[#E2E8F0] dark:bg-[#1B317A] rounded-full h-1.5">
+                      <div className="bg-gradient-to-r from-[#1746D1] to-[#087CFF] h-1.5 rounded-full" style={{ width: `${analytics.avgPercent}%` }} />
                     </div>
                   </div>
 
@@ -2202,7 +2202,7 @@ export default function TeacherStudentsClient({
 
                     <button
                       onClick={() => setSelectedClassId(c.id)}
-                      className="text-[11px] font-extrabold text-primary uppercase tracking-wider flex items-center gap-0.5 hover:underline"
+                      className="text-[11px] font-extrabold text-[#1746D1] dark:text-cyan-400 uppercase tracking-wider flex items-center gap-0.5 hover:underline"
                     >
                       Chi tiết <ChevronRight className="h-3.5 w-3.5" />
                     </button>

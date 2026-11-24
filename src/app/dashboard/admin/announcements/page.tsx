@@ -51,22 +51,33 @@ export default async function AdminAnnouncementsPage() {
 
   return (
     <div className="space-y-6 w-full animate-fade-in">
-      {/* HEADER QUẢN LÝ THÔNG BÁO (CHUẨN FPREP BANNER) */}
-      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
-        <div className="space-y-2 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
-            <Bell className="h-3.5 w-3.5" /> Truyền thông & Báo cáo Nội bộ
+      {/* ==================================================== */}
+      {/* WELCOME BANNER - TRUYỀN THÔNG & THÔNG BÁO NỘI BỘ */}
+      {/* ==================================================== */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1B55] via-[#1746D1] to-[#087CFF] p-6 sm:p-7 text-white shadow-xl shadow-blue-500/10 border border-[#00DFFF]/30">
+        <div className="absolute -right-12 -top-12 h-56 w-56 rounded-full bg-[#00DFFF]/15 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-3 py-0.5 text-xs font-bold text-[#00DFFF] border border-white/15">
+              <Bell className="h-3.5 w-3.5" />
+              <span>FPT AI LEARNING &bull; TRUYỀN THÔNG & BÁO CÁO NỘI BỘ</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black font-heading text-white m-0 uppercase tracking-tight">
+              Quản Lý Thông Báo
+            </h1>
+            <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed m-0 font-medium">
+              Đăng tải bản tin, thông báo và điều hướng truyền thông quan trọng đến toàn bộ hệ thống, riêng giáo viên hoặc cá nhân học sinh.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
-            Quản Lý Thông Báo
-          </h1>
-          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
-            Đăng thông tin, thông báo và tin tức quan trọng đến toàn bộ website, chỉ giáo viên hoặc gửi riêng cho từng cá nhân.
-          </p>
+
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 text-xs shrink-0 self-start sm:self-center">
+            <span className="font-extrabold text-white">Tổng: {announcements.length} thông báo</span>
+          </div>
         </div>
       </div>
 
-      <div className="flat-card">
+      <div className="bg-white dark:bg-[#0B1B55]/90 border border-[#E2E8F0] dark:border-[#1B317A] rounded-2xl p-5 sm:p-6 shadow-sm">
         <AnnouncementManager
           initialAnnouncements={announcements}
           userRole={userRole}

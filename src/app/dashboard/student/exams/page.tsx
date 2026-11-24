@@ -70,7 +70,7 @@ export default async function StudentExamsPage() {
     <div className="space-y-6 w-full animate-fade-in">
       
       {/* HEADER TRANG ĐỀ LUYỆN TẬP (CHUẨN FPREP BANNER) */}
-      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden bg-white dark:bg-card">
+      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden">
         <div className="space-y-2 max-w-2xl">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
             <ClipboardList className="h-3.5 w-3.5" /> Luyện tập & Đánh giá năng lực Khối 12
