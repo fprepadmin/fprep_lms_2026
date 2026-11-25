@@ -244,13 +244,91 @@ export default function AdminDashboardClient({
 
   // -------------------------------------------------------------
   // BẢNG VINH DANH GIÁO VIÊN XUẤT SẮC & ĐÓNG GÓP NGÂN HÀNG ĐỀ THI
+  // (CHỈ THỐNG KÊ CHÍNH XÁC ĐỀ DO CHÍNH GIÁO VIÊN UPLOAD, KHÔNG CỘNG GỘP THEO BỘ MÔN)
   // -------------------------------------------------------------
   const [teacherSearchKeyword, setTeacherSearchKeyword] = useState('');
   const [leaderboardSubjectFilter, setLeaderboardSubjectFilter] = useState('all');
+  const [localExamAuthors, setLocalExamAuthors] = useState<Record<string, string>>(
+    () => ({ ...(examMetadataStore?.exam_authors || {}) })
+  );
+  const [showUnattributedPanel, setShowUnattributedPanel] = useState(false);
+  const [savingAuthorExamId, setSavingAuthorExamId] = useState<string | null>(null);
+  const [authorDrafts, setAuthorDrafts] = useState<Record<string, string>>({});
+
+  // Tổng hợp chính xác người upload của từng đề thi từ các nguồn dữ liệu thực tế
+  const resolvedExamAuthors = React.useMemo(() => {
+    const map: Record<string, string> = {};
+
+    // 1. Nguồn dự phòng từ audit_logs (duyệt từ cũ -> mới để bản ghi mới nhất có hiệu lực)
+    for (let i = auditLogs.length - 1; i >= 0; i--) {
+      const log = auditLogs[i];
+      if (
+        log.target_table === 'exams' &&
+        log.target_id &&
+        (log.action === 'RECORD_EXAM_AUTHOR' || log.action === 'CREATE_EXAM' || log.action === 'UPLOAD_EXAM')
+      ) {
+        const authorId = log.new_values?.teacher_id || log.actor_id;
+        if (authorId) map[log.target_id] = authorId;
+      }
+    }
+
+    // 2. Cột tác giả trực tiếp trên bảng exams (nếu DB có created_by / teacher_id / author_id)
+    exams.forEach((e: any) => {
+      const directAuthor = e.created_by || e.teacher_id || e.author_id;
+      if (directAuthor && !map[e.id]) {
+        map[e.id] = directAuthor;
+      }
+    });
+
+    // 3. Nguồn chính thức từ Exam Metadata Store (ưu tiên cao nhất)
+    Object.entries(localExamAuthors).forEach(([examId, teacherId]) => {
+      if (teacherId) {
+        map[examId] = teacherId;
+      } else {
+        delete map[examId];
+      }
+    });
+
+    return map;
+  }, [auditLogs, exams, localExamAuthors]);
+
+  const unattributedExams = React.useMemo(
+    () => exams.filter((e: any) => !resolvedExamAuthors[e.id]),
+    [exams, resolvedExamAuthors]
+  );
+
+  const handleAssignExamAuthor = async (examId: string, teacherId: string, examTitle?: string) => {
+    if (!teacherId) return;
+    setSavingAuthorExamId(examId);
+    try {
+      const res = await fetch('/api/teacher/exam-assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          exam_id: examId,
+          action: 'record_author',
+          teacher_id: teacherId,
+          force: true,
+          title: examTitle || ''
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Không thể lưu giáo viên upload đề');
+      }
+      setLocalExamAuthors(prev => ({ ...prev, [examId]: teacherId }));
+    } catch (err: any) {
+      alert(err.message || 'Lỗi khi gán giáo viên upload đề.');
+    } finally {
+      setSavingAuthorExamId(null);
+    }
+  };
 
   const teacherContributionLeaderboard = React.useMemo(() => {
     const teachers = profiles.filter(p => p.role === 'teacher' || p.role === 'head_of_department');
-    const authorMap = examMetadataStore?.exam_authors || {};
 
     const categorize = (e: any) => {
       const rawType = e.exam_type;
@@ -275,12 +353,8 @@ export default function AdminDashboardClient({
       const teachingSubjectIds = Array.from(new Set(teachingClasses.map((tc: any) => tc.subject_id).filter(Boolean)));
       const teachingSubjects = subjects.filter((s: any) => teachingSubjectIds.includes(s.id));
 
-      // 2. Các đề thi do giáo viên này đóng góp / phụ trách môn
-      const teacherExams = exams.filter((e: any) => {
-        if (authorMap[e.id] && authorMap[e.id] === teacher.id) return true;
-        if (!authorMap[e.id] && teachingSubjectIds.includes(e.subject_id)) return true;
-        return false;
-      });
+      // 2. CHỈ tính các đề thi do CHÍNH giáo viên này trực tiếp upload/biên soạn (KHÔNG gộp chung đề của cả bộ môn)
+      const teacherExams = exams.filter((e: any) => resolvedExamAuthors[e.id] === teacher.id);
 
       const examIdsSet = new Set(teacherExams.map((e: any) => e.id));
 
@@ -292,7 +366,7 @@ export default function AdminDashboardClient({
 
       const teacherQuestions = questions.filter((q: any) => examIdsSet.has(q.exam_id));
       const studentSubmissions = examResults.filter((r: any) => examIdsSet.has(r.exam_id));
-      const assignedCount = (examMetadataStore?.assignments || []).filter((a: any) => examIdsSet.has(a.exam_id) || a.teacher_id === teacher.id).length;
+      const assignedCount = (examMetadataStore?.assignments || []).filter((a: any) => a.teacher_id === teacher.id).length;
 
       const teacherNames = getTeacherDisplayName(teacher.email);
       const displayNameStr = teacherNames?.fullName || teacherNames?.fptName || teacher.email.split('@')[0];
@@ -315,14 +389,32 @@ export default function AdminDashboardClient({
       };
     });
 
-    // Sắp xếp vinh danh giáo viên xuất sắc theo số đề thi đóng góp
+    // Sắp xếp vinh danh giáo viên xuất sắc theo số đề thực tế đã upload
     board.sort((a, b) => {
       if (b.totalExams !== a.totalExams) return b.totalExams - a.totalExams;
-      return b.totalQuestions - a.totalQuestions;
+      if (b.totalQuestions !== a.totalQuestions) return b.totalQuestions - a.totalQuestions;
+      return b.totalStudentAttempts - a.totalStudentAttempts;
     });
 
     return board;
-  }, [profiles, exams, questions, examResults, initialTeacherClasses, subjects, examMetadataStore]);
+  }, [profiles, exams, questions, examResults, initialTeacherClasses, subjects, examMetadataStore, resolvedExamAuthors]);
+
+  const teachersWithUploadsCount = React.useMemo(
+    () => teacherContributionLeaderboard.filter(t => t.totalExams > 0).length,
+    [teacherContributionLeaderboard]
+  );
+
+  const attributedExamsCount = React.useMemo(
+    () => teacherContributionLeaderboard.reduce((sum, item) => sum + item.totalExams, 0),
+    [teacherContributionLeaderboard]
+  );
+
+  const attributedQuestionsCount = React.useMemo(
+    () => teacherContributionLeaderboard.reduce((sum, item) => sum + item.totalQuestions, 0),
+    [teacherContributionLeaderboard]
+  );
+
+  const topContributor = teacherContributionLeaderboard[0]?.totalExams > 0 ? teacherContributionLeaderboard[0] : null;
 
   // Lọc bảng vinh danh theo từ khóa và môn học
   const filteredTeacherLeaderboard = React.useMemo(() => {
@@ -1592,127 +1684,225 @@ export default function AdminDashboardClient({
             {/* Chỉ Số Nhanh Về Đóng Góp Của Giáo Viên */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D226B]/50 border border-[#E2E8F0] dark:border-[#1B317A] flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-500/15 text-[#1746D1] dark:text-blue-400 border border-blue-200 dark:border-blue-500/25">
                   <Users className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Giáo viên tham gia</span>
-                  <div className="text-base sm:text-lg font-black font-heading text-[#14213D] dark:text-white">{teacherContributionLeaderboard.length} Thầy/Cô</div>
+                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">GV đã upload đề</span>
+                  <div className="text-base sm:text-lg font-black font-heading text-[#14213D] dark:text-white">
+                    {teachersWithUploadsCount} <span className="text-xs font-bold text-[#64748B] dark:text-slate-400">/ {teacherContributionLeaderboard.length} GV</span>
+                  </div>
                 </div>
               </div>
 
               <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D226B]/50 border border-[#E2E8F0] dark:border-[#1B317A] flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                <div className="p-2.5 rounded-lg bg-sky-50 dark:bg-cyan-500/15 text-[#087CFF] dark:text-cyan-400 border border-sky-200 dark:border-cyan-500/25">
                   <ClipboardList className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Đề thi đã upload</span>
-                  <div className="text-base sm:text-lg font-black font-heading text-[#14213D] dark:text-cyan-400">{exams.length} đề thi</div>
+                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Đề đã định danh GV</span>
+                  <div className="text-base sm:text-lg font-black font-heading text-[#14213D] dark:text-cyan-400">
+                    {attributedExamsCount} <span className="text-xs font-bold text-[#64748B] dark:text-slate-400">/ {exams.length} đề</span>
+                  </div>
                 </div>
               </div>
 
               <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0D226B]/50 border border-[#E2E8F0] dark:border-[#1B317A] flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/25">
                   <BookOpen className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Câu hỏi trắc nghiệm</span>
-                  <div className="text-base sm:text-lg font-black font-heading text-[#14213D] dark:text-emerald-400">{questions.length} câu</div>
+                  <span className="text-[10px] font-bold text-[#64748B] dark:text-slate-400 uppercase">Câu hỏi GV upload</span>
+                  <div className="text-base sm:text-lg font-black font-heading text-emerald-700 dark:text-emerald-400">
+                    {attributedQuestionsCount} <span className="text-xs font-bold text-[#64748B] dark:text-slate-400">/ {questions.length} câu</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl bg-gradient-to-br from-amber-500/15 via-[#F8FAFC] to-[#F8FAFC] dark:via-[#0D226B]/50 dark:to-[#0D226B]/50 border border-amber-500/40 flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-400/40">
-                  <Trophy className="h-5 w-5 text-amber-500" />
+              <div className="p-4 rounded-xl bg-gradient-to-br from-amber-50 via-white to-white dark:from-amber-500/15 dark:via-[#0D226B]/50 dark:to-[#0D226B]/50 border border-amber-300 dark:border-amber-500/40 flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-400/40">
+                  <Trophy className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div className="min-w-0">
-                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-300 uppercase">Top 1 Đóng góp</span>
-                  <div className="text-sm font-black font-heading text-[#14213D] dark:text-amber-300 truncate" title={teacherContributionLeaderboard[0]?.displayName || 'Chưa có'}>
-                    {teacherContributionLeaderboard[0]?.displayName || 'Chưa có'} ({teacherContributionLeaderboard[0]?.totalExams || 0} đề)
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase">Top 1 Đóng góp</span>
+                  <div className="text-sm font-black font-heading text-[#14213D] dark:text-amber-300 truncate" title={topContributor?.displayName || 'Chưa có dữ liệu upload'}>
+                    {topContributor ? `${topContributor.displayName} (${topContributor.totalExams} đề)` : 'Chưa có dữ liệu'}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Bảng Xếp Hạng & Danh Hiệu Giáo Viên Xuất Sắc */}
-            <div className="overflow-x-auto rounded-xl border border-border">
+            {/* Thông báo & Công cụ gán giáo viên upload cho các đề thi cũ chưa có thông tin tác giả */}
+            {unattributedExams.length > 0 && (
+              <div className="rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50/80 dark:bg-amber-950/25 p-3.5 sm:p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-start gap-2.5 text-xs">
+                    <Info className="h-4 w-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-[#14213D] dark:text-amber-100">
+                      <strong className="font-extrabold">Có {unattributedExams.length} đề thi cũ chưa có thông tin giáo viên upload</strong>
+                      <span className="text-[#475569] dark:text-amber-200/80 block sm:inline sm:ml-1">
+                        (Hệ thống chỉ tính đúng đề do từng Thầy/Cô upload, không tự cộng gộp đề chung của bộ môn).
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowUnattributedPanel(prev => !prev)}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#0B1B55] hover:bg-[#1746D1] text-white text-xs font-bold shrink-0 self-start sm:self-auto transition-colors cursor-pointer"
+                  >
+                    {showUnattributedPanel ? 'Ẩn danh sách' : `Gán giáo viên upload (${unattributedExams.length} đề)`}
+                  </button>
+                </div>
+
+                {showUnattributedPanel && (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pt-2 border-t border-amber-200 dark:border-amber-500/30">
+                    {unattributedExams.map((ex: any) => {
+                      const subObj = subjects.find((s: any) => s.id === ex.subject_id);
+                      const matchingTeachers = teacherContributionLeaderboard.filter(t => t.teachingSubjectIds.includes(ex.subject_id));
+                      const otherTeachers = teacherContributionLeaderboard.filter(t => !t.teachingSubjectIds.includes(ex.subject_id));
+                      const draftVal = authorDrafts[ex.id] || '';
+                      const isSaving = savingAuthorExamId === ex.id;
+
+                      return (
+                        <div
+                          key={ex.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-white dark:bg-[#0B1B55] border border-[#E2E8F0] dark:border-[#1B317A]"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-extrabold text-[#14213D] dark:text-white block truncate" title={ex.title}>
+                              {ex.title}
+                            </span>
+                            <span className="text-[11px] text-[#64748B] dark:text-slate-400 font-semibold">
+                              Môn: <strong className="text-[#1746D1] dark:text-cyan-300">{subObj?.name || 'Chưa rõ'}</strong>
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <select
+                              value={draftVal}
+                              onChange={(e) => setAuthorDrafts(prev => ({ ...prev, [ex.id]: e.target.value }))}
+                              className="px-2.5 py-1.5 rounded-lg border border-[#CBD5E1] dark:border-[#1B317A] bg-[#F8FAFC] dark:bg-[#0D2063] text-xs font-semibold text-[#14213D] dark:text-white max-w-[220px]"
+                            >
+                              <option value="">-- Chọn giáo viên upload --</option>
+                              {matchingTeachers.length > 0 && (
+                                <optgroup label={`Giáo viên môn ${subObj?.name || ''}`}>
+                                  {matchingTeachers.map(t => (
+                                    <option key={t.teacher.id} value={t.teacher.id}>
+                                      {t.displayName} ({t.teacher.email})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {otherTeachers.length > 0 && (
+                                <optgroup label="Giáo viên khác">
+                                  {otherTeachers.map(t => (
+                                    <option key={t.teacher.id} value={t.teacher.id}>
+                                      {t.displayName} ({t.teacher.email})
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={!draftVal || isSaving}
+                              onClick={() => handleAssignExamAuthor(ex.id, draftVal, ex.title)}
+                              className="px-3 py-1.5 rounded-lg bg-[#1746D1] hover:bg-[#087CFF] disabled:opacity-40 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                            >
+                              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                              Lưu
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Bảng Xếp Hạng & Danh Hiệu Giáo Viên Xuất Sắc - ĐỘ TƯƠNG PHẢN CAO CHUẨN FUTURE BLUE 2.0 */}
+            <div className="overflow-x-auto rounded-2xl border border-[#CBD5E1] dark:border-[#1B317A] shadow-sm">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-muted/40 border-b border-border text-foreground font-bold">
-                    <th className="p-3 text-center w-14">Hạng</th>
-                    <th className="p-3">Giáo viên</th>
-                    <th className="p-3">Môn học phụ trách</th>
-                    <th className="p-3 text-center">Tổng Đề Upload</th>
-                    <th className="p-3 text-center hidden md:table-cell">Phân loại đề</th>
-                    <th className="p-3 text-center">Tổng Câu Hỏi</th>
-                    <th className="p-3 text-center hidden lg:table-cell">Lượt học sinh thi</th>
-                    <th className="p-3 text-center">Danh hiệu Vinh danh</th>
+                  <tr className="bg-[#0B1B55] text-white font-extrabold uppercase tracking-wider text-[11px]">
+                    <th className="p-3.5 text-center w-16">Hạng</th>
+                    <th className="p-3.5">Giáo viên</th>
+                    <th className="p-3.5">Môn học phụ trách</th>
+                    <th className="p-3.5 text-center">Tổng Đề Upload</th>
+                    <th className="p-3.5 text-center hidden md:table-cell">Phân loại đề</th>
+                    <th className="p-3.5 text-center">Tổng Câu Hỏi</th>
+                    <th className="p-3.5 text-center hidden lg:table-cell">Lượt học sinh thi</th>
+                    <th className="p-3.5 text-center">Danh hiệu Vinh danh</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-[#E2E8F0] dark:divide-[#1B317A] bg-white dark:bg-[#0B1B55]/80">
                   {filteredTeacherLeaderboard.map((item, idx) => {
                     const isTop1 = idx === 0 && item.totalExams > 0;
                     const isTop2 = idx === 1 && item.totalExams > 0;
                     const isTop3 = idx === 2 && item.totalExams > 0;
 
                     let rankBadge = (
-                      <span className="font-bold text-muted-foreground">#{idx + 1}</span>
+                      <span className="font-extrabold text-[#475569] dark:text-slate-300 text-xs">#{idx + 1}</span>
                     );
-                    let awardTitle = 'Giáo viên Tích cực';
-                    let awardBadgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+                    let awardTitle = item.totalExams > 0 ? 'Giáo viên Tích cực' : 'Chưa upload đề';
+                    let awardBadgeClass = item.totalExams > 0
+                      ? 'bg-emerald-100 dark:bg-emerald-500/25 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-400/40 font-extrabold'
+                      : 'bg-slate-100 dark:bg-slate-800 text-[#64748B] dark:text-slate-400 border-slate-200 dark:border-slate-700 font-semibold';
 
                     if (isTop1) {
                       rankBadge = (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/25 border border-amber-400 text-amber-300 font-black text-xs shadow-[0_0_12px_rgba(251,191,36,0.5)]">
-                          🥇 1
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-yellow-500 border border-amber-600 text-[#0B1B55] font-black text-xs shadow-sm">
+                          1
                         </span>
                       );
                       awardTitle = 'Nhà giáo Xuất sắc & Chuyên gia Khảo thí Kim Cương';
-                      awardBadgeClass = 'bg-amber-500/20 text-amber-300 border-amber-400/50 shadow-[0_0_10px_rgba(251,191,36,0.3)] font-black';
+                      awardBadgeClass = 'bg-gradient-to-r from-amber-400 to-yellow-500 text-[#0B1B55] border-amber-500 shadow-sm font-black';
                     } else if (isTop2) {
                       rankBadge = (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300/25 border border-slate-300 text-slate-100 font-black text-xs shadow-xs">
-                          🥈 2
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-500 dark:to-slate-600 border border-slate-400 text-[#0F172A] dark:text-white font-black text-xs shadow-sm">
+                          2
                         </span>
                       );
                       awardTitle = 'Nhà giáo Tiêu biểu & Chuyên gia Khảo thí Vàng';
-                      awardBadgeClass = 'bg-slate-300/20 text-slate-200 border-slate-300/50 font-black';
+                      awardBadgeClass = 'bg-gradient-to-r from-[#0B1B55] to-[#1746D1] text-white border-[#1746D1] shadow-sm font-extrabold';
                     } else if (isTop3) {
                       rankBadge = (
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/25 border border-amber-600 text-amber-400 font-black text-xs shadow-xs">
-                          🥉 3
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-amber-600 border border-orange-600 text-white font-black text-xs shadow-sm">
+                          3
                         </span>
                       );
                       awardTitle = 'Nhà giáo Tích cực & Chuyên gia Khảo thí Bạc';
-                      awardBadgeClass = 'bg-amber-700/20 text-amber-300 border-amber-600/50 font-bold';
+                      awardBadgeClass = 'bg-gradient-to-r from-orange-500 to-amber-600 text-white border-orange-600 shadow-sm font-extrabold';
                     } else if (item.totalExams >= 5) {
                       awardTitle = 'Đại sứ Đóng góp Đề thi FPREP';
-                      awardBadgeClass = 'bg-cyan-500/15 text-cyan-300 border-cyan-400/30 font-bold';
+                      awardBadgeClass = 'bg-blue-100 dark:bg-blue-500/25 text-[#0B1B55] dark:text-cyan-200 border-blue-300 dark:border-blue-400/40 font-extrabold';
                     }
 
                     return (
                       <tr 
                         key={item.teacher.id} 
-                        className={`hover:bg-muted/30 transition-colors ${isTop1 ? 'bg-amber-500/5' : ''}`}
+                        className={`hover:bg-blue-50/60 dark:hover:bg-[#15276B]/50 transition-colors ${isTop1 ? 'bg-amber-50/70 dark:bg-amber-500/10' : ''}`}
                       >
                         {/* Thứ hạng */}
-                        <td className="p-3 text-center align-middle">
+                        <td className="p-3.5 text-center align-middle">
                           {rankBadge}
                         </td>
 
                         {/* Thông tin giáo viên */}
-                        <td className="p-3 align-middle">
+                        <td className="p-3.5 align-middle">
                           <div className="flex items-center gap-2.5">
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
-                              isTop1 ? 'bg-amber-500 text-slate-950 font-black shadow-md' : 'bg-primary/20 text-primary border border-primary/30'
+                              isTop1
+                                ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm'
+                                : 'bg-blue-100 dark:bg-blue-500/20 text-[#1746D1] dark:text-blue-200 border border-blue-200 dark:border-blue-400/30'
                             }`}>
                               {item.displayName.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <span className="font-extrabold text-foreground block text-xs hover:text-primary transition-colors">
+                              <span className="font-extrabold text-[#14213D] dark:text-white block text-xs">
                                 {item.displayName}
                               </span>
-                              <span className="text-[10px] text-muted-foreground block truncate max-w-[180px]">
+                              <span className="text-[11px] text-[#475569] dark:text-slate-300 font-medium block truncate max-w-[190px]">
                                 {item.teacher.email}
                               </span>
                             </div>
@@ -1720,44 +1910,46 @@ export default function AdminDashboardClient({
                         </td>
 
                         {/* Môn học phụ trách */}
-                        <td className="p-3 align-middle">
+                        <td className="p-3.5 align-middle">
                           <div className="flex flex-wrap gap-1">
                             {item.subjects.length > 0 ? (
                               item.subjects.map((s: any) => (
-                                <span key={s.id} className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
+                                <span key={s.id} className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-50 dark:bg-blue-500/20 text-[#1746D1] dark:text-blue-200 border border-blue-200 dark:border-blue-400/30">
                                   {s.name}
                                 </span>
                               ))
                             ) : (
-                              <span className="text-muted-foreground italic text-[10px]">Chưa gán môn</span>
+                              <span className="text-[#64748B] dark:text-slate-400 italic text-[11px]">Chưa gán môn</span>
                             )}
                           </div>
                         </td>
 
                         {/* Tổng Đề Upload */}
-                        <td className="p-3 text-center align-middle">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black ${
-                            item.totalExams > 0 ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-400/30 shadow-xs' : 'text-muted-foreground'
+                        <td className="p-3.5 text-center align-middle">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black border ${
+                            item.totalExams > 0
+                              ? 'bg-blue-50 dark:bg-blue-500/20 text-[#0B1B55] dark:text-[#00DFFF] border-blue-300 dark:border-blue-400/40 shadow-2xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-[#64748B] dark:text-slate-400 border-slate-200 dark:border-slate-700 font-bold'
                           }`}>
-                            <ClipboardList className="h-3 w-3" />
+                            <ClipboardList className="h-3.5 w-3.5 text-[#1746D1] dark:text-[#00DFFF]" />
                             <strong>{item.totalExams}</strong> đề
                           </span>
                         </td>
 
                         {/* Phân loại đề */}
-                        <td className="p-3 text-center align-middle hidden md:table-cell">
-                          <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
-                            <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded" title="Đề chủ đề">
+                        <td className="p-3.5 text-center align-middle hidden md:table-cell">
+                          <div className="flex items-center justify-center gap-1.5 text-[11px] font-extrabold">
+                            <span className="bg-emerald-50 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-500/40 px-2 py-0.5 rounded-md whitespace-nowrap" title="Đề chủ đề">
                               CĐ: {item.topicCount}
                             </span>
-                            <span className="bg-blue-900/40 text-blue-300 px-1.5 py-0.5 rounded" title="Kiểm tra">
+                            <span className="bg-blue-50 dark:bg-blue-500/20 text-blue-800 dark:text-blue-200 border border-blue-300 dark:border-blue-500/40 px-2 py-0.5 rounded-md whitespace-nowrap" title="Kiểm tra">
                               KT: {item.testCount}
                             </span>
-                            <span className="bg-purple-900/40 text-purple-300 px-1.5 py-0.5 rounded" title="THPTQG">
+                            <span className="bg-purple-50 dark:bg-purple-500/20 text-purple-800 dark:text-purple-200 border border-purple-300 dark:border-purple-500/40 px-2 py-0.5 rounded-md whitespace-nowrap" title="THPTQG">
                               THPT: {item.thptqgCount}
                             </span>
                             {(item.vsatCount > 0 || item.dgnlCount > 0) && (
-                              <span className="bg-amber-900/40 text-amber-300 px-1.5 py-0.5 rounded" title="VSAT / ĐGNL">
+                              <span className="bg-amber-50 dark:bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-500/40 px-2 py-0.5 rounded-md whitespace-nowrap" title="VSAT / ĐGNL">
                                 ĐG: {item.vsatCount + item.dgnlCount}
                               </span>
                             )}
@@ -1765,19 +1957,21 @@ export default function AdminDashboardClient({
                         </td>
 
                         {/* Tổng Câu Hỏi */}
-                        <td className="p-3 text-center align-middle font-bold text-foreground">
-                          <span className="text-emerald-400 font-extrabold">{item.totalQuestions}</span> câu
+                        <td className="p-3.5 text-center align-middle whitespace-nowrap">
+                          <span className="text-emerald-700 dark:text-emerald-300 font-black">{item.totalQuestions}</span>{' '}
+                          <span className="text-[#475569] dark:text-slate-300 font-semibold">câu</span>
                         </td>
 
                         {/* Lượt học sinh thi */}
-                        <td className="p-3 text-center align-middle font-bold text-muted-foreground hidden lg:table-cell">
-                          {item.totalStudentAttempts} lượt
+                        <td className="p-3.5 text-center align-middle whitespace-nowrap hidden lg:table-cell">
+                          <span className="font-extrabold text-[#14213D] dark:text-white">{item.totalStudentAttempts}</span>{' '}
+                          <span className="text-[#64748B] dark:text-slate-400 font-semibold">lượt</span>
                         </td>
 
                         {/* Danh hiệu Vinh danh */}
-                        <td className="p-3 text-center align-middle">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] border ${awardBadgeClass}`}>
-                            <Award className="h-3 w-3 shrink-0" />
+                        <td className="p-3.5 text-center align-middle">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] border ${awardBadgeClass}`}>
+                            <Award className="h-3.5 w-3.5 shrink-0" />
                             <span>{awardTitle}</span>
                           </span>
                         </td>

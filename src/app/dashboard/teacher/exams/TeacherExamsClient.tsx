@@ -626,6 +626,26 @@ export default function TeacherExamsClient({
       }
 
       setLocalExams(prev => [clonedExam, ...prev]);
+
+      // Ghi nhận giáo viên nhân bản/tạo đề thi mới
+      try {
+        await fetch('/api/teacher/exam-assignments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            exam_id: clonedExam.id,
+            action: 'record_author',
+            teacher_id: teacherId,
+            title: newExamTitle
+          })
+        });
+      } catch (e) {
+        console.warn('Record author warning:', e);
+      }
+
       alert(`Đã nhân bản đề thi thành công: "${newExamTitle}"!`);
     } catch (err: any) {
       alert('Không thể nhân bản đề thi: ' + err.message);
@@ -777,22 +797,25 @@ export default function TeacherExamsClient({
         setLocalQuestions(prev => [...prev, ...(qRes.data || [])]);
       }
 
-      // Ghi nhận tác giả biên soạn đề thi để phục vụ thống kê & vinh danh giáo viên xuất sắc
-      try {
-        await fetch('/api/teacher/exam-assignments', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            exam_id: savedExamId,
-            action: 'record_author',
-            teacher_id: teacherId
-          })
-        });
-      } catch (e) {
-        console.warn('Record author warning:', e);
+      // Chỉ ghi nhận tác giả khi giáo viên tạo/upload đề thi mới (không ghi đè khi sửa đề của giáo viên khác)
+      if (isNew) {
+        try {
+          await fetch('/api/teacher/exam-assignments', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              exam_id: savedExamId,
+              action: 'record_author',
+              teacher_id: teacherId,
+              title: examMeta.title
+            })
+          });
+        } catch (e) {
+          console.warn('Record author warning:', e);
+        }
       }
 
       alert('Đã lưu đề thi và câu hỏi thành công!');

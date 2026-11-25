@@ -69,33 +69,39 @@ export default async function StudentExamsPage() {
   return (
     <div className="space-y-6 w-full animate-fade-in">
       
-      {/* HEADER TRANG ĐỀ LUYỆN TẬP (CHUẨN FPREP BANNER) */}
-      <div className="flat-card flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative overflow-hidden">
-        <div className="space-y-2 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f1ff] dark:bg-primary/20 px-3 py-0.5 text-xs font-bold text-primary border border-[#b6d4fe] dark:border-primary/30">
-            <ClipboardList className="h-3.5 w-3.5" /> Luyện tập & Đánh giá năng lực Khối 12
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold font-heading text-secondary dark:text-foreground tracking-tight m-0">
-            Kho Đề Luyện Tập & Kiểm Tra
-          </h1>
-          <p className="text-xs text-[#6c757d] dark:text-muted-foreground font-semibold m-0">
-            Hệ thống đề thi trắc nghiệm được phân loại theo bài học, kiểm tra định kỳ, đề thi THPT Quốc Gia và Đánh giá năng lực.
-          </p>
-        </div>
+      {/* HEADER TRANG ĐỀ LUYỆN TẬP (FUTURE BLUE 2.0 - ĐỒNG BỘ QUẢN TRỊ VIÊN) */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1B55] via-[#1746D1] to-[#087CFF] p-6 sm:p-8 text-white shadow-xl shadow-blue-500/10 border border-[#00DFFF]/30">
+        <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[#00DFFF]/15 blur-3xl pointer-events-none" />
+        <div className="absolute right-1/4 -bottom-16 h-48 w-48 rounded-full bg-[#087CFF]/20 blur-2xl pointer-events-none" />
 
-        {/* 3 THẺ CHỈ SỐ NHANH */}
-        <div className="flex gap-4 sm:gap-6 border-t sm:border-t-0 sm:border-l border-border pt-3 sm:pt-0 sm:pl-6 shrink-0">
-          <div className="text-center">
-            <span className="block text-2xl font-bold font-heading text-primary">{totalExamsCount}</span>
-            <span className="text-[10px] font-bold text-[#6c757d] uppercase">Tổng số đề</span>
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-3.5 py-1 text-xs font-bold text-[#00DFFF] border border-white/15">
+              <ClipboardList className="h-3.5 w-3.5 text-[#00DFFF]" />
+              <span>Luyện tập & Đánh giá năng lực Khối 12</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-heading text-white tracking-tight m-0 uppercase">
+              Kho Đề Luyện Tập & Kiểm Tra
+            </h1>
+            <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed font-medium m-0">
+              Hệ thống đề thi trắc nghiệm được phân loại theo bài học, kiểm tra định kỳ, đề thi THPT Quốc Gia và Đánh giá năng lực.
+            </p>
           </div>
-          <div className="text-center border-l border-border pl-4 sm:pl-6">
-            <span className="block text-2xl font-bold font-heading text-[#198754]">{completedExamsCount}</span>
-            <span className="text-[10px] font-bold text-[#6c757d] uppercase">Đã làm</span>
-          </div>
-          <div className="text-center border-l border-border pl-4 sm:pl-6">
-            <span className="block text-2xl font-bold font-heading text-secondary dark:text-foreground">{averageScore}</span>
-            <span className="text-[10px] font-bold text-[#6c757d] uppercase">Điểm TB</span>
+
+          {/* 3 THẺ CHỈ SỐ NHANH */}
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3 shrink-0 self-start lg:self-center w-full sm:w-auto">
+            <div className="text-center px-4 py-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 min-w-[92px]">
+              <span className="block text-2xl font-black font-heading text-white">{totalExamsCount}</span>
+              <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider">Tổng số đề</span>
+            </div>
+            <div className="text-center px-4 py-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 min-w-[92px]">
+              <span className="block text-2xl font-black font-heading text-emerald-300">{completedExamsCount}</span>
+              <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider">Đã làm</span>
+            </div>
+            <div className="text-center px-4 py-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 min-w-[92px]">
+              <span className="block text-2xl font-black font-heading text-[#00DFFF]">{averageScore}</span>
+              <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider">Điểm TB</span>
+            </div>
           </div>
         </div>
       </div>

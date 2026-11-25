@@ -27,28 +27,35 @@ export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get('authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
-    let teacherId = '';
+    let callerId = '';
+    let callerRole = '';
     if (token) {
       const payload = verifySessionToken(token);
       if (payload?.sub) {
-        teacherId = payload.sub;
+        callerId = payload.sub;
+        callerRole = payload.role || '';
       }
     }
 
     const body = await request.json();
-    const { exam_id, assignments, teacher_id, action } = body;
+    const { exam_id, assignments, teacher_id, action, force, title } = body;
 
     if (!exam_id) {
       return NextResponse.json({ error: 'Thiếu exam_id' }, { status: 400 });
     }
 
-    const targetTeacherId = teacher_id || teacherId;
+    const isAdmin = callerRole === 'admin';
+    const targetTeacherId = isAdmin ? (teacher_id ?? '') : (callerId || teacher_id || '');
 
     if (action === 'record_author') {
-      if (targetTeacherId) {
-        await recordExamAuthor(exam_id, targetTeacherId);
+      const allowForce = isAdmin && Boolean(force);
+      if (targetTeacherId || allowForce) {
+        await recordExamAuthor(exam_id, targetTeacherId, {
+          force: allowForce,
+          title: typeof title === 'string' ? title : undefined
+        });
       }
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, exam_id, teacher_id: targetTeacherId || null });
     }
 
     // Mặc định là lưu phân công đề thi
@@ -56,7 +63,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Danh sách assignments không hợp lệ' }, { status: 400 });
     }
 
-    const saved = await saveExamAssignmentsForExam(exam_id, assignments, targetTeacherId);
+    const saved = await saveExamAssignmentsForExam(exam_id, assignments, targetTeacherId || undefined);
 
     return NextResponse.json({
       success: true,

@@ -77,39 +77,39 @@ export default function TeacherSupportManager({
 
   return (
     <div className="flat-card space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3.5 gap-3">
-        <h2 className="text-base font-bold font-heading flex items-center gap-2 m-0 text-white">
-          <MessageSquare className="h-4.5 w-4.5 text-cyan-400" /> Yêu Cầu Hỗ Trợ Chuyên Môn Của Học Sinh
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3.5 gap-3">
+        <h2 className="text-base font-bold font-heading flex items-center gap-2 m-0 text-[#14213D] dark:text-white">
+          <MessageSquare className="h-4.5 w-4.5 text-[#1746D1] dark:text-[#00DFFF]" /> Yêu Cầu Hỗ Trợ Chuyên Môn Của Học Sinh
         </h2>
         
         {/* Bộ lọc trạng thái dạng Pill FPREP */}
-        <div className="flex items-center gap-1.5 bg-[#081a3a]/80 border border-cyan-500/25 p-1 rounded-xl">
+        <div className="flex items-center gap-1.5 bg-[#F1F5F9] dark:bg-[#0D2063] border border-[#E2E8F0] dark:border-[#1B317A] p-1 rounded-xl">
           <button
             onClick={() => setFilter('pending')}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               filter === 'pending'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-[#6c757d] hover:text-[#212529] dark:hover:text-foreground'
+                ? 'bg-[#0B1B55] dark:bg-[#1746D1] text-white shadow-sm'
+                : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D] dark:hover:text-white'
             }`}
           >
             Đang chờ ({requests.filter(r => r.status === 'pending').length})
           </button>
           <button
             onClick={() => setFilter('resolved')}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               filter === 'resolved'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-[#6c757d] hover:text-[#212529] dark:hover:text-foreground'
+                ? 'bg-[#0B1B55] dark:bg-[#1746D1] text-white shadow-sm'
+                : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D] dark:hover:text-white'
             }`}
           >
             Đã giải quyết ({requests.filter(r => r.status === 'resolved').length})
           </button>
           <button
             onClick={() => setFilter('all')}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
               filter === 'all'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-[#6c757d] hover:text-[#212529] dark:hover:text-foreground'
+                ? 'bg-[#0B1B55] dark:bg-[#1746D1] text-white shadow-sm'
+                : 'text-[#64748B] dark:text-slate-300 hover:text-[#14213D] dark:hover:text-white'
             }`}
           >
             Tất cả
@@ -145,8 +145,8 @@ export default function TeacherSupportManager({
               </div>
 
               {/* Nội dung câu hỏi */}
-              <div className="text-xs text-slate-100 font-semibold bg-[#081a3a]/80 p-3.5 rounded-xl border border-cyan-500/25">
-                <span className="text-[10px] font-bold text-cyan-300 uppercase block mb-1">Nội dung thắc mắc:</span>
+              <div className="text-xs text-[#14213D] dark:text-slate-100 font-semibold bg-[#F8FAFC] dark:bg-[#0D2063] p-3.5 rounded-xl border border-[#E2E8F0] dark:border-[#1B317A]">
+                <span className="text-[10px] font-bold text-[#1746D1] dark:text-[#00DFFF] uppercase block mb-1">Nội dung thắc mắc:</span>
                 <p className="whitespace-pre-line leading-relaxed m-0">{req.message}</p>
               </div>
 

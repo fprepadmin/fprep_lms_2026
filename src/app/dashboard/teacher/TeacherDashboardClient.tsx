@@ -604,6 +604,25 @@ export default function TeacherDashboardClient({
 
         setLocalExams(prev => [...prev, newExam]);
         setLocalQuestions(prev => [...prev, ...(qRes.data || [])]);
+
+        // Ghi nhận chính xác giáo viên upload/tạo đề thi mới
+        try {
+          await fetch('/api/teacher/exam-assignments', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              exam_id: savedExamId,
+              action: 'record_author',
+              teacher_id: teacherId,
+              title: examMeta.title
+            })
+          });
+        } catch (e) {
+          console.warn('Record author warning:', e);
+        }
       }
 
       alert('Lưu Đề thi & Bộ câu hỏi thành công!');

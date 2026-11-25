@@ -1,5 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,400..900;1,400..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Orbitron:wght@500;600;700;800;900&family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=Raleway:wght@500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Inter:ital,opsz,wght@0,14..32,400..900;1,14..32,400..900&display=swap');
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 @import "katex/dist/katex.min.css";
 
 :root {
@@ -107,45 +108,54 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+  --font-sans: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-html {
-  height: auto;
-  min-height: 100%;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  html {
+    height: auto;
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+  }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 14px;
-  line-height: 1.6;
-  min-height: 100vh;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  -webkit-font-smoothing: antialiased;
-}
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Exo 2', sans-serif;
-  color: var(--card-foreground);
-  letter-spacing: -0.015em;
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
+    color: var(--card-foreground);
+    letter-spacing: -0.015em;
+  }
+
+  h1 { font-size: 1.75rem; line-height: 1.25; margin-bottom: 0.75rem; }
+  h2 { font-size: 1.35rem; line-height: 1.3; margin-bottom: 0.5rem; }
+  h3 { font-size: 1.15rem; line-height: 1.35; margin-bottom: 0.5rem; }
+  h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 /* FUTURE BLUE 2.0 UTILITIES */
 .font-heading {
-  font-family: 'Exo 2', sans-serif !important;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif !important;
 }
 
 .font-body {
-  font-family: 'Inter', sans-serif !important;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif !important;
 }
 
 .font-tech {
-  font-family: 'Orbitron', monospace !important;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), sans-serif !important;
+  font-variant-numeric: tabular-nums;
 }
 
 .bg-future-gradient {
@@ -190,21 +200,12 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 800;
 }
 
-h1 { font-size: 1.75rem; line-height: 1.25; margin-bottom: 0.75rem; }
-h2 { font-size: 1.35rem; line-height: 1.3; margin-bottom: 0.5rem; }
-h3 { font-size: 1.15rem; line-height: 1.35; margin-bottom: 0.5rem; }
-h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
-
-.font-heading {
-  font-family: 'Raleway', sans-serif;
-}
-
 .font-ui {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
 }
 
 .font-sans {
-  font-family: 'Be Vietnam Pro', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
 }
 
 /* =========================================================================
@@ -233,7 +234,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 .page-header {
   font-size: 1.5rem;
   font-weight: 700;
-  font-family: 'Raleway', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   color: #212529;
   margin-bottom: 0.5rem;
   display: flex;
@@ -279,7 +280,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 
 /* BUTTONS CHUẨN FPREP - KÍCH THƯỚC TO RÕ DỄ BẤM */
 .btn-primary {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #0d6efd;
   color: #ffffff;
   padding: 0.75rem 1.5rem;
@@ -315,7 +316,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 .btn-secondary {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #e9ecef;
   color: #495057;
   padding: 0.75rem 1.5rem;
@@ -345,7 +346,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 .btn-outline {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #ffffff;
   border: 1.5px solid #dee2e6;
   color: #495057;
@@ -371,7 +372,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 .btn-danger {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #dc3545;
   color: #ffffff;
   padding: 0.75rem 1.5rem;
@@ -412,7 +413,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 
 /* BADGES CHUẨN FPREP */
 .badge-primary {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #0d6efd;
   color: #ffffff;
   font-size: 11px;
@@ -422,7 +423,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 .badge-success {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #198754;
   color: #ffffff;
   font-size: 11px;
@@ -432,7 +433,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 .badge-info {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #0dcaf0;
   color: #000000;
   font-size: 11px;
@@ -442,7 +443,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 .badge-warning {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #ffc107;
   color: #000000;
   font-size: 11px;
@@ -452,7 +453,7 @@ h4 { font-size: 0.975rem; line-height: 1.4; margin-bottom: 0.25rem; }
 }
 
 .badge-danger {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-be-vietnam), 'Be Vietnam Pro', var(--font-inter), 'Inter', sans-serif;
   background-color: #dc3545;
   color: #ffffff;
   font-size: 11px;
@@ -662,67 +663,67 @@ img, video, iframe {
   box-shadow: 0 4px 20px -2px rgba(14, 165, 233, 0.22) !important;
 }
 
-/* ICON BADGES TRONG THỐNG KÊ (TÀI KHOẢN, QUẢN TRỊ VIÊN, NHẬT KÝ, V.V...) */
-.teacher-workspace .bg-\[\#e7f1ff\], .admin-workspace .bg-\[\#e7f1ff\], .student-exams-workspace .bg-\[\#e7f1ff\],
-.teacher-workspace .bg-\[\#f8d7da\], .admin-workspace .bg-\[\#f8d7da\], .student-exams-workspace .bg-\[\#f8d7da\],
-.teacher-workspace .bg-\[\#fff3cd\], .admin-workspace .bg-\[\#fff3cd\], .student-exams-workspace .bg-\[\#fff3cd\],
-.teacher-workspace .bg-\[\#d1e7dd\], .admin-workspace .bg-\[\#d1e7dd\], .student-exams-workspace .bg-\[\#d1e7dd\],
-.teacher-workspace .bg-\[\#cff4fc\], .admin-workspace .bg-\[\#cff4fc\], .student-exams-workspace .bg-\[\#cff4fc\] {
+/* ICON BADGES TRONG THỐNG KÊ (CHẾ ĐỘ TỐI) */
+.dark .teacher-workspace .bg-\[\#e7f1ff\], .dark .admin-workspace .bg-\[\#e7f1ff\], .dark .student-exams-workspace .bg-\[\#e7f1ff\],
+.dark .teacher-workspace .bg-\[\#f8d7da\], .dark .admin-workspace .bg-\[\#f8d7da\], .dark .student-exams-workspace .bg-\[\#f8d7da\],
+.dark .teacher-workspace .bg-\[\#fff3cd\], .dark .admin-workspace .bg-\[\#fff3cd\], .dark .student-exams-workspace .bg-\[\#fff3cd\],
+.dark .teacher-workspace .bg-\[\#d1e7dd\], .dark .admin-workspace .bg-\[\#d1e7dd\], .dark .student-exams-workspace .bg-\[\#d1e7dd\],
+.dark .teacher-workspace .bg-\[\#cff4fc\], .dark .admin-workspace .bg-\[\#cff4fc\], .dark .student-exams-workspace .bg-\[\#cff4fc\] {
   background-color: rgba(14, 38, 77, 0.8) !important;
   border: 1px solid rgba(56, 189, 248, 0.35) !important;
 }
 
-/* KHUNG THỐNG KÊ SỐ LIỆU NỔI BẬT */
-.teacher-workspace .stat-box-neon, .admin-workspace .stat-box-neon, .student-exams-workspace .stat-box-neon {
+/* KHUNG THỐNG KÊ SỐ LIỆU NỔI BẬT (CHẾ ĐỘ TỐI) */
+.dark .teacher-workspace .stat-box-neon, .dark .admin-workspace .stat-box-neon, .dark .student-exams-workspace .stat-box-neon {
   background: linear-gradient(135deg, rgba(14, 38, 80, 0.88) 0%, rgba(6, 21, 48, 0.88) 100%) !important;
   border: 1px solid rgba(56, 189, 248, 0.35) !important;
   box-shadow: 0 8px 24px -4px rgba(0, 150, 255, 0.25) !important;
 }
 
-/* BẢNG BIỂU (TABLES) TRÊN NỀN XANH CÔNG NGHỆ */
-.teacher-workspace table, .admin-workspace table, .student-exams-workspace table {
+/* BẢNG BIỂU (TABLES) CHẾ ĐỘ TỐI */
+.dark .teacher-workspace table, .dark .admin-workspace table, .dark .student-exams-workspace table {
   color: #f1f5f9 !important;
 }
 
-.teacher-workspace table thead th, .admin-workspace table thead th, .student-exams-workspace table thead th {
+.dark .teacher-workspace table thead th, .dark .admin-workspace table thead th, .dark .student-exams-workspace table thead th {
   background-color: rgba(14, 38, 80, 0.9) !important;
   color: #38bdf8 !important;
   border-bottom: 2px solid rgba(56, 189, 248, 0.35) !important;
 }
 
-.teacher-workspace table tbody tr, .admin-workspace table tbody tr, .student-exams-workspace table tbody tr {
+.dark .teacher-workspace table tbody tr, .dark .admin-workspace table tbody tr, .dark .student-exams-workspace table tbody tr {
   border-bottom: 1px solid rgba(56, 189, 248, 0.18) !important;
   transition: background-color 0.15s ease;
 }
 
-.teacher-workspace table tbody tr:hover, .admin-workspace table tbody tr:hover, .student-exams-workspace table tbody tr:hover {
+.dark .teacher-workspace table tbody tr:hover, .dark .admin-workspace table tbody tr:hover, .dark .student-exams-workspace table tbody tr:hover {
   background-color: rgba(56, 189, 248, 0.1) !important;
 }
 
-/* INPUT & SELECT TRÊN NỀN XANH */
-.teacher-workspace input, .admin-workspace input, .student-exams-workspace input,
-.teacher-workspace select, .admin-workspace select, .student-exams-workspace select,
-.teacher-workspace textarea, .admin-workspace textarea, .student-exams-workspace textarea {
+/* INPUT & SELECT CHẾ ĐỘ TỐI */
+.dark .teacher-workspace input, .dark .admin-workspace input, .dark .student-exams-workspace input,
+.dark .teacher-workspace select, .dark .admin-workspace select, .dark .student-exams-workspace select,
+.dark .teacher-workspace textarea, .dark .admin-workspace textarea, .dark .student-exams-workspace textarea {
   background-color: rgba(7, 22, 50, 0.85) !important;
   border-color: rgba(56, 189, 248, 0.35) !important;
   color: #f8fafc !important;
 }
 
-.teacher-workspace input:focus, .admin-workspace input:focus, .student-exams-workspace input:focus,
-.teacher-workspace select:focus, .admin-workspace select:focus, .student-exams-workspace select:focus,
-.teacher-workspace textarea:focus, .admin-workspace textarea:focus, .student-exams-workspace textarea:focus {
+.dark .teacher-workspace input:focus, .dark .admin-workspace input:focus, .dark .student-exams-workspace input:focus,
+.dark .teacher-workspace select:focus, .dark .admin-workspace select:focus, .dark .student-exams-workspace select:focus,
+.dark .teacher-workspace textarea:focus, .dark .admin-workspace textarea:focus, .dark .student-exams-workspace textarea:focus {
   border-color: #38bdf8 !important;
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25) !important;
 }
 
-.teacher-workspace input::placeholder, .admin-workspace input::placeholder, .student-exams-workspace input::placeholder,
-.teacher-workspace textarea::placeholder, .admin-workspace textarea::placeholder, .student-exams-workspace textarea::placeholder {
-  color: #64748b !important;
+.dark .teacher-workspace input::placeholder, .dark .admin-workspace input::placeholder, .dark .student-exams-workspace input::placeholder,
+.dark .teacher-workspace textarea::placeholder, .dark .admin-workspace textarea::placeholder, .dark .student-exams-workspace textarea::placeholder {
+  color: #94a3b8 !important;
 }
 
-/* MODAL & DIALOG TRÊN NỀN XANH */
-.teacher-workspace .modal-surface, .admin-workspace .modal-surface, .student-exams-workspace .modal-surface,
-.teacher-workspace [role="dialog"] > div, .admin-workspace [role="dialog"] > div, .student-exams-workspace [role="dialog"] > div {
+/* MODAL & DIALOG CHẾ ĐỘ TỐI */
+.dark .teacher-workspace .modal-surface, .dark .admin-workspace .modal-surface, .dark .student-exams-workspace .modal-surface,
+.dark .teacher-workspace [role="dialog"] > div, .dark .admin-workspace [role="dialog"] > div, .dark .student-exams-workspace [role="dialog"] > div {
   background-color: rgba(6, 20, 48, 0.96) !important;
   border: 1px solid rgba(56, 189, 248, 0.4) !important;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(56, 189, 248, 0.2) !important;

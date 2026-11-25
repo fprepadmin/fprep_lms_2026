@@ -46,7 +46,7 @@ export default async function AdminDashboardPage() {
     supabase.from('classes').select('*').order('name', { ascending: true }),
     supabase.from('subjects').select('*').order('name', { ascending: true }),
     supabase.from('teacher_classes').select('*'),
-    supabase.from('exams').select('id, subject_id, lesson_id, title, exam_type, created_at'),
+    supabase.from('exams').select('*'),
     supabase.from('questions').select('id, exam_id, question_type, level'),
     supabase.from('exam_results').select('id, exam_id, student_id, score, correct_answers, total_questions, created_at').order('created_at', { ascending: false }),
     getExamMetadataStore()
@@ -66,10 +66,10 @@ export default async function AdminDashboardPage() {
           <div className="space-y-3 max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-3.5 py-1 text-xs font-bold text-[#00DFFF] border border-white/15">
               <Sparkles className="h-3.5 w-3.5 text-[#00DFFF] animate-pulse" />
-              <span>FPT AI LEARNING &bull; FUTURE BLUE 2.0 &bull; ADMIN CONSOLE</span>
+              <span>TRƯỜNG THPT FPT CẦN THƠ</span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-heading tracking-tight text-white m-0 uppercase">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-heading tracking-tight text-white! m-0 uppercase">
               Bảng Điều Khiển Quản Trị Hệ Thống
             </h1>
 

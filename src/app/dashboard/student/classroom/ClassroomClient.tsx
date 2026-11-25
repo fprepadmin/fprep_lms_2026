@@ -133,13 +133,20 @@ export default function ClassroomClient({
     <div className="space-y-6 animate-fade-in">
       
       {/* ========================================================================= */}
-      {/* 1. HEADER BANNER LỚP HỌC (CÁ NHÂN HÓA THEO ẢNH NỀN LỚP DO ADMIN THIẾT LẬP) */}
+      {/* 1. HEADER BANNER LỚP HỌC (FUTURE BLUE 2.0 - ĐỒNG BỘ QUẢN TRỊ VIÊN) */}
       {/* ========================================================================= */}
-      <div className={`relative overflow-hidden rounded-3xl border shadow-sm transition-all duration-300 ${
+      <div className={`relative overflow-hidden rounded-2xl border shadow-xl shadow-blue-500/10 transition-all duration-300 text-white ${
         classInfo.background_url 
-          ? 'border-border/80 min-h-[220px] sm:min-h-[250px] flex flex-col justify-end p-6 sm:p-8 text-white' 
-          : 'border-border bg-gradient-to-br from-card via-card to-primary/[0.04] p-6'
+          ? 'border-[#00DFFF]/30 min-h-[220px] sm:min-h-[250px] flex flex-col justify-end p-6 sm:p-8' 
+          : 'border-[#00DFFF]/30 bg-gradient-to-r from-[#0B1B55] via-[#1746D1] to-[#087CFF] p-6 sm:p-8'
       }`}>
+        {!classInfo.background_url && (
+          <>
+            <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-[#00DFFF]/15 blur-3xl pointer-events-none" />
+            <div className="absolute right-1/4 -bottom-16 h-48 w-48 rounded-full bg-[#087CFF]/20 blur-2xl pointer-events-none" />
+          </>
+        )}
+
         {/* Ảnh nền cá nhân hóa của riêng lớp đó */}
         {classInfo.background_url && (
           <>
@@ -162,100 +169,58 @@ export default function ClassroomClient({
           
           <div className="space-y-3 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
-                classInfo.background_url
-                  ? 'bg-white/15 backdrop-blur-md border-white/25 text-white'
-                  : 'bg-primary/10 border-primary/25 text-primary'
-              }`}>
+              <span className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1 text-xs font-bold border bg-white/10 backdrop-blur-md border-white/20 text-[#00DFFF]">
                 <GraduationCap className="h-3.5 w-3.5" /> Lớp học chính khóa FPT School
               </span>
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
-                classInfo.background_url
-                  ? 'bg-white/15 backdrop-blur-md border-white/25 text-white'
-                  : classInfo.group_type === 'T'
-                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/25'
-                    : classInfo.group_type === 'X'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
-                      : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/25'
-              }`}>
+              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border bg-white/15 backdrop-blur-md border-white/20 text-white">
                 {groupLabel}
               </span>
             </div>
 
-            <h1 className={`text-2xl sm:text-4xl font-extrabold font-heading tracking-tight m-0 ${
-              classInfo.background_url ? 'text-white drop-shadow-sm' : 'text-foreground'
-            }`}>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-heading tracking-tight m-0 text-white uppercase drop-shadow-sm">
               Không gian Lớp {classInfo.name}
             </h1>
 
-            <div className={`flex flex-wrap items-center gap-4 text-xs font-semibold ${
-              classInfo.background_url ? 'text-slate-200' : 'text-muted-foreground'
-            }`}>
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-semibold text-blue-100/90">
               <span className="flex items-center gap-1.5">
-                <Calendar className={`h-4 w-4 ${classInfo.background_url ? 'text-orange-400' : 'text-primary'}`} /> Niên khóa: <strong className={classInfo.background_url ? 'text-white' : 'text-foreground'}>{classInfo.academic_year || '2024-2027'}</strong>
+                <Calendar className="h-4 w-4 text-[#00DFFF]" /> Niên khóa: <strong className="text-white">{classInfo.academic_year || '2024-2027'}</strong>
               </span>
-              <span>&bull;</span>
+              <span className="text-white/40">&bull;</span>
               <span>
-                MSHS của bạn: <strong className={`font-mono ${classInfo.background_url ? 'text-amber-300 font-bold' : 'text-primary'}`}>{currentStudent?.mshs || 'N/A'}</strong>
+                MSHS của bạn: <strong className="font-mono text-[#00DFFF] font-bold">{currentStudent?.mshs || 'N/A'}</strong>
               </span>
-              <span>&bull;</span>
+              <span className="text-white/40">&bull;</span>
               <span>
-                Học sinh: <strong className={classInfo.background_url ? 'text-white' : 'text-foreground'}>{currentStudent?.full_name || 'Học sinh'}</strong>
+                Học sinh: <strong className="text-white">{currentStudent?.full_name || 'Học sinh'}</strong>
               </span>
             </div>
           </div>
 
           {/* CHỈ SỐ NHANH (METRICS BADGES) */}
-          <div className={`grid grid-cols-3 gap-3 sm:gap-4 border-t lg:border-t-0 lg:border-l pt-4 lg:pt-0 lg:pl-6 shrink-0 ${
-            classInfo.background_url ? 'border-white/20' : 'border-border'
-          }`}>
-            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
-              classInfo.background_url 
-                ? 'bg-black/35 backdrop-blur-md border-white/20' 
-                : 'bg-background/60 border-border/80'
-            }`}>
-              <span className={`block text-2xl sm:text-3xl font-black font-heading ${
-                classInfo.background_url ? 'text-amber-400' : 'text-primary'
-              }`}>
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3 border-t lg:border-t-0 lg:border-l border-white/20 pt-4 lg:pt-0 lg:pl-6 shrink-0">
+            <div className="p-3 sm:p-4 rounded-xl text-center min-w-[90px] border bg-white/10 backdrop-blur-md border-white/15">
+              <span className="block text-2xl sm:text-3xl font-black font-heading text-[#00DFFF]">
                 {classmates.length}
               </span>
-              <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
-                classInfo.background_url ? 'text-slate-300' : 'text-muted-foreground'
-              }`}>
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-100">
                 Học sinh
               </span>
             </div>
 
-            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
-              classInfo.background_url 
-                ? 'bg-black/35 backdrop-blur-md border-white/20' 
-                : 'bg-background/60 border-border/80'
-            }`}>
-              <span className={`block text-2xl sm:text-3xl font-black font-heading ${
-                classInfo.background_url ? 'text-white' : 'text-foreground'
-              }`}>
+            <div className="p-3 sm:p-4 rounded-xl text-center min-w-[90px] border bg-white/10 backdrop-blur-md border-white/15">
+              <span className="block text-2xl sm:text-3xl font-black font-heading text-white">
                 {teacherAssignments.length}
               </span>
-              <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
-                classInfo.background_url ? 'text-slate-300' : 'text-muted-foreground'
-              }`}>
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-100">
                 Giáo viên
               </span>
             </div>
 
-            <div className={`p-3 sm:p-4 rounded-xl text-center min-w-[90px] border ${
-              classInfo.background_url 
-                ? 'bg-black/35 backdrop-blur-md border-white/20' 
-                : 'bg-background/60 border-border/80'
-            }`}>
-              <span className={`block text-2xl sm:text-3xl font-black font-heading ${
-                classInfo.background_url ? 'text-emerald-400' : 'text-green-600 dark:text-green-400'
-              }`}>
+            <div className="p-3 sm:p-4 rounded-xl text-center min-w-[90px] border bg-white/10 backdrop-blur-md border-white/15">
+              <span className="block text-2xl sm:text-3xl font-black font-heading text-emerald-300">
                 {completedCount}/{exams.length}
               </span>
-              <span className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
-                classInfo.background_url ? 'text-slate-300' : 'text-muted-foreground'
-              }`}>
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-100">
                 Hoàn thành
               </span>
             </div>

@@ -78,10 +78,8 @@ export async function saveExamAssignmentsForExam(
     }));
 
     const updatedAssignments = [...remainingAssignments, ...formattedNew];
+    // Không tự ghi đè tác giả upload đề thi khi giáo viên khác chỉ thao tác giao bài cho lớp
     const updatedAuthors = { ...currentStore.exam_authors };
-    if (teacherId) {
-      updatedAuthors[examId] = teacherId;
-    }
 
     const payload: ExamMetadataPayload = {
       assignments: updatedAssignments,
@@ -127,13 +125,33 @@ export async function saveExamAssignmentsForExam(
 }
 
 /**
- * Ghi nhận tác giả biên soạn đề thi
+ * Ghi nhận tác giả (giáo viên trực tiếp upload/tạo) đề thi.
+ * Mặc định không ghi đè nếu đề thi đã có tác giả (trừ khi force = true do Quản trị viên chỉ định).
  */
-export async function recordExamAuthor(examId: string, teacherId: string): Promise<void> {
+export async function recordExamAuthor(
+  examId: string,
+  teacherId: string,
+  options?: { force?: boolean; title?: string }
+): Promise<boolean> {
   try {
     const supabase = await getSupabaseServerClient();
     const currentStore = await getExamMetadataStore();
-    currentStore.exam_authors[examId] = teacherId;
+
+    const existingAuthor = currentStore.exam_authors[examId];
+    if (existingAuthor && !options?.force) {
+      return false;
+    }
+
+    if (!teacherId && options?.force) {
+      delete currentStore.exam_authors[examId];
+    } else if (teacherId) {
+      currentStore.exam_authors[examId] = teacherId;
+    } else {
+      return false;
+    }
+
+    const nowIso = new Date().toISOString();
+    currentStore.updated_at = nowIso;
 
     const { data: existing } = await supabase
       .from('announcements')
@@ -142,7 +160,6 @@ export async function recordExamAuthor(examId: string, teacherId: string): Promi
       .limit(1)
       .maybeSingle();
 
-    const nowIso = new Date().toISOString();
     if (existing?.id) {
       await supabase
         .from('announcements')
@@ -163,7 +180,30 @@ export async function recordExamAuthor(examId: string, teacherId: string): Promi
           date: new Date().toLocaleDateString('vi-VN')
         }]);
     }
+
+    // Lưu dự phòng vào audit_logs để không bao giờ thất lạc thông tin người upload đề
+    if (teacherId) {
+      try {
+        await supabase.from('audit_logs').insert({
+          actor_id: teacherId,
+          action: 'RECORD_EXAM_AUTHOR',
+          target_table: 'exams',
+          target_id: examId,
+          old_values: existingAuthor ? { teacher_id: existingAuthor } : null,
+          new_values: {
+            exam_id: examId,
+            teacher_id: teacherId,
+            title: options?.title || null
+          }
+        });
+      } catch (auditErr) {
+        console.warn('[ExamMetadataStore] Audit log backup skipped:', auditErr);
+      }
+    }
+
+    return true;
   } catch (err) {
     console.warn('[ExamMetadataStore] Error recording author:', err);
+    return false;
   }
 }

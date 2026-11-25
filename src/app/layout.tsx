@@ -1,27 +1,19 @@
 import type { Metadata } from "next";
-import { Raleway, Inter, Be_Vietnam_Pro } from "next/font/google";
+import { Inter, Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { Suspense } from "react";
 import RouteProgressBar from "@/components/RouteProgressBar";
 
-const raleway = Raleway({
-  subsets: ["latin", "vietnamese"],
-  weight: ["400", "600", "700", "800"],
-  variable: "--font-raleway",
-  display: "swap",
-});
-
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
-  weight: ["400", "500", "600", "700"],
   variable: "--font-inter",
   display: "swap",
 });
 
 const beVietnam = Be_Vietnam_Pro({
   subsets: ["latin", "vietnamese"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800", "900"],
   variable: "--font-be-vietnam",
   display: "swap",
 });
@@ -45,7 +37,7 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
-      className={`${raleway.variable} ${inter.variable} ${beVietnam.variable} min-h-screen antialiased`}
+      className={`${beVietnam.variable} ${inter.variable} min-h-screen antialiased`}
       suppressHydrationWarning
     >
       <head>

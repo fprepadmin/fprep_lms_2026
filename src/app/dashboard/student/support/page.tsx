@@ -48,14 +48,18 @@ export default async function StudentSupportPage() {
 
   return (
     <div className="space-y-8 w-full">
-      {/* HEADER HỎI ĐÁP */}
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-gradient-to-r from-primary/5 via-transparent to-transparent">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary border border-primary/20">
-            <MessageSquare className="h-3.5 w-3.5" /> Kênh tương tác học thuật chuyên môn
+      {/* HEADER HỎI ĐÁP - FUTURE BLUE 2.0 ĐỒNG BỘ QUẢN TRỊ VIÊN */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1B55] via-[#1746D1] to-[#087CFF] p-6 sm:p-8 text-white shadow-xl shadow-blue-500/10 border border-[#00DFFF]/30">
+        <div className="absolute -right-12 -top-12 h-56 w-56 rounded-full bg-[#00DFFF]/15 blur-3xl pointer-events-none" />
+        <div className="relative z-10 space-y-2.5 max-w-2xl">
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-md px-3.5 py-1 text-xs font-bold text-[#00DFFF] border border-white/15">
+            <MessageSquare className="h-3.5 w-3.5 text-[#00DFFF]" />
+            <span>Kênh tương tác học thuật chuyên môn</span>
           </div>
-          <h1 className="text-3xl font-black text-foreground">Hỏi Đáp Hỗ Trợ Học Tập</h1>
-          <p className="text-xs text-muted-foreground font-semibold">
+          <h1 className="text-2xl sm:text-3xl font-black font-heading text-white uppercase tracking-tight m-0">
+            Hỏi Đáp Hỗ Trợ Học Tập
+          </h1>
+          <p className="text-xs sm:text-sm text-blue-100/90 font-medium leading-relaxed m-0">
             Gửi câu hỏi thắc mắc chuyên môn đến thầy cô tổ bộ môn để nhận giải đáp trực tiếp nhanh chóng.
           </p>
         </div>

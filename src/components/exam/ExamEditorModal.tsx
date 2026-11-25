@@ -35,7 +35,7 @@ CÁC NGUYÊN TẮC BẮT BUỘC TUYỆT ĐỐI KHÔNG ĐƯỢC VI PHẠM (CRITIC
 3. QUY ƯỚC CÔNG THỨC TOÁN HỌC & LATEX:
    - VỀ VECTOR: BẮT BUỘC 100% DÙNG \\overrightarrow (ví dụ: \\overrightarrow{a}, \\overrightarrow{b}, \\overrightarrow{AB}, \\overrightarrow{u}), TUYỆT ĐỐI KHÔNG DÙNG \\vec{...} hoặc \\vec a. Mọi ký hiệu \\vec{a} PHẢI LUÔN LUÔN ĐỔI THÀNH \\overrightarrow{a}.
    - VỀ PHÂN SỐ: BẮT BUỘC 100% DÙNG \\dfrac (ví dụ: \\dfrac{a}{b}), TUYỆT ĐỐI KHÔNG DÙNG \\frac để đảm bảo phân số hiển thị to rõ, cân đối và chuẩn thẩm mỹ toán học trên web.
-   - VỀ DẤU KHÁC: BẮT BUỘC DÙNG \\neq (ví dụ: $x \\neq 2$), TUYỆT ĐỐI KHÔNG DÙNG \\ne.
+   - VỀ DẤU KHÁC: BẮT BUỘC DÙNG \\neq (ví dụ: $x \\neq 2$, $(ac \\neq 0)$), TUYỆT ĐỐI KHÔNG DÙNG \\ne, \\not=, /=, / =, != hoặc <>.
    - Mọi công thức toán học PHẢI đặt trong cặp dấu $ cho công thức nội dòng (ví dụ: $y = f(x)$) hoặc $$ cho công thức độc lập.
    - Vector: \\overrightarrow{a}, \\overrightarrow{AB}, căn bậc hai: \\sqrt{...}, tích vô hướng: \\overrightarrow{a} \\cdot \\overrightarrow{b}.
    - Trong chuỗi JSON, tất cả dấu gạch chéo ngược LaTeX phải được escape hợp lệ (ví dụ: "\\\\dfrac{1}{2}", "\\\\sqrt{3}", "\\\\overrightarrow{a}", "\\\\overrightarrow{AB}").
@@ -568,6 +568,10 @@ export default function ExamEditorModal({
         return str
           .replace(/\\frac\b/g, '\\dfrac')
           .replace(/\\ne\b/g, '\\neq')
+          .replace(/\\not\s*=/g, '\\neq')
+          .replace(/\s*\/\s*=\s*/g, ' \\neq ')
+          .replace(/\s*!=\s*/g, ' \\neq ')
+          .replace(/\s*<>\s*/g, ' \\neq ')
           .replace(/\\+vec\{([^}]+)\}/g, '\\overrightarrow{$1}')
           .replace(/\\+vec\s*([a-zA-Z0-9])/g, '\\overrightarrow{$1}');
       };
