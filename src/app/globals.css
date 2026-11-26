@@ -744,3 +744,51 @@ img, video, iframe {
   border-color: rgba(56, 189, 248, 0.3) !important;
 }
 
+/* =========================================================================
+   KATEX MATH ENGINE STABILIZATION & FONT ISOLATION
+   Khắc phục triệt để lỗi ký hiệu "khác" (\neq) bị tách thành slash và bằng (/=)
+   trên iPad, Safari iOS, điện thoại và các trình duyệt không tải được font KaTeX.
+   ========================================================================= */
+.katex,
+.katex * {
+  font-family: KaTeX_Main, KaTeX_Math, 'Times New Roman', serif !important;
+}
+
+.katex .mathnormal {
+  font-family: KaTeX_Math, KaTeX_Main, 'Times New Roman', serif !important;
+  font-style: italic !important;
+}
+
+/* 1. Ngăn chặn flexbox/font metrics bên ngoài làm giãn ký tự gạch chéo \rlap trong \neq */
+.katex .rlap {
+  position: relative !important;
+  width: 0 !important;
+  max-width: 0 !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+  display: inline-block !important;
+}
+
+.katex .rlap > .katex-inner {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: 0 !important;
+  overflow: visible !important;
+}
+
+/* 2. Đảm bảo hộp chứa v-box của \neq không chiếm khoảng rộng đẩy dấu = sang phải */
+.katex .katex-vbox:has(.rlap) {
+  width: 0 !important;
+  max-width: 0 !important;
+  display: inline-flex !important;
+  overflow: visible !important;
+}
+
+.katex .mrel:has(.rlap) {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+

@@ -185,6 +185,293 @@ const parseOptions = (rawOptions: any, type?: 'mcq' | 'tf' | 'saq'): { id: strin
   });
 };
 
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+interface ExamTimerProps {
+  initialSeconds: number;
+  isSubmitted: boolean;
+  onTimeUp: () => void;
+  onTick?: (secondsLeft: number) => void;
+}
+
+const ExamTimer = React.memo(function ExamTimer({
+  initialSeconds,
+  isSubmitted,
+  onTimeUp,
+  onTick
+}: ExamTimerProps) {
+  const [seconds, setSeconds] = useState(initialSeconds);
+  const onTimeUpRef = useRef(onTimeUp);
+  onTimeUpRef.current = onTimeUp;
+  const onTickRef = useRef(onTick);
+  onTickRef.current = onTick;
+
+  useEffect(() => {
+    if (isSubmitted) return;
+
+    const timer = setInterval(() => {
+      setSeconds(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          onTimeUpRef.current();
+          return 0;
+        }
+        const next = prev - 1;
+        onTickRef.current?.(next);
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isSubmitted]);
+
+  return (
+    <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border font-mono font-bold text-xs sm:text-sm shrink-0 transition-colors ${
+      seconds <= 300 
+        ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 animate-pulse' 
+        : 'bg-primary/10 border-primary/20 text-primary'
+    }`}>
+      <Clock className="h-4 w-4" />
+      <span>{formatTime(seconds)}</span>
+    </div>
+  );
+});
+
+interface QuestionCardProps {
+  q: Question;
+  qIndex: number;
+  userAns: any;
+  isFlagged: boolean;
+  fontSizeClass: string;
+  onSelectMcq: (qId: string, optKey: string) => void;
+  onSelectTf: (qId: string, subKey: string, val: boolean) => void;
+  onUpdateSaq: (qId: string, val: string) => void;
+  onToggleFlag: (qId: string) => void;
+  onClearAnswer: (qId: string) => void;
+}
+
+const QuestionCard = React.memo(function QuestionCard({
+  q,
+  qIndex,
+  userAns,
+  isFlagged,
+  fontSizeClass,
+  onSelectMcq,
+  onSelectTf,
+  onUpdateSaq,
+  onToggleFlag,
+  onClearAnswer
+}: QuestionCardProps) {
+  const qType = useMemo(() => getQuestionType(q), [q]);
+  const opts = useMemo(() => parseOptions(q.options, qType), [q.options, qType]);
+
+  return (
+    <div 
+      id={`question-${q.id}`}
+      className="flat-card p-5 sm:p-7 space-y-5 relative scroll-mt-24 transition-colors border border-border shadow-xs hover:border-primary/40 bg-card rounded-2xl touch-manipulation [content-visibility:auto] [contain-intrinsic-size:1px_300px]"
+    >
+      {/* Header câu hỏi */}
+      <div className="flex items-center justify-between border-b border-border/70 pb-3.5 flex-wrap gap-2">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="font-black text-xs sm:text-sm text-primary bg-primary/10 px-3 py-1 rounded-xl border border-primary/20">
+            Câu {q.order_index || qIndex + 1}
+          </span>
+          <span className="text-[11px] font-bold text-muted-foreground uppercase bg-muted/50 px-2.5 py-0.5 rounded-lg border border-border">
+            {qType === 'mcq' ? 'Trắc nghiệm 4 ý' : qType === 'tf' ? 'Đúng / Sai' : 'Trả lời ngắn'}
+          </span>
+          {q.level && (
+            <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md">
+              {q.level}
+            </span>
+          )}
+          <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20">
+            {q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25)} điểm
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onToggleFlag(q.id)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border touch-manipulation active:scale-95 ${
+              isFlagged 
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400 shadow-xs' 
+                : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted'
+            }`}
+            title="Đánh dấu câu hỏi cần xem lại (Phím tắt: F)"
+          >
+            <Flag className={`h-3.5 w-3.5 ${isFlagged ? 'fill-amber-500 text-amber-500' : ''}`} />
+            <span className="hidden sm:inline">{isFlagged ? 'Đã gắn cờ' : 'Đánh dấu'}</span>
+          </button>
+
+          {userAns !== undefined && (
+            <button
+              type="button"
+              onClick={() => onClearAnswer(q.id)}
+              className="text-[11px] font-bold text-muted-foreground hover:text-rose-500 transition-colors pl-1 touch-manipulation"
+              title="Xóa câu trả lời này"
+            >
+              Xóa chọn
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Nội dung đề bài */}
+      <div className={`font-medium text-foreground leading-relaxed ${fontSizeClass}`}>
+        <MathRenderer content={q.content} />
+      </div>
+
+      {/* PHẦN I: TRẮC NGHIỆM 4 PHƯƠNG ÁN LỰA CHỌN */}
+      {qType === 'mcq' && (
+        <div className="grid gap-3 sm:grid-cols-2 pt-2">
+          {opts.map((opt, optIdx) => {
+            const optKey = ['A', 'B', 'C', 'D'][optIdx] || opt.id.toUpperCase();
+            const isSelected = String(userAns || '').toUpperCase() === optKey;
+
+            return (
+              <div
+                key={opt.id || optIdx}
+                onClick={() => onSelectMcq(q.id, optKey)}
+                className={`p-4 rounded-2xl border-2 cursor-pointer transition-colors flex items-start gap-3.5 select-none touch-manipulation active:scale-[0.99] ${
+                  isSelected 
+                    ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-2 ring-primary/20' 
+                    : 'bg-background border-border hover:border-primary/40 hover:bg-muted/20 text-foreground'
+                }`}
+              >
+                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 border transition-colors ${
+                  isSelected 
+                    ? 'bg-primary border-primary text-primary-foreground shadow-xs' 
+                    : 'border-border bg-muted/50 text-foreground'
+                }`}>
+                  {optKey}
+                </span>
+                <div className={`min-w-0 pt-1 break-words font-medium ${fontSizeClass}`}>
+                  <MathRenderer content={opt.text} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI */}
+      {qType === 'tf' && (
+        <div className="space-y-3 pt-2">
+          <div className="text-xs font-bold text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg border border-border inline-block">
+            Xét tính đúng hoặc sai của các mệnh đề a), b), c), d) dưới đây:
+          </div>
+
+          {opts.map((opt, optIdx) => {
+            const subKey = ['a', 'b', 'c', 'd'][optIdx] || opt.id.toLowerCase();
+            const currentChoice = userAns ? userAns[subKey] : undefined;
+
+            return (
+              <div 
+                key={opt.id || optIdx}
+                className="p-4 rounded-2xl border border-border/80 bg-background/60 hover:bg-background transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
+              >
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <span className="w-7 h-7 rounded-xl bg-primary/10 text-primary font-black text-xs flex items-center justify-center shrink-0 uppercase border border-primary/20">
+                    {subKey})
+                  </span>
+                  <div className={`min-w-0 pt-0.5 break-words font-medium text-foreground ${fontSizeClass}`}>
+                    <MathRenderer content={opt.text} />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center bg-muted/40 p-1 rounded-xl border border-border">
+                  <button
+                    type="button"
+                    onClick={() => onSelectTf(q.id, subKey, true)}
+                    className={`px-4 py-2 rounded-lg text-xs font-black transition-colors flex items-center gap-1.5 touch-manipulation active:scale-95 ${
+                      currentChoice === true 
+                        ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
+                    }`}
+                  >
+                    <Check className={`h-3.5 w-3.5 ${currentChoice === true ? 'stroke-[3]' : ''}`} />
+                    <span>ĐÚNG</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onSelectTf(q.id, subKey, false)}
+                    className={`px-4 py-2 rounded-lg text-xs font-black transition-colors flex items-center gap-1.5 touch-manipulation active:scale-95 ${
+                      currentChoice === false 
+                        ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-400/40' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
+                    }`}
+                  >
+                    <X className={`h-3.5 w-3.5 ${currentChoice === false ? 'stroke-[3]' : ''}`} />
+                    <span>SAI</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* PHẦN III: TRẢ LỜI NGẮN */}
+      {qType === 'saq' && (
+        <div className="p-5 rounded-2xl bg-muted/20 border border-border space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-black text-foreground uppercase tracking-wider block">
+              Điền câu trả lời ngắn:
+            </label>
+            <span className="text-[11px] text-muted-foreground font-semibold">
+              Chấp nhận số nguyên hoặc số thập phân (VD: 10,1 hoặc -12)
+            </span>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <input
+              type="text"
+              placeholder="Nhập kết quả tính toán (VD: 10,1 hoặc -5)..."
+              value={userAns || ''}
+              onChange={(e) => onUpdateSaq(q.id, e.target.value)}
+              className={`flex-1 p-3.5 rounded-xl border border-border bg-background font-mono font-bold text-base text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all touch-manipulation ${fontSizeClass}`}
+            />
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onUpdateSaq(q.id, (userAns || '') + '-')}
+                className="px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted font-mono font-bold text-xs touch-manipulation active:scale-95"
+                title="Thêm dấu âm (-)"
+              >
+                - (Âm)
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateSaq(q.id, (userAns || '') + ',')}
+                className="px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted font-mono font-bold text-xs touch-manipulation active:scale-95"
+                title="Thêm dấu phẩy thập phân (,)"
+              >
+                , (Phẩy)
+              </button>
+              {userAns && (
+                <button
+                  type="button"
+                  onClick={() => onClearAnswer(q.id)}
+                  className="px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted font-bold text-xs text-rose-500 touch-manipulation"
+                >
+                  Xóa
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
 export default function ExamSessionClient({
   exam,
   questions: initialQuestions,
@@ -209,7 +496,7 @@ export default function ExamSessionClient({
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>('base');
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Record<string, boolean>>({});
-  const [timeLeft, setTimeLeft] = useState((exam.duration_minutes || 45) * 60);
+  const timeLeftRef = useRef((exam.duration_minutes || 45) * 60);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -229,27 +516,35 @@ export default function ExamSessionClient({
     part3Correct: number;
   } | null>(null);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const handleTick = useCallback((secs: number) => {
+    timeLeftRef.current = secs;
+  }, []);
 
-  // Bộ đếm thời gian
-  useEffect(() => {
-    if (isSubmitted) return;
+  const handleSelectMcq = useCallback((qId: string, optKey: string) => {
+    setAnswers(prev => ({ ...prev, [qId]: optKey }));
+  }, []);
 
-    timerRef.current = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          handleAutoSubmit();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+  const handleSelectTf = useCallback((qId: string, subKey: string, val: boolean) => {
+    setAnswers(prev => ({
+      ...prev,
+      [qId]: {
+        ...(prev[qId] || {}),
+        [subKey]: val
+      }
+    }));
+  }, []);
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isSubmitted]);
+  const handleUpdateSaq = useCallback((qId: string, val: string) => {
+    setAnswers(prev => ({ ...prev, [qId]: val }));
+  }, []);
+
+  const handleClearAnswer = useCallback((qId: string) => {
+    setAnswers(prev => {
+      const copy = { ...prev };
+      delete copy[qId];
+      return copy;
+    });
+  }, []);
 
   // Phím tắt bàn phím tiện ích
   useEffect(() => {
@@ -339,11 +634,13 @@ export default function ExamSessionClient({
     setIsMobileDrawerOpen(false);
   };
 
+  const submitTestRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
+
   // Nộp bài tự động khi hết giờ
-  const handleAutoSubmit = async () => {
+  const handleAutoSubmit = useCallback(async () => {
     alert('Đã hết thời gian làm bài! Hệ thống tự động nộp bài thi của bạn.');
-    await submitTest(true);
-  };
+    await submitTestRef.current(true);
+  }, []);
 
   // Nộp bài thi
   const submitTest = async (force = false) => {
@@ -423,7 +720,7 @@ export default function ExamSessionClient({
     const score = totalMaxScore > 0 
       ? Math.round((earnedPoints / totalMaxScore) * 10 * 100) / 100 
       : 0;
-    const timeSpent = (exam.duration_minutes || 45) * 60 - timeLeft;
+    const timeSpent = (exam.duration_minutes || 45) * 60 - timeLeftRef.current;
 
     try {
       const resultPayload: any = {
@@ -469,12 +766,7 @@ export default function ExamSessionClient({
       setSubmitting(false);
     }
   };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  submitTestRef.current = submitTest;
 
   const answeredQuestionsCount = questions.filter(q => isQuestionAnswered(q)).length;
   const unansweredQuestions = questions.filter(q => !isQuestionAnswered(q));
@@ -586,7 +878,7 @@ export default function ExamSessionClient({
               onClick={() => {
                 setAnswers({});
                 setFlaggedQuestions({});
-                setTimeLeft((exam.duration_minutes || 45) * 60);
+                timeLeftRef.current = (exam.duration_minutes || 45) * 60;
                 setIsSubmitted(false);
                 setResult(null);
                 setCurrentQuestionIndex(0);
@@ -804,12 +1096,12 @@ export default function ExamSessionClient({
                   {qType === 'saq' && (
                     <div className="p-4 bg-muted/20 border border-border rounded-xl space-y-1.5 text-xs">
                       <p className="text-muted-foreground font-semibold m-0">
-                        Câu trả lời của bạn: <strong className={String(userAns || '').trim().toLowerCase() === String(q.correct_answer || '').trim().toLowerCase() ? 'text-emerald-600 text-sm' : 'text-rose-600 text-sm'}>
+                        Câu trả lời của bạn: <strong className={String(userAns || '').trim().replace(/,/g, '.').toLowerCase() === String(q.correct_answer || '').trim().replace(/,/g, '.').toLowerCase() ? 'text-emerald-600 text-sm' : 'text-rose-600 text-sm'}>
                           {userAns || '(Bỏ trống)'}
                         </strong>
                       </p>
                       <p className="font-bold text-emerald-600 dark:text-emerald-400 m-0">
-                        Đáp án chuẩn: {String(q.correct_answer || '')}
+                        Đáp án chuẩn: {String(q.correct_answer || '').replace(/^([+-]?\d+)\.(\d+)$/, '$1,$2')}
                       </p>
                     </div>
                   )}
@@ -849,238 +1141,13 @@ export default function ExamSessionClient({
   const activeQuestion = questions[currentQuestionIndex] || questions[0];
   const activeQuestionType = activeQuestion ? getQuestionType(activeQuestion) : 'mcq';
 
-  // Render một câu hỏi đơn lẻ
-  const renderQuestionCard = (q: Question, qIndex: number) => {
-    const qType = getQuestionType(q);
-    const userAns = answers[q.id];
-    const opts = parseOptions(q.options, qType);
-    const isFlagged = Boolean(flaggedQuestions[q.id]);
-
-    return (
-      <div 
-        key={q.id}
-        id={`question-${q.id}`}
-        className="flat-card p-5 sm:p-7 space-y-5 relative scroll-mt-24 transition-all border border-border shadow-xs hover:border-primary/40 bg-card rounded-2xl"
-      >
-        {/* Header câu hỏi */}
-        <div className="flex items-center justify-between border-b border-border/70 pb-3.5 flex-wrap gap-2">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="font-black text-xs sm:text-sm text-primary bg-primary/10 px-3 py-1 rounded-xl border border-primary/20">
-              Câu {q.order_index || qIndex + 1}
-            </span>
-            <span className="text-[11px] font-bold text-muted-foreground uppercase bg-muted/50 px-2.5 py-0.5 rounded-lg border border-border">
-              {qType === 'mcq' ? 'Trắc nghiệm 4 ý' : qType === 'tf' ? 'Đúng / Sai' : 'Trả lời ngắn'}
-            </span>
-            {q.level && (
-              <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md">
-                {q.level}
-              </span>
-            )}
-            <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20">
-              {q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : (qType === 'tf' ? 1.0 : qType === 'saq' ? 0.5 : 0.25)} điểm
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => toggleFlag(q.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-                isFlagged 
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400 shadow-xs' 
-                  : 'bg-muted/40 border-border text-muted-foreground hover:bg-muted'
-              }`}
-              title="Đánh dấu câu hỏi cần xem lại (Phím tắt: F)"
-            >
-              <Flag className={`h-3.5 w-3.5 ${isFlagged ? 'fill-amber-500 text-amber-500' : ''}`} />
-              <span className="hidden sm:inline">{isFlagged ? 'Đã gắn cờ' : 'Đánh dấu'}</span>
-            </button>
-
-            {userAns !== undefined && (
-              <button
-                onClick={() => setAnswers(prev => {
-                  const copy = { ...prev };
-                  delete copy[q.id];
-                  return copy;
-                })}
-                className="text-[11px] font-bold text-muted-foreground hover:text-rose-500 transition-colors pl-1"
-                title="Xóa câu trả lời này"
-              >
-                Xóa chọn
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Nội dung đề bài */}
-        <div className={`font-medium text-foreground leading-relaxed ${fontSizeClass}`}>
-          <MathRenderer content={q.content} />
-        </div>
-
-        {/* PHẦN I: TRẮC NGHIỆM 4 PHƯƠNG ÁN LỰA CHỌN */}
-        {qType === 'mcq' && (
-          <div className="grid gap-3 sm:grid-cols-2 pt-2">
-            {opts.map((opt, optIdx) => {
-              const optKey = ['A', 'B', 'C', 'D'][optIdx] || opt.id.toUpperCase();
-              const isSelected = String(userAns || '').toUpperCase() === optKey;
-
-              return (
-                <div
-                  key={opt.id || optIdx}
-                  onClick={() => setAnswers(prev => ({ ...prev, [q.id]: optKey }))}
-                  className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3.5 select-none ${
-                    isSelected 
-                      ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs ring-2 ring-primary/20' 
-                      : 'bg-background border-border hover:border-primary/40 hover:bg-muted/20 text-foreground'
-                  }`}
-                >
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 border transition-all ${
-                    isSelected 
-                      ? 'bg-primary border-primary text-primary-foreground shadow-xs' 
-                      : 'border-border bg-muted/50 text-foreground'
-                  }`}>
-                    {optKey}
-                  </span>
-                  <div className={`min-w-0 pt-1 break-words font-medium ${fontSizeClass}`}>
-                    <MathRenderer content={opt.text} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI (THIẾT KẾ MỚI SEGMENTED CONTROL) */}
-        {qType === 'tf' && (
-          <div className="space-y-3 pt-2">
-            <div className="text-xs font-bold text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg border border-border inline-block">
-              Xét tính đúng hoặc sai của các mệnh đề a), b), c), d) dưới đây:
-            </div>
-
-            {opts.map((opt, optIdx) => {
-              const subKey = ['a', 'b', 'c', 'd'][optIdx] || opt.id.toLowerCase();
-              const currentChoice = userAns ? userAns[subKey] : undefined;
-
-              const handleSelect = (val: boolean) => {
-                setAnswers(prev => ({
-                  ...prev,
-                  [q.id]: {
-                    ...(prev[q.id] || {}),
-                    [subKey]: val
-                  }
-                }));
-              };
-
-              return (
-                <div 
-                  key={opt.id || optIdx}
-                  className="p-4 rounded-2xl border border-border/80 bg-background/60 hover:bg-background transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
-                >
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <span className="w-7 h-7 rounded-xl bg-primary/10 text-primary font-black text-xs flex items-center justify-center shrink-0 uppercase border border-primary/20">
-                      {subKey})
-                    </span>
-                    <div className={`min-w-0 pt-0.5 break-words font-medium text-foreground ${fontSizeClass}`}>
-                      <MathRenderer content={opt.text} />
-                    </div>
-                  </div>
-
-                  {/* Nút Toggle ĐÚNG / SAI Hiện Đại */}
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center bg-muted/40 p-1 rounded-xl border border-border">
-                    <button
-                      type="button"
-                      onClick={() => handleSelect(true)}
-                      className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
-                        currentChoice === true 
-                          ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
-                      }`}
-                    >
-                      <Check className={`h-3.5 w-3.5 ${currentChoice === true ? 'stroke-[3]' : ''}`} />
-                      <span>ĐÚNG</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSelect(false)}
-                      className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
-                        currentChoice === false 
-                          ? 'bg-rose-600 text-white shadow-md ring-2 ring-rose-400/40' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-background/80'
-                      }`}
-                    >
-                      <X className={`h-3.5 w-3.5 ${currentChoice === false ? 'stroke-[3]' : ''}`} />
-                      <span>SAI</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* PHẦN III: TRẢ LỜI NGẮN */}
-        {qType === 'saq' && (
-          <div className="p-5 rounded-2xl bg-muted/20 border border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-black text-foreground uppercase tracking-wider block">
-                Điền câu trả lời ngắn:
-              </label>
-              <span className="text-[11px] text-muted-foreground font-semibold">
-                Chấp nhận số nguyên hoặc số thập phân (VD: 3.5 hoặc -12)
-              </span>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <input
-                type="text"
-                placeholder="Nhập kết quả tính toán..."
-                value={userAns || ''}
-                onChange={(e) => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
-                className={`flex-1 p-3.5 rounded-xl border border-border bg-background font-mono font-bold text-base text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all ${fontSizeClass}`}
-              />
-
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setAnswers(prev => ({ ...prev, [q.id]: (prev[q.id] || '') + '-' }))}
-                  className="px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted font-mono font-bold text-xs"
-                  title="Thêm dấu âm (-)"
-                >
-                  - (Âm)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAnswers(prev => ({ ...prev, [q.id]: (prev[q.id] || '') + '.' }))}
-                  className="px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted font-mono font-bold text-xs"
-                  title="Thêm dấu thập phân (.)"
-                >
-                  . (Phẩy)
-                </button>
-                {userAns && (
-                  <button
-                    type="button"
-                    onClick={() => setAnswers(prev => ({ ...prev, [q.id]: '' }))}
-                    className="px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted font-bold text-xs text-rose-500"
-                  >
-                    Xóa
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-      </div>
-    );
-  };
-
   return (
     <div className="w-full min-h-screen flex flex-col bg-[#f8fafc] dark:bg-background text-foreground select-none">
       
       {/* =====================================================================
-          1. HEADER PHÒNG THI HIỆN ĐẠI (STICKY TOP BAR)
+          1. HEADER PHÒNG THI HIỆN ĐẠI (STICKY TOP BAR - KHÔNG BLUR ĐỂ TRÁNH LAG IPAD/MOBILE)
           ===================================================================== */}
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-card/95 backdrop-blur-md border-b border-border shadow-xs px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-40 bg-white dark:bg-card border-b border-border shadow-xs px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         
         {/* Cột trái: Thoát & Tiêu đề đề thi */}
         <div className="flex items-center gap-3 min-w-0">
@@ -1090,7 +1157,7 @@ export default function ExamSessionClient({
                 router.push('/dashboard/student/exams');
               }
             }}
-            className="p-2 rounded-xl border border-border hover:bg-muted bg-background text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="p-2 rounded-xl border border-border hover:bg-muted bg-background text-muted-foreground hover:text-foreground transition-colors shrink-0 touch-manipulation"
             title="Thoát phòng thi"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -1108,15 +1175,13 @@ export default function ExamSessionClient({
           </div>
         </div>
 
-        {/* Cột giữa: Đồng hồ đếm ngược nổi bật */}
-        <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border font-mono font-bold text-xs sm:text-sm shrink-0 transition-all ${
-          timeLeft <= 300 
-            ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 animate-pulse' 
-            : 'bg-primary/10 border-primary/20 text-primary'
-        }`}>
-          <Clock className="h-4 w-4" />
-          <span>{formatTime(timeLeft)}</span>
-        </div>
+        {/* Cột giữa: Đồng hồ đếm ngược nổi bật (Cô lập state để không re-render đề thi) */}
+        <ExamTimer
+          initialSeconds={(exam.duration_minutes || 45) * 60}
+          isSubmitted={isSubmitted}
+          onTimeUp={handleAutoSubmit}
+          onTick={handleTick}
+        />
 
         {/* Cột phải: Bộ điều khiển chế độ xem & Nút nộp bài */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -1211,7 +1276,18 @@ export default function ExamSessionClient({
           {/* CHẾ ĐỘ 1: FOCUS MODE (LÀM TỪNG CÂU HỎI TRỌNG TÂM) */}
           {viewMode === 'focus' && activeQuestion && (
             <div className="space-y-6 animate-fade-in">
-              {renderQuestionCard(activeQuestion, currentQuestionIndex)}
+              <QuestionCard
+                q={activeQuestion}
+                qIndex={currentQuestionIndex}
+                userAns={answers[activeQuestion.id]}
+                isFlagged={Boolean(flaggedQuestions[activeQuestion.id])}
+                fontSizeClass={fontSizeClass}
+                onSelectMcq={handleSelectMcq}
+                onSelectTf={handleSelectTf}
+                onUpdateSaq={handleUpdateSaq}
+                onToggleFlag={toggleFlag}
+                onClearAnswer={handleClearAnswer}
+              />
 
               {/* Thanh điều hướng câu trước / câu sau */}
               <div className="flex items-center justify-between gap-3 pt-2">
@@ -1219,7 +1295,7 @@ export default function ExamSessionClient({
                   type="button"
                   onClick={() => jumpToQuestion(Math.max(0, currentQuestionIndex - 1))}
                   disabled={currentQuestionIndex === 0}
-                  className="btn-secondary text-xs sm:text-sm py-2.5 px-4 sm:px-6 font-bold flex items-center gap-2 disabled:opacity-40"
+                  className="btn-secondary text-xs sm:text-sm py-2.5 px-4 sm:px-6 font-bold flex items-center gap-2 disabled:opacity-40 touch-manipulation"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   <span>Câu Trước</span>
@@ -1233,7 +1309,7 @@ export default function ExamSessionClient({
                   type="button"
                   onClick={() => jumpToQuestion(Math.min(questions.length - 1, currentQuestionIndex + 1))}
                   disabled={currentQuestionIndex === questions.length - 1}
-                  className="btn-primary text-xs sm:text-sm py-2.5 px-4 sm:px-6 font-bold flex items-center gap-2 disabled:opacity-40"
+                  className="btn-primary text-xs sm:text-sm py-2.5 px-4 sm:px-6 font-bold flex items-center gap-2 disabled:opacity-40 touch-manipulation"
                 >
                   <span>Câu Tiếp Theo</span>
                   <ArrowRight className="h-4 w-4" />
@@ -1256,7 +1332,21 @@ export default function ExamSessionClient({
                     <p className="text-xs text-muted-foreground m-0">Mỗi câu chỉ chọn một phương án duy nhất.</p>
                   </div>
                   <div className="space-y-4">
-                    {part1Questions.map((q, idx) => renderQuestionCard(q, idx))}
+                    {part1Questions.map((q, idx) => (
+                      <QuestionCard
+                        key={q.id}
+                        q={q}
+                        qIndex={idx}
+                        userAns={answers[q.id]}
+                        isFlagged={Boolean(flaggedQuestions[q.id])}
+                        fontSizeClass={fontSizeClass}
+                        onSelectMcq={handleSelectMcq}
+                        onSelectTf={handleSelectTf}
+                        onUpdateSaq={handleUpdateSaq}
+                        onToggleFlag={toggleFlag}
+                        onClearAnswer={handleClearAnswer}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
@@ -1272,7 +1362,21 @@ export default function ExamSessionClient({
                     <p className="text-xs text-muted-foreground m-0">Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.</p>
                   </div>
                   <div className="space-y-4">
-                    {part2Questions.map((q, idx) => renderQuestionCard(q, part1Questions.length + idx))}
+                    {part2Questions.map((q, idx) => (
+                      <QuestionCard
+                        key={q.id}
+                        q={q}
+                        qIndex={part1Questions.length + idx}
+                        userAns={answers[q.id]}
+                        isFlagged={Boolean(flaggedQuestions[q.id])}
+                        fontSizeClass={fontSizeClass}
+                        onSelectMcq={handleSelectMcq}
+                        onSelectTf={handleSelectTf}
+                        onUpdateSaq={handleUpdateSaq}
+                        onToggleFlag={toggleFlag}
+                        onClearAnswer={handleClearAnswer}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
@@ -1288,7 +1392,21 @@ export default function ExamSessionClient({
                     <p className="text-xs text-muted-foreground m-0">Thí sinh điền kết quả vào ô trống tương ứng.</p>
                   </div>
                   <div className="space-y-4">
-                    {part3Questions.map((q, idx) => renderQuestionCard(q, part1Questions.length + part2Questions.length + idx))}
+                    {part3Questions.map((q, idx) => (
+                      <QuestionCard
+                        key={q.id}
+                        q={q}
+                        qIndex={part1Questions.length + part2Questions.length + idx}
+                        userAns={answers[q.id]}
+                        isFlagged={Boolean(flaggedQuestions[q.id])}
+                        fontSizeClass={fontSizeClass}
+                        onSelectMcq={handleSelectMcq}
+                        onSelectTf={handleSelectTf}
+                        onUpdateSaq={handleUpdateSaq}
+                        onToggleFlag={toggleFlag}
+                        onClearAnswer={handleClearAnswer}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
@@ -1403,10 +1521,10 @@ export default function ExamSessionClient({
       {/* =====================================================================
           3. THANH NỔI DƯỚI CÙNG CHO MOBILE (BOTTOM FLOATING BAR)
           ===================================================================== */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border p-3 flex items-center justify-between gap-3 shadow-lg">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border p-3 flex items-center justify-between gap-3 shadow-lg">
         <button
           onClick={() => setIsMobileDrawerOpen(true)}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted/60 text-xs font-bold text-foreground"
+          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted/60 text-xs font-bold text-foreground touch-manipulation"
         >
           <Menu className="h-4 w-4" />
           <span>Phiếu câu ({answeredQuestionsCount}/{questions.length})</span>
@@ -1414,7 +1532,7 @@ export default function ExamSessionClient({
 
         <button
           onClick={() => setShowConfirmModal(true)}
-          className="btn-primary text-xs py-2 px-5 font-black flex items-center gap-1.5 shadow-md"
+          className="btn-primary text-xs py-2 px-5 font-black flex items-center gap-1.5 shadow-md touch-manipulation"
         >
           <Send className="h-3.5 w-3.5" />
           <span>Nộp bài</span>
@@ -1423,7 +1541,7 @@ export default function ExamSessionClient({
 
       {/* MOBILE BOTTOM SHEET DRAWER */}
       {isMobileDrawerOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end animate-fade-in">
+        <div className="lg:hidden fixed inset-0 z-50 bg-black/60 flex flex-col justify-end animate-fade-in">
           <div className="bg-card border-t border-border rounded-t-3xl p-5 max-h-[80vh] flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-border">
               <h3 className="text-sm font-black text-foreground uppercase tracking-wider flex items-center gap-2 m-0">
@@ -1431,7 +1549,7 @@ export default function ExamSessionClient({
               </h3>
               <button
                 onClick={() => setIsMobileDrawerOpen(false)}
-                className="p-1 rounded-lg hover:bg-muted text-muted-foreground"
+                className="p-1 rounded-lg hover:bg-muted text-muted-foreground touch-manipulation"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1457,7 +1575,7 @@ export default function ExamSessionClient({
                     <button
                       key={q.id}
                       onClick={() => jumpToQuestion(idx)}
-                      className={`h-10 rounded-xl font-bold text-xs relative flex items-center justify-center transition-all ${btnStyle}`}
+                      className={`h-10 rounded-xl font-bold text-xs relative flex items-center justify-center transition-colors touch-manipulation ${btnStyle}`}
                     >
                       <span>{q.order_index || idx + 1}</span>
                       {isFlagged && (
@@ -1471,7 +1589,7 @@ export default function ExamSessionClient({
 
             <button
               onClick={() => setIsMobileDrawerOpen(false)}
-              className="w-full py-2.5 rounded-xl bg-muted text-foreground font-bold text-xs"
+              className="w-full py-2.5 rounded-xl bg-muted text-foreground font-bold text-xs touch-manipulation"
             >
               Đóng
             </button>
@@ -1483,7 +1601,7 @@ export default function ExamSessionClient({
           4. MODAL XÁC NHẬN NỘP BÀI THÔNG MINH
           ===================================================================== */}
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-6 shadow-2xl relative">
             <div className="flex items-start gap-4">
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${

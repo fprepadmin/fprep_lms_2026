@@ -19,34 +19,54 @@ Nhiệm vụ: Chuyển đổi chính xác 100% đề thi dưới đây sang đ�
 
 CÁC NGUYÊN TẮC BẮT BUỘC TUYỆT ĐỐI KHÔNG ĐƯỢC VI PHẠM (CRITICAL STRICT RULES):
 
-1. BẢO LƯU NGUYÊN BẢN 100% (KHÔNG ĐƯỢC PHÉP THAY ĐỔI NỘI DUNG, CÁCH HỎI, ĐÁP ÁN):
-   - TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ Ý THAY ĐỔI, viết lại, biên tập lại, tóm tắt hay diễn giải lại câu chữ, câu dẫn, cách hỏi trong trường "content".
-   - TUYỆT ĐỐI KHÔNG ĐƯỢC THAY ĐỔI văn phong, dữ liệu số, thứ tự câu hỏi và nội dung các phương án ("options").
-   - ĐÁP ÁN CỦA ĐỀ GỐC/GIÁO VIÊN LÀ CHÂN LÝ TUYỆT ĐỐI: Bạn PHẢI trích xuất chính xác đáp án giáo viên đã cung cấp trong đề (gạch chân, in đậm, đánh dấu *, khoanh tròn hoặc bảng đáp án ở cuối đề) làm "correct_answer". TUYỆT ĐỐI KHÔNG tự ý giải lại rồi chọn đáp án khác với chỉ định của đề gốc.
-   - Lời giải ("explanation") phải lập luận sư phạm logic, chặt chẽ để chứng minh và dẫn về ĐÚNG đáp án mà đề gốc đã chọn.
+1. BẢO TOÀN CHÍNH XÁC 100% THỨ TỰ NHƯ ĐỀ GỐC (TUYỆT ĐỐI KHÔNG ĐẢO LỘN HAY XÁO TRỘN):
+   - Thứ tự các câu hỏi trong mảng JSON BẮT BUỘC PHẢI GIỮ ĐÚNG NGUYÊN VẸN 100% THỨ TỰ XUẤT HIỆN TỪ ĐẦU ĐẾN CUỐI CỦA ĐỀ GỐC (từ Câu 1, Câu 2, Câu 3... cho đến Câu cuối cùng).
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC ĐẢO LỘN, XÁO TRỘN HAY THAY ĐỔI VỊ TRÍ CỦA BẤT KỲ CÂU NÀO: Không được tự ý gom nhóm lại theo độ khó/dễ, không được nhảy cóc câu, không được thay đổi vị trí của bất kỳ câu hỏi nào.
+   - THỨ TỰ CÁC PHƯƠNG ÁN ĐÁP ÁN BẮT BUỘC GIỮ ĐÚNG THỨ TỰ ĐỀ GỐC:
+     + Trắc nghiệm 4 lựa chọn (MCQ): Thứ tự các phương án bắt buộc phải là A, B, C, D y hệt như đề gốc. TUYỆT ĐỐI KHÔNG xáo trộn thứ tự các đáp án (không đảo B lên trước A hay D lên đầu).
+     + Trắc nghiệm Đúng/Sai (TF): Thứ tự các ý bắt buộc là a, b, c, d y hệt như đề gốc.
 
-2. QUY TẮC BẢNG BIẾN THIÊN, ĐỒ THỊ VÀ HÌNH ẢNH:
+2. BÓC TÁCH BẠCH - TUYỆT ĐỐI KHÔNG ĐƯỢC TRỘN LẪN CÂU HỎI VÀ ĐÁP ÁN:
+   - TRƯỜNG "content" (NỘI DUNG ĐỀ BÀI):
+     + CHỈ CHỨA DUY NHẤT LỜI DẪN / NỘI DUNG ĐỀ BÀI CỦA CÂU HỎI.
+     + TUYỆT ĐỐI KHÔNG ĐƯỢC ĐƯA CÁC PHƯƠNG ÁN ĐÁP ÁN (A. ..., B. ..., C. ..., D. ...) VÀO TRƯỜNG "content". Mọi nội dung của phương án A, B, C, D BẮT BUỘC PHẢI ĐƯỢC TÁCH RIÊNG vào mảng "options".
+     + TUYỆT ĐỐI KHÔNG để đáp án đúng (ví dụ: "Chọn A", "Đáp án: B") hay lời giải dính vào trường "content".
+   - MẢNG "options" (CÁC PHƯƠNG ÁN LỰA CHỌN):
+     + Chứa danh sách các lựa chọn được bóc tách độc lập.
+     + Trường "id" lưu định danh: "A", "B", "C", "D" (với MCQ) hoặc "a", "b", "c", "d" (với Đúng/Sai).
+     + Trường "text" CHỈ CHỨA NỘI DUNG của phương án đó. TUYỆT ĐỐI KHÔNG lặp lại tiền tố "A. ", "B. ", "C. ", "D. " hay "a) ", "b) " trong trường "text".
+   - TRƯỜNG "correct_answer" & "explanation" (ĐÁP ÁN VÀ LỜI GIẢI):
+     + Phải bóc tách riêng biệt, khớp chính xác 100% với từng câu, tuyệt đối không để lẫn lộn giữa câu này sang câu khác.
+     + ĐÁP ÁN CỦA ĐỀ GỐC/GIÁO VIÊN LÀ CHÂN LÝ TUYỆT ĐỐI: Bạn PHẢI trích xuất chính xác đáp án giáo viên đã cung cấp trong đề (gạch chân, in đậm, đánh dấu *, khoanh tròn hoặc bảng đáp án ở cuối đề) làm "correct_answer". TUYỆT ĐỐI KHÔNG tự ý giải lại rồi chọn đáp án khác với chỉ định của đề gốc.
+     + Lời giải ("explanation") phải lập luận sư phạm logic, chặt chẽ để chứng minh và dẫn về ĐÚNG đáp án mà đề gốc đã chọn.
+
+3. BẢO LƯU NGUYÊN BẢN 100% (KHÔNG ĐƯỢC PHÉP THAY ĐỔI CÂU CHỮ):
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ Ý THAY ĐỔI, viết lại, biên tập lại, tóm tắt hay diễn giải lại câu chữ, câu dẫn, cách hỏi trong trường "content".
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC THAY ĐỔI văn phong, dữ liệu số và nội dung các phương án ("options").
+
+4. QUY TẮC BẢNG BIẾN THIÊN, ĐỒ THỊ VÀ HÌNH ẢNH:
    - VỀ BẢNG BIẾN THIÊN: BẢNG BIẾN THIÊN LUÔN LUÔN PHẢI ĐƯA VỀ DẠNG HÌNH ẢNH NHƯ TRONG FILE GỐC (nếu trích xuất trực tiếp được ảnh gốc thì dùng link ảnh hoặc đặt ký hiệu giữ chỗ \`[Hình vẽ: Bảng biến thiên]\`, nếu không được thì giáo viên/AI chụp ảnh/chuyển thành ảnh dán vào). TUYỆT ĐỐI KHÔNG tự ý gõ lại bảng biến thiên bằng bảng text hay ký tự thô sơ để tránh lệch mũi tên và lỗi định dạng.
    - VỚI HÌNH VẼ, ĐỒ THỊ, HÌNH HỌC KHÔNG GIAN, TRANH ẢNH MINH HỌA:
      + TUYỆT ĐỐI KHÔNG tự ý bỏ qua hay tự bịa lời văn mô tả thay thế hình.
      + Đặt đúng vị trí hình ảnh bằng ký hiệu giữ chỗ rõ ràng: \`[Hình vẽ: Mô tả vị trí xuất hiện trong đề]\` (hoặc \`[Đồ thị hàm số]\`, \`[Bảng biến thiên]\`, hoặc nếu có link ảnh thì giữ nguyên \`![Hình vẽ](link_anh)\`).
      + Hình vẽ phải được đặt CHÍNH XÁC tại vị trí xuất hiện trong đề bài hoặc trong các phương án, lời giải. Hệ thống FPREP sẽ tự động nhận diện vị trí này để hiển thị và cắt sát ảnh tương ứng.
 
-3. QUY ƯỚC CÔNG THỨC TOÁN HỌC & LATEX:
+5. QUY ƯỚC CÔNG THỨC TOÁN HỌC & LATEX:
    - VỀ VECTOR: BẮT BUỘC 100% DÙNG \\overrightarrow (ví dụ: \\overrightarrow{a}, \\overrightarrow{b}, \\overrightarrow{AB}, \\overrightarrow{u}), TUYỆT ĐỐI KHÔNG DÙNG \\vec{...} hoặc \\vec a. Mọi ký hiệu \\vec{a} PHẢI LUÔN LUÔN ĐỔI THÀNH \\overrightarrow{a}.
    - VỀ PHÂN SỐ: BẮT BUỘC 100% DÙNG \\dfrac (ví dụ: \\dfrac{a}{b}), TUYỆT ĐỐI KHÔNG DÙNG \\frac để đảm bảo phân số hiển thị to rõ, cân đối và chuẩn thẩm mỹ toán học trên web.
    - VỀ DẤU KHÁC: BẮT BUỘC DÙNG \\neq (ví dụ: $x \\neq 2$, $(ac \\neq 0)$), TUYỆT ĐỐI KHÔNG DÙNG \\ne, \\not=, /=, / =, != hoặc <>.
+   - VỀ ĐÁP ÁN TRẢ LỜI NGẮN (type "saq"): BẮT BUỘC số thập phân dùng dấu phẩy "," theo chuẩn Bộ GD&ĐT Việt Nam (ví dụ: "10,1", "12,5", "-3,25"), TUYỆT ĐỐI KHÔNG DÙNG dấu chấm "." (không dùng "10.1", "12.5"). Cả trường "correct_answer" và câu kết luận trong "explanation" đều phải dùng dấu phẩy "," cho số thập phân.
    - Mọi công thức toán học PHẢI đặt trong cặp dấu $ cho công thức nội dòng (ví dụ: $y = f(x)$) hoặc $$ cho công thức độc lập.
    - Vector: \\overrightarrow{a}, \\overrightarrow{AB}, căn bậc hai: \\sqrt{...}, tích vô hướng: \\overrightarrow{a} \\cdot \\overrightarrow{b}.
    - Trong chuỗi JSON, tất cả dấu gạch chéo ngược LaTeX phải được escape hợp lệ (ví dụ: "\\\\dfrac{1}{2}", "\\\\sqrt{3}", "\\\\overrightarrow{a}", "\\\\overrightarrow{AB}").
 
-4. ĐỊNH DẠNG XUỐNG DÒNG DỄ ĐỌC TRONG LỜI GIẢI ("explanation"):
+6. ĐỊNH DẠNG XUỐNG DÒNG DỄ ĐỌC TRONG LỜI GIẢI ("explanation"):
    - Các bước giải, lập luận phân tích PHẢI được ngắt dòng rõ ràng bằng ký tự xuống dòng \\n hoặc \\n\\n, không viết dồn thành một khối chữ đặc.
    - Trắc nghiệm Đúng/Sai (type "tf"): Bắt buộc ngắt dòng riêng biệt cho từng ý:
      Ý a) ... -> Đúng.\\n\\nÝ b) ... -> Sai.\\n\\nÝ c) ... -> Đúng.\\n\\nÝ d) ... -> Sai.
-   - Trả lời ngắn (type "saq"): Trình bày từng bước tính, dòng cuối ghi rõ kết luận giá trị cần điền.
+   - Trả lời ngắn (type "saq"): Trình bày từng bước tính, dòng cuối ghi rõ kết luận giá trị cần điền là số nguyên hoặc số thập phân dùng dấu phẩy "," (ví dụ: "\\\\n\\\\nVậy giá trị cần điền vào ô đáp án là: 10,1").
 
-5. CẤU TRÚC JSON CHUẨN 2026 (MẪU 3 DẠNG THỨC):
+7. CẤU TRÚC JSON CHUẨN 2026 (MẪU 3 DẠNG THỨC):
 [
   // Dạng 1: Trắc nghiệm 4 lựa chọn (type: "mcq", points: 0.25)
   {
@@ -85,8 +105,8 @@ CÁC NGUYÊN TẮC BẮT BUỘC TUYỆT ĐỐI KHÔNG ĐƯỢC VI PHẠM (CRITIC
     "points": 0.5,
     "content": "Nội dung câu hỏi nguyên văn không đổi...",
     "options": [],
-    "correct_answer": "12.5",
-    "explanation": "Bước 1: ...\\nBước 2: ...\\n\\nVậy giá trị cần điền vào ô đáp án là: 12.5"
+    "correct_answer": "10,1",
+    "explanation": "Bước 1: ...\\nBước 2: ...\\n\\nVậy giá trị cần điền vào ô đáp án là: 10,1"
   }
 ]
 
@@ -195,7 +215,7 @@ export default function ExamEditorModal({
           }
         } else if (qType === 'saq') {
           if (ca === undefined || ca === null) ca = '';
-          else ca = String(ca);
+          else ca = String(ca).trim().replace(/^([+-]?\d+)\.(\d+)$/, '$1,$2');
         }
 
         const rawPt = q.points !== undefined && q.points !== null && !isNaN(Number(q.points))
@@ -546,7 +566,7 @@ export default function ExamEditorModal({
     try {
       let parsed = parseAndRepairJson<any>(jsonInput);
 
-      // Tự động nhận diện nếu dữ liệu được bọc trong object wrapper
+      // 1. Tự động nhận diện nếu dữ liệu được bọc trong object wrapper hoặc object theo số thứ tự câu
       if (parsed && !Array.isArray(parsed)) {
         if (Array.isArray(parsed.questions)) {
           parsed = parsed.questions;
@@ -554,13 +574,53 @@ export default function ExamEditorModal({
           parsed = parsed.data;
         } else if (parsed.exam && Array.isArray(parsed.exam.questions)) {
           parsed = parsed.exam.questions;
-        } else if (parsed.content || parsed.type || parsed.options) {
-          parsed = [parsed];
+        } else {
+          // Kiểm tra xem object có dạng { "1": {...}, "2": {...} } hoặc { "cau1": {...}, "cau2": {...} } không
+          const keys = Object.keys(parsed);
+          const hasNumericKeys = keys.length > 1 && keys.every(k => /^(?:c[aâ]u\s*)?\d+$/i.test(k.trim()));
+          if (hasNumericKeys) {
+            keys.sort((a, b) => {
+              const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+              const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+              return numA - numB;
+            });
+            parsed = keys.map(k => parsed[k]);
+          } else if (parsed.content || parsed.type || parsed.options) {
+            parsed = [parsed];
+          }
         }
       }
 
       if (!Array.isArray(parsed) || parsed.length === 0) {
         throw new Error('Dữ liệu sau khi xử lý phải là một danh sách các câu hỏi!');
+      }
+
+      // 2. BẢO TOÀN CHÍNH XÁC 100% THỨ TỰ CÂU HỎI NHƯ ĐỀ GỐC (Câu 1 -> Câu 2 -> ... -> Câu N)
+      // Nếu các phần tử có trường thứ tự rõ ràng (question_number, order_index, number, cau, index...)
+      // thì sắp xếp đúng trật tự tăng dần để không bao giờ bị nhảy câu hay đảo lộn.
+      const hasOrderField = parsed.length > 1 && parsed.some((item: any) => 
+        item && typeof item === 'object' && (
+          item.question_number !== undefined || item.order_index !== undefined || 
+          item.order !== undefined || item.number !== undefined || 
+          item.index !== undefined || item.cau !== undefined
+        )
+      );
+      if (hasOrderField) {
+        parsed.sort((a: any, b: any) => {
+          const getOrder = (item: any) => {
+            if (!item || typeof item !== 'object') return 0;
+            const val = item.question_number ?? item.order_index ?? item.order ?? item.number ?? item.index ?? item.cau;
+            if (val !== undefined && val !== null) {
+              const num = typeof val === 'number' ? val : parseInt(String(val).replace(/\D/g, ''), 10);
+              if (!isNaN(num) && num > 0) return num;
+            }
+            return 0;
+          };
+          const orderA = getOrder(a);
+          const orderB = getOrder(b);
+          if (orderA > 0 && orderB > 0) return orderA - orderB;
+          return 0; // Giữ nguyên thứ tự ban đầu nếu không có số thứ tự
+        });
       }
 
       const enforceDfracAndMath = (str: any): string => {
@@ -578,10 +638,11 @@ export default function ExamEditorModal({
 
       const formattedQuestions: QuestionData[] = parsed.map((item: any, idx: number) => {
         let qType: 'mcq' | 'tf' | 'saq' = item.type || item.question_type || 'mcq';
+        let rawContent = String(item.content || '').trim();
         let opts = Array.isArray(item.options) ? item.options : [];
         
         // Tự động suy luận dạng câu hỏi
-        const contentLower = (item.content || '').toLowerCase();
+        const contentLower = rawContent.toLowerCase();
         if (
           contentLower.includes('đúng hoặc sai') || 
           contentLower.includes('đúng sai') || 
@@ -594,35 +655,84 @@ export default function ExamEditorModal({
         } else if (typeof item.correct_answer === 'object' && item.correct_answer !== null && !Array.isArray(item.correct_answer)) {
           qType = 'tf';
         } else if (opts.length === 0 && qType !== 'tf') {
-          qType = 'saq';
+          const hasOptionsInContent = /(?:^|\n)\s*[A-D][\.\)]\s+/i.test(rawContent);
+          if (!hasOptionsInContent) {
+            qType = 'saq';
+          }
         }
 
         const isTf = qType === 'tf';
         const defaultKeys = isTf ? ['a', 'b', 'c', 'd'] : ['A', 'B', 'C', 'D'];
 
-        if (opts.length > 0) {
-          opts = opts.map((t: any, i: number) => {
-            if (typeof t === 'object' && t !== null) {
-              return {
-                id: isTf ? String(t.id || defaultKeys[i] || String(i + 1)).toLowerCase() : String(t.id || defaultKeys[i] || String(i + 1)).toUpperCase(),
-                text: enforceDfracAndMath(t.text || t.content || '')
-              };
+        // 3. TÁCH BẠCH TRIỆT ĐỂ CÂU HỎI VÀ ĐÁP ÁN (KHÔNG ĐỂ BỊ TRỘN LẪN):
+        // 3.1. Nếu options rỗng mà trong content lại dính A. ... B. ... C. ... D. ...
+        if (opts.length === 0 && qType === 'mcq') {
+          const mcqRegex = /(?:^|\n)\s*([A-D])[\.\)]\s+([\s\S]*?)(?=(?:\n\s*[A-D][\.\)]\s+)|$)/gi;
+          const extracted: { id: string; text: string }[] = [];
+          let m: RegExpExecArray | null;
+          while ((m = mcqRegex.exec(rawContent)) !== null) {
+            extracted.push({
+              id: m[1].toUpperCase(),
+              text: m[2].trim()
+            });
+          }
+          if (extracted.length >= 2) {
+            opts = extracted;
+            const firstOptIdx = rawContent.search(/(?:^|\n)\s*[A-D][\.\)]\s+/i);
+            if (firstOptIdx !== -1) {
+              rawContent = rawContent.slice(0, firstOptIdx).trim();
             }
-            return { id: defaultKeys[i] || String(i + 1), text: enforceDfracAndMath(String(t)) };
-          });
+          }
+        } else if (opts.length >= 2 && qType === 'mcq') {
+          // 3.2. Nếu options đã có, nhưng content VẪN BỊ DÍNH các phương án A. ... B. ... ở cuối
+          const firstOptIdx = rawContent.search(/(?:\n|^)\s*[A-D][\.\)]\s+[\s\S]*?(?:\n\s*[B-D][\.\)]\s+)/i);
+          if (firstOptIdx !== -1) {
+            rawContent = rawContent.slice(0, firstOptIdx).trim();
+          }
+        }
+
+        // Bóc tách bỏ phần đáp án/lời giải thừa bị dính ở cuối content (nếu AI dán nhầm vào)
+        rawContent = rawContent.replace(/(?:\n|^)\s*(?:Đáp án|ĐÁP ÁN|Key|LỜI GIẢI|Lời giải|Hướng dẫn giải)\s*[:.-]\s*[\s\S]*$/i, '').trim();
+
+        // 4. CHUẨN HÓA VÀ BẢO TOÀN THỨ TỰ PHƯƠNG ÁN (A, B, C, D hoặc a, b, c, d)
+        let formattedOpts: { id: string; text: string }[] = [];
+        if (qType !== 'saq') {
+          if (opts.length > 0) {
+            formattedOpts = opts.map((t: any, i: number) => {
+              let id = defaultKeys[i];
+              let text = '';
+              if (typeof t === 'object' && t !== null) {
+                id = isTf ? String(t.id || defaultKeys[i]).toLowerCase() : String(t.id || defaultKeys[i]).toUpperCase();
+                text = String(t.text || t.content || '');
+              } else {
+                text = String(t || '');
+              }
+              // Gọt bỏ tiền tố "A. ", "A) ", "a. ", "a) " thừa
+              text = text.replace(/^[A-Da-d][\.\)\:\-]\s*/, '').trim();
+              return {
+                id,
+                text: enforceDfracAndMath(text)
+              };
+            });
+
+            // Đảm bảo thứ tự options chuẩn A -> B -> C -> D hoặc a -> b -> c -> d
+            formattedOpts.sort((a, b) => defaultKeys.indexOf(a.id) - defaultKeys.indexOf(b.id));
+          } else {
+            formattedOpts = defaultKeys.map(k => ({ id: k, text: '' }));
+          }
         }
 
         let ca = item.correct_answer;
         if (qType === 'mcq') {
           if (!ca || typeof ca !== 'string') ca = 'A';
-          else ca = String(ca).toUpperCase();
+          else ca = String(ca).trim().toUpperCase();
         } else if (qType === 'tf') {
           if (!ca || typeof ca !== 'object' || Array.isArray(ca)) {
             ca = { a: true, b: false, c: true, d: false };
           }
         } else if (qType === 'saq') {
           if (ca === undefined || ca === null) ca = '';
-          else ca = String(ca);
+          else ca = String(ca).trim().replace(/^([+-]?\d+)\.(\d+)$/, '$1,$2');
         }
 
         const parsedPt = item.points !== undefined && item.points !== null && !isNaN(Number(item.points))
@@ -633,19 +743,9 @@ export default function ExamEditorModal({
           id: `imported-${idx}`,
           type: qType,
           level: item.level || (qType === 'saq' ? 'Vận dụng' : qType === 'tf' ? 'Thông hiểu' : 'Nhận biết'),
-          content: enforceDfracAndMath(item.content || ''),
+          content: enforceDfracAndMath(rawContent),
           points: parsedPt,
-          options: qType === 'saq' ? [] : (opts.length > 0 ? opts : isTf ? [
-            { id: 'a', text: '' },
-            { id: 'b', text: '' },
-            { id: 'c', text: '' },
-            { id: 'd', text: '' }
-          ] : [
-            { id: 'A', text: '' },
-            { id: 'B', text: '' },
-            { id: 'C', text: '' },
-            { id: 'D', text: '' }
-          ]),
+          options: formattedOpts,
           correct_answer: ca,
           explanation: enforceDfracAndMath(cleanMathContent(item.explanation || ''))
         };
@@ -655,7 +755,7 @@ export default function ExamEditorModal({
       setActiveQuestionIdx(0);
       setShowAiModal(false);
       setJsonInput('');
-      alert(`Đã tự động sửa lỗi và nạp thành công ${formattedQuestions.length} câu hỏi vào đề thi!`);
+      alert(`Đã tự động chuẩn hóa, tách bạch câu hỏi - đáp án và nạp thành công ${formattedQuestions.length} câu hỏi theo đúng thứ tự đề gốc!`);
     } catch (err: any) {
       alert('Không thể tự động phân tích JSON: ' + err.message);
     }
@@ -675,10 +775,17 @@ export default function ExamEditorModal({
           duration_minutes: Number(examDuration),
           exam_type: examType
         },
-        questions.map(q => ({
-          ...q,
-          points: q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : getDefaultQuestionPoints(q.type)
-        }))
+        questions.map(q => {
+          let ca = q.correct_answer;
+          if (q.type === 'saq' && ca !== undefined && ca !== null) {
+            ca = String(ca).trim().replace(/^([+-]?\d+)\.(\d+)$/, '$1,$2');
+          }
+          return {
+            ...q,
+            correct_answer: ca,
+            points: q.points !== undefined && !isNaN(Number(q.points)) ? Number(q.points) : getDefaultQuestionPoints(q.type)
+          };
+        })
       );
       onClose();
     } catch (err: any) {
@@ -1227,14 +1334,23 @@ export default function ExamEditorModal({
                 {/* TRẢ LỜI NGẮN (SAQ) */}
                 {currentQ.type === 'saq' && (
                   <div className="space-y-2 bg-primary/5 p-4 rounded-2xl border border-primary/20">
-                    <label className="text-xs font-bold text-primary block">
-                      Đáp án chính xác (Số hoặc Chuỗi ký tự ngắn):
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-primary block">
+                        Đáp án chính xác (Số nguyên, phân số hoặc số thập phân dùng dấu phẩy &quot;,&quot;):
+                      </label>
+                      <span className="text-[11px] text-muted-foreground font-semibold">
+                        Chuẩn Bộ GD&ĐT: Dùng dấu phẩy cho số thập phân (VD: 10,1)
+                      </span>
+                    </div>
                     <input
                       type="text"
                       value={String(currentQ.correct_answer || '')}
-                      onChange={(e) => handleUpdateCurrentQ('correct_answer', e.target.value)}
-                      placeholder="VD: 12.5 hoặc -3/4..."
+                      onChange={(e) => {
+                        // Tự động chuyển dấu chấm thành dấu phẩy nếu người dùng nhập số thập phân dạng 10.1 -> 10,1
+                        const val = e.target.value.replace(/^([+-]?\d+)\.(\d*)$/, '$1,$2');
+                        handleUpdateCurrentQ('correct_answer', val);
+                      }}
+                      placeholder="VD: 10,1 hoặc 12,5 hoặc -3/4..."
                       className="w-full rounded-xl border border-border bg-card px-4 py-2.5 font-bold text-primary text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
                     />
                   </div>

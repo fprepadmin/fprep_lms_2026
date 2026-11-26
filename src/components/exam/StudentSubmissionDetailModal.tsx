@@ -633,7 +633,7 @@ export default function StudentSubmissionDetailModal({
                     <div className="p-3 bg-muted/20 border border-border rounded-xl space-y-1.5 text-xs">
                       <div className="flex items-center justify-between">
                         <span>Câu trả lời của học sinh: <strong className="text-foreground text-sm">{userAns !== undefined && userAns !== '' ? String(userAns) : '(Bỏ trống)'}</strong></span>
-                        <span>Đáp án chuẩn: <strong className="text-green-600 text-sm">{String(q.correct_answer || '')}</strong></span>
+                        <span>Đáp án chuẩn: <strong className="text-green-600 text-sm">{String(q.correct_answer || '').replace(/^([+-]?\d+)\.(\d+)$/, '$1,$2')}</strong></span>
                       </div>
                     </div>
                   )}

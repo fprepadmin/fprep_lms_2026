@@ -1921,7 +1921,7 @@ export default function TeacherExamsClient({
                           Giá trị cần điền vào ô đáp án:
                         </span>
                         <span className="px-3 py-1 rounded-lg bg-white dark:bg-[#0B1B55] border border-amber-500/40 text-amber-700 dark:text-amber-300 font-black font-mono text-sm">
-                          {String(q.correct_answer ?? '') || 'Chưa thiết lập'}
+                          {String(q.correct_answer ?? '').replace(/^([+-]?\d+)\.(\d+)$/, '$1,$2') || 'Chưa thiết lập'}
                         </span>
                       </div>
                     )}
