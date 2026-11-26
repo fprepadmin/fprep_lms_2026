@@ -11,7 +11,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import AnnouncementManager from '../teacher/AnnouncementManager';
 import SubjectIcon from '@/components/student/SubjectIcon';
-import DailyQuote from '@/components/student/DailyQuote';
+import StudentProfileHero, { StudentSubjectExamStat } from '@/components/student/StudentProfileHero';
 import GamificationHub from '@/components/student/GamificationHub';
 import StudentHomeLeaderboard from '@/components/student/StudentHomeLeaderboard';
 import LearningPlanSection from '@/components/student/LearningPlanSection';
@@ -76,11 +76,12 @@ export default async function StudentDashboardPage() {
     }
   }
 
+  const actualStudentId = studentDetail?.student_id || studentId || crypto.randomUUID();
   const studentName = studentDetail?.full_name || (studentEmail ? studentEmail.split('@')[0] : 'Học sinh');
   const studentMshs = studentDetail?.mshs || (studentEmail ? studentEmail.split('@')[0].toUpperCase() : 'Chưa cập nhật');
   const className = studentDetail?.classes?.name || 'Chưa xếp lớp';
   const groupType = studentDetail?.classes?.group_type || 'T';
-  const academicYear = '2024-2027';
+  const academicYear = studentDetail?.classes?.academic_year || '2024-2027';
 
   // 3. TỐI ƯU HÓA TRUY VẤN SONG SONG BẰNG PROMISE.ALL
   const [
@@ -95,7 +96,9 @@ export default async function StudentDashboardPage() {
     allExamResultsRes,
     subjectsRes,
     chaptersRes,
-    examsRes
+    examsRes,
+    allSubjectsRes,
+    profileSettingsRes
   ] = await Promise.all([
     // Tiến độ của học sinh
     supabase.from('study_progress').select('*').eq('student_id', studentId || crypto.randomUUID()),
@@ -107,8 +110,11 @@ export default async function StudentDashboardPage() {
     supabase.from('announcements').select('*').or(`target_type.eq.all,and(target_type.eq.individual,target_user_id.eq.${studentId}),target_type.is.null`).order('created_at', { ascending: false }),
     // Hoạt động gần đây
     supabase.from('study_progress').select('*, lessons(*, chapters(*, subjects(*)))').eq('student_id', studentId || crypto.randomUUID()).eq('completed', true).order('completed_at', { ascending: false }).limit(4),
-    // Đề thi đã làm
-    supabase.from('exam_results').select('*').eq('student_id', studentId || crypto.randomUUID()),
+    // Đề thi đã làm (kèm thông tin môn học để tính số lần giải đề & điểm TB từng môn)
+    supabase
+      .from('exam_results')
+      .select('*, exams(id, subject_id, title)')
+      .or(`student_id.eq.${actualStudentId},student_id.eq.${studentId || actualStudentId}`),
     // Bảng vàng: Học sinh
     supabase.from('student_details').select('student_id, full_name, mshs, class_id, classes(id, name)'),
     // Bảng vàng: Tiến độ tất cả
@@ -123,8 +129,17 @@ export default async function StudentDashboardPage() {
     supabase.from('chapters').select('id, subject_id, lessons(id)').order('order_index', { ascending: true }),
     // Danh sách đề thi
     supabase.from('exams').select('id, subject_id'),
-    // Toàn bộ danh sách môn học cho Bảng vàng
-    supabase.from('subjects').select('*').order('name')
+    // Toàn bộ danh sách môn học (cho chọn 4 môn thi TN & Bảng vàng)
+    supabase.from('subjects').select('*').order('name'),
+    // Thiết lập ảnh đại diện & 2 môn thi tốt nghiệp tự chọn của học sinh
+    supabase
+      .from('audit_logs')
+      .select('new_values, created_at')
+      .eq('target_table', 'student_details')
+      .eq('action', 'UPDATE_STUDENT_PROFILE_SETTINGS')
+      .or(`target_id.eq.${actualStudentId},target_id.eq.${studentId || actualStudentId}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
   ]);
 
   const progress = progressRes.data || [];
@@ -136,7 +151,46 @@ export default async function StudentDashboardPage() {
   const subjects = subjectsRes.data || [];
   const chapters = chaptersRes.data || [];
   const exams = examsRes.data || [];
-  const allSubjects = (subjectsRes.data || []).length > 0 ? (subjectsRes.data || []) : [];
+  const allSubjects = (allSubjectsRes.data || []).length > 0 ? (allSubjectsRes.data || []) : subjects;
+
+  // Ảnh đại diện & 2 môn tự chọn đã lưu của học sinh
+  const savedProfileSettings = profileSettingsRes.data?.[0]?.new_values || {};
+  const initialAvatarUrl: string | null =
+    (typeof savedProfileSettings.avatar_url === 'string' && savedProfileSettings.avatar_url.trim())
+      ? savedProfileSettings.avatar_url.trim()
+      : (typeof studentDetail?.avatar_url === 'string' && studentDetail.avatar_url.trim() ? studentDetail.avatar_url.trim() : null);
+  const initialElectiveIds: string[] = Array.isArray(savedProfileSettings.elective_subject_ids)
+    ? savedProfileSettings.elective_subject_ids.filter((id: any) => typeof id === 'string' && id.trim() !== '').slice(0, 2)
+    : (Array.isArray(studentDetail?.graduation_subjects) ? studentDetail.graduation_subjects.slice(0, 2) : []);
+
+  // Tính số lần giải đề & điểm trung bình theo từng môn học của học sinh
+  const examToSubjectMap = new Map<string, string>();
+  exams.forEach((ex: any) => {
+    if (ex.id && ex.subject_id) {
+      examToSubjectMap.set(ex.id, ex.subject_id);
+    }
+  });
+
+  const subjectScoresAccumulator: Record<string, { attempts: number; totalScore: number }> = {};
+  examResults.forEach((res: any) => {
+    const joinedExam = Array.isArray(res.exams) ? res.exams[0] : res.exams;
+    const subId = joinedExam?.subject_id || examToSubjectMap.get(res.exam_id);
+    if (!subId) return;
+    if (!subjectScoresAccumulator[subId]) {
+      subjectScoresAccumulator[subId] = { attempts: 0, totalScore: 0 };
+    }
+    subjectScoresAccumulator[subId].attempts += 1;
+    subjectScoresAccumulator[subId].totalScore += Number(res.score) || 0;
+  });
+
+  const subjectStatsMap: Record<string, StudentSubjectExamStat> = {};
+  Object.entries(subjectScoresAccumulator).forEach(([subId, acc]) => {
+    subjectStatsMap[subId] = {
+      subjectId: subId,
+      attempts: acc.attempts,
+      avgScore: acc.attempts > 0 ? Number((acc.totalScore / acc.attempts).toFixed(2)) : null
+    };
+  });
 
   const totalStudySeconds = logs.reduce((acc: number, curr: any) => acc + (curr.duration_seconds || 0), 0);
   const totalStudyMinutes = Math.round(totalStudySeconds / 60);
@@ -220,101 +274,41 @@ export default async function StudentDashboardPage() {
   const greetingText = hour < 12 ? 'Chào buổi sáng' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
 
   return (
-    <div className="space-y-6 sm:space-y-8 w-full animate-fade-in pb-10" suppressHydrationWarning>
+    <div className="space-y-5 sm:space-y-6 w-full animate-fade-in pb-10" suppressHydrationWarning>
       
       {/* =========================================================================
-          1. HERO GREETING BANNER (FUTURE BLUE 2.0 - DEEP NAVY TO ELECTRIC BLUE)
+          1. HỒ SƠ HỌC SINH & 4 MÔN THI TỐT NGHIỆP (ẢNH ĐẠI DIỆN + CẤP ĐỘ + XP + 4 MÔN TN)
           ========================================================================= */}
-      <div className="relative overflow-hidden rounded-[22px] border border-[#00DFFF]/30 bg-gradient-to-br from-[#0B1B55] via-[#1746D1] to-[#087CFF] p-6 sm:p-8 shadow-[0_12px_40px_-5px_rgba(23,70,209,0.28)] text-white">
-        {/* Glow ambient light */}
-        <div className="absolute -right-20 -top-20 w-80 h-80 bg-[#00DFFF]/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -left-20 -bottom-20 w-80 h-80 bg-[#087CFF]/25 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-3 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white border border-white/20 backdrop-blur-md font-body">
-                <GraduationCap className="h-3.5 w-3.5 text-[#00DFFF]" /> Khối 12 &bull; THPT FPT Cần Thơ
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-blue-200 border border-white/15 backdrop-blur-md font-body">
-                <Calendar className="h-3.5 w-3.5 text-[#E9A23B]" /> Niên khóa {academicYear}
-              </span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black font-heading text-white tracking-tight m-0">
-              {greetingText}, {studentName}!
-            </h1>
-            
-            <p className="text-blue-100 font-medium text-xs sm:text-sm max-w-xl leading-relaxed m-0 font-body">
-              Chào mừng bạn đến với hệ thống tự học trực tuyến FPREP. Hoàn thành các mục tiêu hôm nay để bứt phá điểm số nhé!
-            </p>
-
-            {/* Badges thông tin lớp trong các khối nhỏ */}
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-body">
-              <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/20 font-bold backdrop-blur-md">
-                MSHS: <strong className="text-white font-black">{studentMshs}</strong>
-              </div>
-              <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/20 font-bold backdrop-blur-md">
-                Lớp: <strong className="text-[#00DFFF] font-black">{className}</strong> ({groupType === 'T' ? 'Tự Nhiên' : groupType === 'X' ? 'Xã Hội' : 'Khác'})
-              </div>
-              <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/20 font-bold backdrop-blur-md">
-                Đã nộp: <strong className="text-white font-black">{completedExamsCount}</strong> đề thi
-              </div>
-            </div>
-          </div>
-
-          {/* Right Pillar: Gamification Capsule */}
-          <div className="relative z-10 flex flex-col gap-3 shrink-0 w-full lg:w-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-3 bg-white/95 dark:bg-[#071328]/95 p-4 sm:p-5 rounded-2xl backdrop-blur-md border border-white/30 text-[#14213D] shadow-lg">
-              {/* Level */}
-              <div className="flex items-center gap-3 sm:pr-3 border-b sm:border-b-0 sm:border-r border-[#E2E8F0] pb-2.5 sm:pb-0">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#1746D1] to-[#087CFF] text-white flex items-center justify-center font-black text-sm shadow-xs shrink-0 font-heading">
-                  {level}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider font-body">Cấp Độ &bull; {levelTitle}</div>
-                  <div className="text-sm font-black text-[#14213D] font-heading">Cấp {level}</div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <div className="w-14 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-[#1746D1] h-full rounded-full" style={{ width: `${nextLevelProgress}%` }} />
-                    </div>
-                    <span className="text-[9px] font-black text-[#1746D1]">{nextLevelProgress}%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* XP */}
-              <div className="flex items-center gap-3 sm:pr-3 border-b sm:border-b-0 sm:border-r border-[#E2E8F0] pb-2.5 sm:pb-0">
-                <div className="w-10 h-10 rounded-xl bg-[#E9A23B]/15 text-[#d97706] flex items-center justify-center border border-[#E9A23B]/30 shrink-0">
-                  <Flame className="h-5 w-5 fill-[#E9A23B] text-[#E9A23B]" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider font-body">Kinh Nghiệm</div>
-                  <div className="text-sm font-black text-[#14213D] font-heading">{xp.toLocaleString()} <span className="text-[10px] text-[#E9A23B]">XP</span></div>
-                  <span className="text-[10px] font-bold text-[#d97706]">Chuỗi {gamification.streakDays} ngày</span>
-                </div>
-              </div>
-
-              {/* Tự học */}
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#16A36A]/15 text-[#16A36A] flex items-center justify-center border border-[#16A36A]/30 shrink-0">
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider font-body">Đã Tự Học</div>
-                  <div className="text-sm font-black text-[#14213D] font-heading">{completedLessonsCount} bài học</div>
-                  <span className="text-[10px] font-bold text-[#16A36A]">{completedExamsCount} đề thi</span>
-                </div>
-              </div>
-            </div>
-
-            <DailyQuote className="w-full text-white" />
-          </div>
-        </div>
-      </div>
+      <StudentProfileHero
+        studentId={actualStudentId}
+        studentName={studentName}
+        studentMshs={studentMshs}
+        className={className}
+        groupType={groupType}
+        academicYear={academicYear}
+        level={level}
+        levelTitle={levelTitle}
+        xp={xp}
+        nextLevelProgress={nextLevelProgress}
+        streakDays={gamification.streakDays}
+        allSubjects={allSubjects}
+        subjectStatsMap={subjectStatsMap}
+        initialAvatarUrl={initialAvatarUrl}
+        initialElectiveIds={initialElectiveIds}
+      />
 
       {/* =========================================================================
-          2. QUICK ACCESS CARDS (4 THẺ ĐIỀU HƯỚNG NHANH)
+          2. BẢNG VÀNG VINH DANH HỌC SINH KHẢO THÍ (TOP 3 + TOP 7 THEO TUẦN & THÁNG)
+          ========================================================================= */}
+      <StudentHomeLeaderboard
+        students={allDetailsRes.data || []}
+        examResults={allExamResultsRes.data || []}
+        allSubjects={allSubjects}
+        currentStudentId={studentId}
+      />
+
+      {/* =========================================================================
+          3. QUICK ACCESS CARDS (4 THẺ ĐIỀU HƯỚNG NHANH)
           ========================================================================= */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
         <QuickAccessCard
@@ -495,16 +489,6 @@ export default async function StudentDashboardPage() {
           })}
         </div>
       </div>
-
-      {/* =========================================================================
-          5. BẢNG VÀNG VINH DANH HỌC SINH KHẢO THÍ (TOP 3 + TOP 7 THEO TUẦN & THÁNG)
-          ========================================================================= */}
-      <StudentHomeLeaderboard
-        students={allDetailsRes.data || []}
-        examResults={allExamResultsRes.data || []}
-        allSubjects={allSubjects}
-        currentStudentId={studentId}
-      />
 
       {/* =========================================================================
           6. NỘI DUNG CHÍNH (2 CỘT DASHBOARD: BÀI ĐANG DỞ, THÔNG BÁO, HOẠT ĐỘNG)
