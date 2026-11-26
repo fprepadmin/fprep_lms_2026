@@ -9,7 +9,7 @@ import {
   Minimize2, Flag, RotateCcw, BookOpen, AlertCircle,
   Eye, CheckSquare, XCircle, Send, ZoomIn, ZoomOut,
   SlidersHorizontal, ChevronRight, CornerDownRight,
-  ListFilter, LayoutGrid, Menu
+  ListFilter, LayoutGrid, Menu, History, Calendar
 } from 'lucide-react';
 import { createSupabaseClient } from '@/lib/supabase';
 import MathRenderer from '@/components/MathRenderer';
@@ -41,6 +41,7 @@ interface ExamSessionClientProps {
   exam: Exam;
   questions: Question[];
   studentId: string;
+  previousResults?: any[];
 }
 
 /**
@@ -475,7 +476,8 @@ const QuestionCard = React.memo(function QuestionCard({
 export default function ExamSessionClient({
   exam,
   questions: initialQuestions,
-  studentId
+  studentId,
+  previousResults = []
 }: ExamSessionClientProps) {
   const router = useRouter();
   const supabase = createSupabaseClient();
@@ -504,6 +506,50 @@ export default function ExamSessionClient({
   const [gridFilter, setGridFilter] = useState<'all' | 'done' | 'undone' | 'flagged'>('all');
   const [reviewFilter, setReviewFilter] = useState<'all' | 'wrong' | 'correct'>('all');
   const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>({});
+
+  // Lịch sử bài làm trước đó
+  const [selectedAttemptIdx, setSelectedAttemptIdx] = useState<number>(0);
+  const [isReviewingHistory, setIsReviewingHistory] = useState<boolean>(false);
+
+  // Nạp dữ liệu một lần làm bài cũ vào màn hình xem lại
+  const loadAttemptIntoReview = useCallback((attempt: any, attemptIdx: number = 0) => {
+    if (!attempt) return;
+    let loadedAnswers: Record<string, any> = {};
+    if (attempt.answers) {
+      if (typeof attempt.answers === 'object') {
+        loadedAnswers = attempt.answers;
+      } else if (typeof attempt.answers === 'string') {
+        try {
+          loadedAnswers = JSON.parse(attempt.answers);
+        } catch (e) {}
+      }
+    }
+
+    setAnswers(loadedAnswers);
+    setResult({
+      score: Number(attempt.score) || 0,
+      correctCount: Number(attempt.correct_answers) || 0,
+      totalCount: Number(attempt.total_questions) || questions.length,
+      timeSpent: Number(attempt.time_spent_seconds) || 0,
+      part1Correct: 0,
+      part2Correct: 0,
+      part3Correct: 0
+    });
+    setSelectedAttemptIdx(attemptIdx);
+    setIsReviewingHistory(true);
+    setIsSubmitted(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [questions.length]);
+
+  // Tự động mở bài làm cũ nếu có URL param ?mode=review
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('mode') === 'review' && previousResults && previousResults.length > 0) {
+        loadAttemptIntoReview(previousResults[0], 0);
+      }
+    }
+  }, [previousResults, loadAttemptIntoReview]);
 
   // Kết quả sau khi nộp bài
   const [result, setResult] = useState<{
@@ -830,6 +876,32 @@ export default function ExamSessionClient({
             </p>
           </div>
 
+          {/* Bộ chọn lịch sử các lần làm bài nếu học sinh đã làm nhiều lần */}
+          {previousResults && previousResults.length > 1 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 max-w-2xl mx-auto">
+              <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
+                <History className="h-3.5 w-3.5 text-primary" /> Lịch sử ({previousResults.length} lần làm):
+              </span>
+              {previousResults.map((att, attIdx) => {
+                const isSelected = selectedAttemptIdx === attIdx;
+                const dateStr = att.created_at ? new Date(att.created_at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) : '';
+                return (
+                  <button
+                    key={att.id || attIdx}
+                    onClick={() => loadAttemptIntoReview(att, attIdx)}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-primary text-white border-primary shadow-xs'
+                        : 'bg-background/80 hover:bg-muted text-muted-foreground border-border'
+                    }`}
+                  >
+                    Lần {previousResults.length - attIdx} ({att.score ?? 0}đ{dateStr ? ` - ${dateStr}` : ''})
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Khối Điểm số & Chỉ số */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 max-w-3xl mx-auto">
             <div className="p-4 bg-background/80 dark:bg-muted/30 border border-border rounded-2xl flex flex-col justify-center">
@@ -882,6 +954,7 @@ export default function ExamSessionClient({
                 setIsSubmitted(false);
                 setResult(null);
                 setCurrentQuestionIndex(0);
+                setIsReviewingHistory(false);
               }}
               className="btn-secondary text-xs py-2.5 px-6 flex items-center gap-1.5 font-bold"
             >
@@ -1249,6 +1322,31 @@ export default function ExamSessionClient({
         {/* CỘT CHÍNH (COL-SPAN-8 / 9): NỘI DUNG BÀI LÀM */}
         <div className="lg:col-span-8 xl:col-span-9 space-y-6">
           
+          {/* Thông báo bài đã từng nộp & nút xem lại lịch sử */}
+          {previousResults && previousResults.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                  <History className="h-5 w-5" />
+                </div>
+                <div className="text-xs">
+                  <p className="font-bold text-foreground m-0">
+                    Bạn đã từng làm bài thi này ({previousResults.length} lần nộp bài)
+                  </p>
+                  <p className="text-muted-foreground m-0 mt-0.5">
+                    Lần làm gần nhất: <strong className="text-primary">{previousResults[0].score ?? 0}/10 điểm</strong> ({new Date(previousResults[0].created_at).toLocaleDateString('vi-VN')})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => loadAttemptIntoReview(previousResults[0], 0)}
+                className="btn-secondary text-xs py-2 px-4 flex items-center justify-center gap-1.5 font-bold border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 shrink-0 cursor-pointer"
+              >
+                <ClipboardList className="h-4 w-4" /> Xem lại bài đã làm
+              </button>
+            </div>
+          )}
+
           {/* Thanh chỉ báo tiến trình nhanh */}
           <div className="flex items-center justify-between bg-card border border-border rounded-2xl p-4 shadow-xs">
             <div className="flex items-center gap-3">

@@ -4,9 +4,11 @@ import React, { useState } from 'react';
 import { 
   ClipboardList, Award, Clock, ChevronRight, CheckCircle2, 
   ChevronDown, ChevronUp, BookOpen, Search, Sparkles,
-  FileCheck, Target, Layers, ArrowRight, RotateCcw, Calendar, TrendingUp, Trophy
+  FileCheck, Target, Layers, ArrowRight, RotateCcw, Calendar, TrendingUp, Trophy,
+  History, Eye, FileText, Check, AlertCircle
 } from 'lucide-react';
 import Link from 'next/link';
+import StudentSubmissionDetailModal from '@/components/exam/StudentSubmissionDetailModal';
 
 interface Lesson {
   id: string;
@@ -49,7 +51,8 @@ export type StudentExamCategory =
   | 'final_term_2' 
   | 'thptqg' 
   | 'vsat' 
-  | 'dgnl';
+  | 'dgnl'
+  | 'history';
 
 interface ExamResult {
   id: string;
@@ -59,6 +62,8 @@ interface ExamResult {
   total_questions: number;
   time_spent_seconds: number;
   created_at: string;
+  answers?: any;
+  exams?: any;
 }
 
 interface StudentExamsClientProps {
@@ -80,6 +85,7 @@ export default function StudentExamsClient({
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(subjects[0]?.id || '');
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
   const [searchKeyword, setSearchKeyword] = useState<string>('');
+  const [inspectingSubmission, setInspectingSubmission] = useState<any | null>(null);
 
   // Toggle thu phóng Chương
   const toggleChapter = (chapterId: string) => {
@@ -200,27 +206,46 @@ export default function StudentExamsClient({
           </div>
         </div>
 
-        <div className="pt-3 border-t border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between gap-3 font-body">
-          <span className="text-[11px] text-[#64748B] dark:text-slate-400 font-semibold">
+        <div className="pt-3 border-t border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between gap-2 font-body">
+          <span className="text-[11px] text-[#64748B] dark:text-slate-400 font-semibold truncate">
             {hasTaken ? `Đúng ${bestRes?.correct_answers}/${bestRes?.total_questions} câu` : 'Chưa làm bài'}
           </span>
 
-          <Link
-            href={`/dashboard/student/exams/${exam.id}`}
-            className={hasTaken 
-              ? "px-3.5 py-1.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 dark:bg-slate-800 text-[#14213D] dark:text-white border border-[#E2E8F0] dark:border-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer" 
-              : "px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#0B1B55] to-[#1746D1] hover:opacity-95 text-white shadow-xs text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"}
-          >
-            {hasTaken ? (
-              <>
-                <RotateCcw className="h-3.5 w-3.5" /> Luyện lại
-              </>
-            ) : (
-              <>
-                Làm bài ngay <ArrowRight className="h-3.5 w-3.5" />
-              </>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {hasTaken && (
+              <button
+                type="button"
+                onClick={() => {
+                  setInspectingSubmission({
+                    ...bestRes,
+                    exams: exam
+                  });
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
+                title="Xem lại bài đã làm"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>Xem lại</span>
+              </button>
             )}
-          </Link>
+
+            <Link
+              href={`/dashboard/student/exams/${exam.id}`}
+              className={hasTaken 
+                ? "px-2.5 py-1.5 rounded-xl bg-[#F1F5F9] hover:bg-slate-200 dark:bg-slate-800 text-[#14213D] dark:text-white border border-[#E2E8F0] dark:border-slate-700 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer" 
+                : "px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#0B1B55] to-[#1746D1] hover:opacity-95 text-white shadow-xs text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"}
+            >
+              {hasTaken ? (
+                <>
+                  <RotateCcw className="h-3.5 w-3.5" /> Luyện lại
+                </>
+              ) : (
+                <>
+                  Làm bài ngay <ArrowRight className="h-3.5 w-3.5" />
+                </>
+              )}
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -236,6 +261,7 @@ export default function StudentExamsClient({
     { id: 'thptqg', label: 'THI THỬ TỐT NGHIỆP', icon: <Target className="h-4 w-4" />, desc: 'Bộ đề thi thử Tốt nghiệp THPT Quốc Gia', count: exams.filter(e => categorizeExam(e) === 'thptqg').length },
     { id: 'vsat', label: 'KỲ THI V-SAT', icon: <TrendingUp className="h-4 w-4" />, desc: 'Đề thi đánh giá năng lực đầu vào V-SAT', count: exams.filter(e => categorizeExam(e) === 'vsat').length },
     { id: 'dgnl', label: 'ĐGNL / TSA', icon: <Sparkles className="h-4 w-4" />, desc: 'Bộ đề ôn luyện Đánh giá Năng lực HSA, TSA', count: exams.filter(e => categorizeExam(e) === 'dgnl').length },
+    { id: 'history', label: 'LỊCH SỬ LÀM BÀI', icon: <History className="h-4 w-4" />, desc: 'Xem lại bài thi & đáp án đã nộp', count: examResults.length },
   ];
 
   const getCatTheme = (id: string, isActive: boolean) => {
@@ -246,6 +272,16 @@ export default function StudentExamsClient({
         badge: 'bg-white text-[#0B1B55] font-black shadow-2xs',
         title: 'text-white',
         desc: 'text-blue-100/90'
+      };
+    }
+
+    if (id === 'history') {
+      return {
+        card: 'bg-white dark:bg-[#0B1B55]/90 border-[#E2E8F0] dark:border-[#1B317A] hover:border-cyan-400 hover:shadow-md shadow-sm',
+        icon: 'bg-cyan-50 dark:bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-200/70 dark:border-cyan-500/30',
+        badge: 'bg-cyan-50 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-500/35',
+        title: 'text-[#14213D] dark:text-white',
+        desc: 'text-[#64748B] dark:text-slate-400'
       };
     }
 
@@ -487,8 +523,142 @@ export default function StudentExamsClient({
             </div>
           )}
         </div>
+      ) : activeCategory === 'history' ? (
+        /* 2. LỊCH SỬ LÀM BÀI CỦA HỌC SINH */
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3 gap-2">
+            <div>
+              <h3 className="text-base sm:text-lg font-extrabold font-heading text-[#14213D] dark:text-white flex items-center gap-2 m-0">
+                <History className="h-5 w-5 text-[#1746D1] dark:text-[#00DFFF]" />
+                Lịch Sử Làm Bài & Khảo Thí Của Bạn ({examResults.length} lượt nộp)
+              </h3>
+              <p className="text-xs text-[#64748B] dark:text-slate-400 font-medium m-0 mt-0.5">
+                Xem lại chi tiết từng lần làm bài: điểm số, câu đúng, câu sai, đáp án bạn đã chọn và lời giải chi tiết.
+              </p>
+            </div>
+
+            {examResults.length > 0 && (
+              <span className="text-xs font-bold text-primary bg-primary/10 border border-primary/20 px-3 py-1 rounded-xl shrink-0 self-start sm:self-auto">
+                Điểm TB: {(examResults.reduce((sum, r) => sum + Number(r.score || 0), 0) / examResults.length).toFixed(1)}/10đ
+              </span>
+            )}
+          </div>
+
+          {examResults.length === 0 ? (
+            <div className="text-center py-16 bg-white dark:bg-[#0B1B55]/90 border border-dashed border-[#CBD5E1] dark:border-[#1B317A] rounded-2xl">
+              <History className="h-10 w-10 text-[#94A3B8] mx-auto mb-3 opacity-50" />
+              <p className="font-bold text-[#64748B] dark:text-slate-400 text-sm m-0">
+                Bạn chưa hoàn thành bài thi nào.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 mb-4">
+                Hãy chọn một đề thi và bắt đầu thử sức ngay để theo dõi tiến độ học tập!
+              </p>
+              <button
+                onClick={() => setActiveCategory('topic')}
+                className="btn-primary text-xs py-2 px-5 font-bold shadow-xs inline-flex items-center gap-1.5"
+              >
+                <BookOpen className="h-3.5 w-3.5" /> Bắt đầu luyện tập
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-3.5">
+              {examResults
+                .filter(res => {
+                  if (!searchKeyword.trim()) return true;
+                  const kw = searchKeyword.toLowerCase();
+                  const title = (res.exams?.title || exams.find(e => e.id === res.exam_id)?.title || '').toLowerCase();
+                  return title.includes(kw);
+                })
+                .map((res, idx) => {
+                  const examItem = res.exams || exams.find(e => e.id === res.exam_id);
+                  const examTitle = examItem?.title || 'Đề thi trắc nghiệm';
+                  const subjectName = examItem?.subjects?.name || subjects.find(s => s.id === examItem?.subject_id)?.name;
+                  const dateStr = new Date(res.created_at).toLocaleString('vi-VN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                  });
+
+                  return (
+                    <div
+                      key={res.id || idx}
+                      className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0B1B55]/80 border border-[#E2E8F0] dark:border-[#1B317A] shadow-xs hover:border-primary/40 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                        <div className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center shrink-0 border font-black ${
+                          res.score >= 8
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                            : res.score >= 5
+                            ? 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400'
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
+                        }`}>
+                          <span className="text-base leading-none">{res.score}</span>
+                          <span className="text-[9px] opacity-75">điểm</span>
+                        </div>
+
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="font-extrabold text-sm sm:text-base text-foreground m-0 truncate" title={examTitle}>
+                              {examTitle}
+                            </h4>
+                            {subjectName && (
+                              <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md">
+                                {subjectName}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground font-medium">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3.5 w-3.5 text-muted-foreground" /> {dateStr}
+                            </span>
+                            <span>&bull;</span>
+                            <span className="flex items-center gap-1 font-semibold text-foreground">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Đúng {res.correct_answers}/{res.total_questions} câu
+                            </span>
+                            <span>&bull;</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5 text-muted-foreground" /> {Math.floor((res.time_spent_seconds || 0) / 60)}p {(res.time_spent_seconds || 0) % 60}s
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInspectingSubmission({
+                              ...res,
+                              exams: examItem || { title: examTitle }
+                            });
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Xem lại bài làm</span>
+                        </button>
+
+                        {res.exam_id && (
+                          <Link
+                            href={`/dashboard/student/exams/${res.exam_id}`}
+                            className="px-3.5 py-2 rounded-xl bg-muted hover:bg-muted/80 text-foreground border border-border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            <span>Làm lại</span>
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
       ) : (
-        /* 2. CÁC PHÂN LOẠI ĐỀ THI KHÁC (THƯỜNG XUYÊN, GIỮA KỲ, CUỐI KỲ, THPTQG, VSAT, ĐGNL) */
+        /* 3. CÁC PHÂN LOẠI ĐỀ THI KHÁC (THƯỜNG XUYÊN, GIỮA KỲ, CUỐI KỲ, THPTQG, VSAT, ĐGNL) */
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] dark:border-[#1B317A] pb-3">
             <div>
@@ -518,6 +688,13 @@ export default function StudentExamsClient({
           )}
         </div>
       )}
+
+      {/* MODAL XEM CHI TIẾT BÀI LÀM ĐÃ NỘP CỦA HỌC SINH */}
+      <StudentSubmissionDetailModal
+        isOpen={Boolean(inspectingSubmission)}
+        onClose={() => setInspectingSubmission(null)}
+        submission={inspectingSubmission}
+      />
 
     </div>
   );

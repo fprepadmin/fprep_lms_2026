@@ -49,7 +49,7 @@ export default async function StudentExamsPage() {
     subjectsQuery,
     supabase.from('chapters').select('*, lessons(*)').order('order_index', { ascending: true }),
     supabase.from('exams').select('*, subjects(*), lessons(*)'),
-    supabase.from('exam_results').select('*, exams(title)').eq('student_id', studentId).order('created_at', { ascending: false })
+    supabase.from('exam_results').select('*, exams(*, subjects(*))').eq('student_id', studentId).order('created_at', { ascending: false })
   ]);
 
   const subjects = subjectsRes.data || [];

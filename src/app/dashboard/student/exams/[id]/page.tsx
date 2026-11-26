@@ -45,12 +45,21 @@ export default async function ExamPage({ params }: PageProps) {
     .eq('exam_id', examId)
     .order('order_index', { ascending: true });
 
+  // 3. Lấy toàn bộ lịch sử các lần làm bài trước đó của học sinh cho đề thi này
+  const { data: previousResults } = await supabaseAdmin
+    .from('exam_results')
+    .select('*')
+    .eq('exam_id', examId)
+    .eq('student_id', studentId)
+    .order('created_at', { ascending: false });
+
   return (
     <div className="w-full min-h-screen">
       <ExamSessionClient 
         exam={exam} 
         questions={questions || []} 
-        studentId={studentId} 
+        studentId={studentId}
+        previousResults={previousResults || []}
       />
     </div>
   );
