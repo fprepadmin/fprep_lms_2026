@@ -10,6 +10,7 @@ import {
   Image as ImageIcon, UploadCloud, Sparkles, ClipboardList, HelpCircle, TrendingUp, Award, BarChart3, Clock, Trophy, Search, Download
 } from 'lucide-react';
 import ExcelImportModal from '@/components/student/ExcelImportModal';
+import AdminElectiveStatsSection from '@/components/admin/AdminElectiveStatsSection';
 import { sortClassesNaturally, getTeacherDisplayName, getSubjectColorTheme, CLASS_BACKGROUND_PRESETS, getClassBackgroundUrl } from '@/lib/schoolUtils';
 
 interface Profile {
@@ -39,6 +40,7 @@ interface AdminDashboardClientProps {
   initialProfiles: Profile[];
   auditLogs: AuditLog[];
   studyLogs?: any[];
+  studyProgress?: any[];
   studentDetails?: any[];
   lessons?: any[];
   initialClasses?: any[];
@@ -60,6 +62,7 @@ export default function AdminDashboardClient({
   initialProfiles,
   auditLogs,
   studyLogs = [],
+  studyProgress = [],
   studentDetails = [],
   lessons = [],
   initialClasses = [],
@@ -1409,6 +1412,20 @@ export default function AdminDashboardClient({
               </div>
             </div>
           </div>
+
+          {/* ========================================================================= */}
+          {/* PHÂN HỆ THỐNG KÊ HỌC SINH ĐĂNG KÝ 2 MÔN TỰ CHỌN TỐT NGHIỆP & TÌNH HÌNH NHÓM */}
+          {/* ========================================================================= */}
+          <AdminElectiveStatsSection
+            studentDetails={localStudentDetails}
+            classes={classes}
+            subjects={subjects}
+            auditLogs={auditLogs}
+            exams={exams}
+            examResults={examResults}
+            studyLogs={studyLogs}
+            studyProgress={studyProgress}
+          />
 
           {/* ========================================================================= */}
           {/* PHÂN HỆ THỐNG KÊ KHẢO THÍ CHUYÊN SÂU THEO MÔN & THỜI GIAN (ADMIN) */}

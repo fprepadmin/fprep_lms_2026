@@ -11,6 +11,8 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import AnnouncementManager from './AnnouncementManager';
 import { getExamMetadataStore } from '@/lib/examAssignmentsStore';
+import { getTeacherDisplayName } from '@/lib/schoolUtils';
+import TeacherProfileHero, { TierStudentItem } from '@/components/teacher/TeacherProfileHero';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,29 +38,65 @@ export default async function TeacherDashboardPage() {
     profileRes,
     assignmentsRes,
     supportRequestsRes,
-    announcementsRes
+    announcementsRes,
+    teacherAvatarLogRes,
+    studentSettingsLogsRes,
+    allStudentsRes,
+    allSubjectsRes
   ] = await Promise.all([
-    supabase.from('profiles').select('role, full_name, email').eq('id', teacherId).single(),
+    supabase.from('profiles').select('role, email').eq('id', teacherId).maybeSingle(),
     supabase.from('teacher_classes').select('*, classes(*), subjects(*)').eq('teacher_id', teacherId),
     supabase.from('support_requests').select('*').order('created_at', { ascending: false }),
-    supabase.from('announcements').select('*').or(`target_type.eq.all,target_type.eq.teachers,and(target_type.eq.individual,target_user_id.eq.${teacherId}),target_type.is.null`).order('created_at', { ascending: false })
+    supabase.from('announcements').select('*').or(`target_type.eq.all,target_type.eq.teachers,and(target_type.eq.individual,target_user_id.eq.${teacherId}),target_type.is.null`).order('created_at', { ascending: false }),
+    supabase
+      .from('audit_logs')
+      .select('new_values, created_at')
+      .eq('target_table', 'profiles')
+      .eq('action', 'UPDATE_TEACHER_PROFILE_SETTINGS')
+      .eq('target_id', teacherId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    supabase
+      .from('audit_logs')
+      .select('target_id, new_values, created_at')
+      .eq('target_table', 'student_details')
+      .eq('action', 'UPDATE_STUDENT_PROFILE_SETTINGS')
+      .order('created_at', { ascending: false }),
+    supabase.from('student_details').select('student_id, full_name, mshs, class_id, classes(id, name, group_type, academic_year)'),
+    supabase.from('subjects').select('id, name, group_type').order('name')
   ]);
 
-  const userRole = profileRes.data?.role || 'teacher';
-  const teacherFullName = profileRes.data?.full_name || (teacherEmail ? teacherEmail.split('@')[0].toUpperCase() : 'Thầy/Cô');
+  const userRole = profileRes.data?.role || payload.role || 'teacher';
+  const roleLabel =
+    userRole === 'head_of_department'
+      ? 'Trưởng bộ môn'
+      : userRole === 'admin'
+      ? 'Quản trị viên'
+      : 'Giáo viên';
+  const teacherNames = getTeacherDisplayName({ id: teacherId, email: teacherEmail });
+  const teacherFullName = teacherNames.fullName || (teacherEmail ? teacherEmail.split('@')[0].toUpperCase() : 'Thầy/Cô');
+  const initialAvatarUrl: string | null =
+    typeof teacherAvatarLogRes.data?.[0]?.new_values?.avatar_url === 'string' &&
+    teacherAvatarLogRes.data[0].new_values.avatar_url.trim()
+      ? teacherAvatarLogRes.data[0].new_values.avatar_url.trim()
+      : null;
+
   const assignments = assignmentsRes.data || [];
   const announcements = announcementsRes.data || [];
+  const allGradeStudents = allStudentsRes.data || [];
+  const allSubjects = allSubjectsRes.data || [];
 
-  const classIds = assignments.map((a: any) => a.class_id).filter(Boolean);
-  const subjectIds = assignments.map((a: any) => a.subject_id).filter(Boolean);
-  const assignedSubjects = Array.from(new Set(assignments.map((a: any) => a.subjects?.name).filter(Boolean)));
-  const assignedClasses = Array.from(new Set(assignments.map((a: any) => a.classes?.name).filter(Boolean)));
+  const classIds = Array.from(new Set(assignments.map((a: any) => a.class_id).filter(Boolean)));
+  const subjectIds = Array.from(new Set(assignments.map((a: any) => a.subject_id).filter(Boolean)));
+  const assignedSubjects: string[] = Array.from(new Set(assignments.map((a: any) => a.subjects?.name).filter(Boolean)));
+  const assignedClasses: string[] = Array.from(new Set(assignments.map((a: any) => a.classes?.name).filter(Boolean)));
+  const academicYear = assignments[0]?.classes?.academic_year || '2025 – 2026';
 
   // 2. Truy vấn học sinh & học liệu thuộc các lớp phụ trách
   const [studentsRes, chaptersRes, examsRes, examAssignmentsRes, metadataStore] = await Promise.all([
     supabase.from('student_details').select('*, classes(*)').in('class_id', classIds.length > 0 ? classIds : [crypto.randomUUID()]),
     supabase.from('chapters').select('*, lessons(*, lesson_materials(*))').in('subject_id', subjectIds.length > 0 ? subjectIds : [crypto.randomUUID()]),
-    supabase.from('exams').select('id, title, duration_minutes, created_at, subject_id').in('subject_id', subjectIds.length > 0 ? subjectIds : [crypto.randomUUID()]),
+    supabase.from('exams').select('id, title, duration_minutes, created_at, subject_id, exam_type').in('subject_id', subjectIds.length > 0 ? subjectIds : [crypto.randomUUID()]),
     supabase.from('exam_assignments').select('*, classes(*)').in('class_id', classIds.length > 0 ? classIds : [crypto.randomUUID()]),
     getExamMetadataStore()
   ]);
@@ -67,6 +105,10 @@ export default async function TeacherDashboardPage() {
   const studentIds = students.map((s: any) => s.student_id);
   const chapters = chaptersRes.data || [];
   const exams = examsRes.data || [];
+  const subjectExamIdSet = new Set(exams.map((e: any) => e.id));
+  const subjectLessonIdSet = new Set(
+    chapters.flatMap((c: any) => (c.lessons || []).map((l: any) => l.id))
+  );
 
   // 3. Phân công giao bài & Kết quả học sinh
   const dbAssignments = examAssignmentsRes.data || [];
@@ -81,16 +123,34 @@ export default async function TeacherDashboardPage() {
 
   let examResults: any[] = [];
   let recentProgressWithNames: any[] = [];
+  let studyLogs: any[] = [];
+  let allStudyProgress: any[] = [];
 
   if (studentIds.length > 0) {
-    const [resultsRes, progressRes] = await Promise.all([
+    const [resultsRes, recentProgRes, studyLogsRes, allProgRes] = await Promise.all([
       supabase.from('exam_results').select('*, exams(*)').in('student_id', studentIds),
-      supabase.from('study_progress').select('*, lessons(*, chapters(*, subjects(*)))').in('student_id', studentIds).eq('completed', true).order('last_accessed_at', { ascending: false }).limit(5)
+      supabase.from('study_progress').select('*, lessons(*, chapters(*, subjects(*)))').in('student_id', studentIds).eq('completed', true).order('last_accessed_at', { ascending: false }).limit(5),
+      supabase.from('study_logs').select('id, student_id, lesson_id, duration_seconds').in('student_id', studentIds),
+      supabase.from('study_progress').select('id, student_id, lesson_id, completed').in('student_id', studentIds)
     ]);
 
-    examResults = resultsRes.data || [];
+    // Lọc kết quả làm bài thuộc đúng môn giáo viên dạy
+    const rawResults = resultsRes.data || [];
+    examResults = subjectIds.length > 0
+      ? rawResults.filter((r: any) => {
+          const joinedSubId = Array.isArray(r.exams) ? r.exams[0]?.subject_id : r.exams?.subject_id;
+          return subjectExamIdSet.has(r.exam_id) || (joinedSubId && subjectIds.includes(joinedSubId));
+        })
+      : rawResults;
 
-    recentProgressWithNames = (progressRes.data || []).map((prog: any) => {
+    studyLogs = (studyLogsRes.data || []).filter(
+      (l: any) => subjectLessonIdSet.size === 0 || !l.lesson_id || subjectLessonIdSet.has(l.lesson_id)
+    );
+    allStudyProgress = (allProgRes.data || []).filter(
+      (p: any) => subjectLessonIdSet.size === 0 || !p.lesson_id || subjectLessonIdSet.has(p.lesson_id)
+    );
+
+    recentProgressWithNames = (recentProgRes.data || []).map((prog: any) => {
       const student = students.find((s: any) => s.student_id === prog.student_id);
       return {
         ...prog,
@@ -100,8 +160,159 @@ export default async function TeacherDashboardPage() {
     });
   }
 
-  // 4. TÍNH TOÁN DỮ LIỆU THỰC TẾ TEACHING OVERVIEW & ANALYTICS
-  const totalClassesCount = assignments.length;
+  // 4. TÍNH TOÁN LƯỢT HỌC, LƯỢT LÀM BÀI, HS CHỌN MÔN & PHÂN TẦNG 4 NHÓM THEO ĐỀ THI THỬ
+  const totalStudySessionsCount = Math.max(studyLogs.length, allStudyProgress.length);
+  const studiedStudentSet = new Set<string>([
+    ...studyLogs.map((l: any) => l.student_id),
+    ...allStudyProgress.map((p: any) => p.student_id)
+  ]);
+  const uniqueStudiedStudentsCount = studiedStudentSet.size;
+  const totalStudySeconds = studyLogs.reduce((sum: number, l: any) => sum + (Number(l.duration_seconds) || 0), 0);
+  const totalStudyHours = (totalStudySeconds / 3600).toFixed(1);
+
+  // Xác định môn dạy có phải môn bắt buộc tốt nghiệp (Toán / Ngữ văn) không
+  const isMandatoryGraduationSubject = assignedSubjects.some((name) => {
+    const n = name.toLowerCase();
+    return n.includes('toán') || n.includes('ngữ văn') || n === 'văn' || n.includes('văn học');
+  });
+
+  // Bản đồ lựa chọn 2 môn tự chọn tốt nghiệp của từng học sinh (lấy bản ghi mới nhất từ audit_logs)
+  const studentElectivesMap = new Map<string, string[]>();
+  (studentSettingsLogsRes.data || []).forEach((log: any) => {
+    if (!log.target_id || studentElectivesMap.has(log.target_id)) return;
+    const ids = log.new_values?.elective_subject_ids;
+    if (Array.isArray(ids) && ids.length > 0) {
+      studentElectivesMap.set(
+        log.target_id,
+        ids.filter((x: unknown): x is string => typeof x === 'string' && x.trim() !== '')
+      );
+    }
+  });
+
+  // Hàm xác định 2 môn tự chọn mặc định theo phân ban lớp (khớp với StudentProfileHero khi HS chưa đổi)
+  const electivePool = allSubjects.filter((s: any) => {
+    const n = (s.name || '').toLowerCase();
+    return !n.includes('toán') && !n.includes('ngữ văn') && n !== 'văn' && !n.includes('văn học');
+  });
+
+  const getDefaultElectiveIdsForGroup = (grp: string): string[] => {
+    const preferred = grp === 'X' ? ['tiếng anh', 'lịch sử', 'địa', 'gdkt'] : ['vật l', 'hóa', 'tiếng anh', 'sinh', 'tin'];
+    const picked: string[] = [];
+    for (const kw of preferred) {
+      if (picked.length >= 2) break;
+      const found = electivePool.find((s: any) => (s.name || '').toLowerCase().includes(kw) && !picked.includes(s.id));
+      if (found) picked.push(found.id);
+    }
+    for (const s of electivePool) {
+      if (picked.length >= 2) break;
+      if (!picked.includes(s.id)) picked.push(s.id);
+    }
+    return picked.slice(0, 2);
+  };
+
+  const doesStudentChooseTeacherSubject = (st: any): { chosen: boolean; explicit: boolean } => {
+    if (subjectIds.length === 0) return { chosen: false, explicit: false };
+    if (isMandatoryGraduationSubject) return { chosen: true, explicit: true };
+
+    const explicitIds = studentElectivesMap.get(st.student_id);
+    if (explicitIds && explicitIds.length > 0) {
+      const matched = explicitIds.some((id) => subjectIds.includes(id));
+      return { chosen: matched, explicit: matched };
+    }
+
+    const clsObj = Array.isArray(st.classes) ? st.classes[0] : st.classes;
+    const grp = clsObj?.group_type || 'T';
+    const defaultIds = getDefaultElectiveIdsForGroup(grp);
+    return {
+      chosen: defaultIds.some((id) => subjectIds.includes(id)),
+      explicit: false
+    };
+  };
+
+  // Thống kê số HS chọn môn thầy cô dạy (trong các lớp phụ trách & toàn khối 12)
+  const chosenClassStudents = students.filter((st: any) => doesStudentChooseTeacherSubject(st).chosen);
+  const explicitClassCount = students.filter((st: any) => doesStudentChooseTeacherSubject(st).explicit).length;
+  const gradeWideChoiceCount = allGradeStudents.filter((st: any) => doesStudentChooseTeacherSubject(st).chosen).length;
+  const subjectChoiceStudentsCount = chosenClassStudents.length;
+
+  // Nhận diện đề thi thử (THPTQG, V-SAT, ĐGNL/TSA hoặc tiêu đề có "thi thử" / "tốt nghiệp" / "mô phỏng")
+  const isMockExam = (examObj: any): boolean => {
+    if (!examObj) return false;
+    const t = String(examObj.exam_type || '').toLowerCase();
+    if (t === 'thptqg' || t === 'vsat' || t === 'dgnl') return true;
+    const title = String(examObj.title || '').toLowerCase();
+    return (
+      title.includes('thi thử') ||
+      title.includes('thpt') ||
+      title.includes('tốt nghiệp') ||
+      title.includes('quốc gia') ||
+      title.includes('v-sat') ||
+      title.includes('vsat') ||
+      title.includes('đgnl') ||
+      title.includes('tsa') ||
+      title.includes('hsa') ||
+      title.includes('mô phỏng')
+    );
+  };
+
+  const examById = new Map<string, any>(exams.map((e: any) => [e.id, e]));
+  const mockExamResults = examResults.filter((r: any) => {
+    const joinedExam = Array.isArray(r.exams) ? r.exams[0] : r.exams;
+    return isMockExam(joinedExam || examById.get(r.exam_id));
+  });
+
+  const hasMockData = mockExamResults.length > 0;
+  const resultsForTiering = hasMockData ? mockExamResults : examResults;
+  const tierBasisLabel = hasMockData
+    ? 'Phân tầng theo ĐTB luyện đề thi thử'
+    : 'Tạm tính theo ĐTB đề luyện tập (chưa có lượt thi thử)';
+
+  const mockScoresList = resultsForTiering.map((r: any) => Number(r.score || 0));
+  const mockAverageScore =
+    mockScoresList.length > 0
+      ? (mockScoresList.reduce((a: number, b: number) => a + b, 0) / mockScoresList.length).toFixed(1)
+      : '—';
+
+  // Phân tầng 4 nhóm học sinh (trên tập HS chọn phân ban/môn thầy cô dạy; nếu = 0 thì lấy toàn bộ HS lớp dạy)
+  const cohortForTiering = chosenClassStudents.length > 0 ? chosenClassStudents : students;
+  const tierStudents: TierStudentItem[] = cohortForTiering.map((st: any) => {
+    const stResults = resultsForTiering.filter((r: any) => r.student_id === st.student_id);
+    const attempts = stResults.length;
+    const avg =
+      attempts > 0
+        ? Number((stResults.reduce((s: number, r: any) => s + (Number(r.score) || 0), 0) / attempts).toFixed(2))
+        : null;
+
+    let tier: TierStudentItem['tier'] = 'untested';
+    if (avg !== null) {
+      if (avg >= 8.0) tier = 'tier1';
+      else if (avg >= 6.5) tier = 'tier2';
+      else if (avg >= 5.0) tier = 'tier3';
+      else tier = 'tier4';
+    }
+
+    const clsObj = Array.isArray(st.classes) ? st.classes[0] : st.classes;
+    return {
+      studentId: st.student_id,
+      fullName: st.full_name || 'Học sinh',
+      mshs: st.mshs || 'N/A',
+      className: clsObj?.name || '—',
+      mockAttempts: attempts,
+      avgScore: avg,
+      tier
+    };
+  });
+
+  tierStudents.sort((a, b) => (b.avgScore ?? -1) - (a.avgScore ?? -1));
+
+  const tier1Count = tierStudents.filter((s) => s.tier === 'tier1').length;
+  const tier2Count = tierStudents.filter((s) => s.tier === 'tier2').length;
+  const tier3Count = tierStudents.filter((s) => s.tier === 'tier3').length;
+  const tier4Count = tierStudents.filter((s) => s.tier === 'tier4').length;
+  const untestedCount = tierStudents.filter((s) => s.tier === 'untested').length;
+
+  // 5. TÍNH TOÁN DỮ LIỆU THỰC TẾ TEACHING OVERVIEW & ANALYTICS
+  const totalClassesCount = classIds.length;
   const totalStudentsCount = students.length;
   const totalExamsCreated = exams.length;
   const totalAssignedCount = allAssignments.length;
@@ -140,56 +351,36 @@ export default async function TeacherDashboardPage() {
     <div className="space-y-6 w-full animate-fade-in font-body">
       
       {/* ==================================================== */}
-      {/* 1. WELCOME BANNER CHUẨN FPT AI LEARNING - FUTURE BLUE 2.0 */}
+      {/* 1. HỒ SƠ GIÁO VIÊN & PHÂN TẦNG 4 NHÓM HỌC SINH (THEO MÔ HÌNH HỌC SINH) */}
       {/* ==================================================== */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-[#0B1B55] via-[#1746D1] to-[#087CFF] text-white p-6 sm:p-8 shadow-xl shadow-blue-900/10 border border-white/10">
-        {/* Ambient subtle light glow */}
-        <div className="absolute -top-24 -right-24 w-80 h-80 bg-[#00DFFF]/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-[#0B1B55]/60 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur-md px-3.5 py-1 text-xs font-bold text-cyan-200 border border-white/20">
-              <GraduationCap className="h-4 w-4 text-[#00DFFF]" /> 
-              <span>Giáo viên &bull; THPT FPT Cần Thơ</span>
-              <span className="text-white/40">&bull;</span>
-              <span className="text-cyan-300">Năm học 2025 - 2026</span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-heading text-white tracking-tight m-0">
-              Kính chào Thầy/Cô {teacherFullName}!
-            </h1>
-            <p className="text-xs sm:text-sm text-blue-100 font-medium leading-relaxed m-0">
-              Không gian quản lý chuyên môn FPREP: Soạn đề thi trắc nghiệm chuẩn Bộ GD&ĐT 2026, ngân hàng câu hỏi phân hóa, phân công bài tập và theo dõi tiến độ khảo thí trực tiếp.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-2.5 pt-1 text-xs font-semibold text-blue-200">
-              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1 rounded-lg border border-white/10">
-                Môn phụ trách: <strong className="text-white font-bold">{assignedSubjects.join(', ') || 'Chưa phân công'}</strong>
-              </span>
-              <span className="flex items-center gap-1.5 bg-black/20 px-3 py-1 rounded-lg border border-white/10">
-                Lớp giảng dạy: <strong className="text-white font-bold">{assignedClasses.join(', ') || 'Chưa phân lớp'}</strong>
-              </span>
-            </div>
-          </div>
-
-          {/* ACADEMIC STATUS CAPSULE */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 border-t md:border-t-0 md:border-l border-white/20 pt-4 md:pt-0 md:pl-8 shrink-0">
-            <div className="text-center bg-white/10 backdrop-blur-md rounded-2xl px-5 py-3.5 border border-white/15 w-full sm:w-auto">
-              <span className="block text-2xl sm:text-3xl font-extrabold font-heading text-[#00DFFF]">
-                {totalClassesCount}
-              </span>
-              <span className="text-[11px] font-bold text-blue-100 uppercase tracking-wider">Lớp phụ trách</span>
-            </div>
-            <div className="text-center bg-white/10 backdrop-blur-md rounded-2xl px-5 py-3.5 border border-white/15 w-full sm:w-auto">
-              <span className="block text-2xl sm:text-3xl font-extrabold font-heading text-white">
-                {totalStudentsCount}
-              </span>
-              <span className="text-[11px] font-bold text-blue-100 uppercase tracking-wider">Tổng học sinh</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <TeacherProfileHero
+        teacherId={teacherId}
+        teacherFullName={teacherFullName}
+        roleLabel={roleLabel}
+        assignedSubjects={assignedSubjects}
+        assignedClasses={assignedClasses}
+        academicYear={academicYear}
+        totalClassesCount={totalClassesCount}
+        totalStudentsCount={totalStudentsCount}
+        initialAvatarUrl={initialAvatarUrl}
+        totalStudySessionsCount={totalStudySessionsCount}
+        uniqueStudiedStudentsCount={uniqueStudiedStudentsCount}
+        totalStudyHours={totalStudyHours}
+        totalExamAttemptsCount={completedSubmissionsCount}
+        mockExamAttemptsCount={mockExamResults.length}
+        mockAverageScore={mockAverageScore}
+        subjectChoiceStudentsCount={subjectChoiceStudentsCount}
+        gradeWideChoiceCount={gradeWideChoiceCount}
+        explicitRegisteredCount={explicitClassCount}
+        isMandatoryGraduationSubject={isMandatoryGraduationSubject}
+        tierBasisLabel={tierBasisLabel}
+        tier1Count={tier1Count}
+        tier2Count={tier2Count}
+        tier3Count={tier3Count}
+        tier4Count={tier4Count}
+        untestedCount={untestedCount}
+        tierStudents={tierStudents}
+      />
 
       {/* ==================================================== */}
       {/* 2. TEACHING OVERVIEW: 6 THẺ THỐNG KÊ SỐ LIỆU THỰC TẾ */}

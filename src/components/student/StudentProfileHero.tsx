@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   GraduationCap, Calendar, Camera, Flame, Target, Lock, Check,
-  SlidersHorizontal, Loader2, X, ClipboardList, BarChart3, Sparkles, User
+  SlidersHorizontal, Loader2, ClipboardList, BarChart3, Sparkles, User
 } from 'lucide-react';
 import SubjectIcon from '@/components/student/SubjectIcon';
 import DailyQuote from '@/components/student/DailyQuote';
@@ -276,23 +276,6 @@ export default function StudentProfileHero({
     }
   };
 
-  const handleRemoveAvatar = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setUploadingAvatar(true);
-    try {
-      setAvatarUrl(null);
-      persistLocal(null, selectedElectiveIds);
-      await fetch('/api/student/profile-settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatar_url: null }),
-      });
-      flashMessage('Đã gỡ ảnh đại diện.');
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
-
   const toggleDraftElective = (subjectId: string) => {
     setDraftElectiveIds((prev) => {
       if (prev.includes(subjectId)) {
@@ -387,7 +370,7 @@ export default function StudentProfileHero({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingAvatar}
                 title="Nhấn để tải ảnh đại diện của bạn lên"
-                className="group relative w-20 h-20 sm:w-[88px] sm:h-[88px] rounded-2xl overflow-hidden border-2 border-white/50 bg-white/15 backdrop-blur-md shadow-lg flex flex-col items-center justify-center cursor-pointer transition-all hover:border-[#00DFFF] hover:scale-[1.02] active:scale-95"
+                className="group relative w-20 h-20 sm:w-[88px] sm:h-[88px] rounded-full overflow-hidden border-[3px] border-[#F26F21] ring-2 ring-orange-400/35 bg-white/15 backdrop-blur-md shadow-lg flex flex-col items-center justify-center cursor-pointer transition-all hover:border-orange-300 hover:scale-[1.02] active:scale-95"
               >
                 {avatarUrl ? (
                   <img
@@ -397,7 +380,7 @@ export default function StudentProfileHero({
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-1 text-white/90 px-1 text-center">
-                    <User className="h-7 w-7 text-[#00DFFF]" />
+                    <User className="h-7 w-7 text-orange-300" />
                     <span className="text-[10px] font-bold leading-none text-blue-100">
                       Tải ảnh
                     </span>
@@ -411,10 +394,10 @@ export default function StudentProfileHero({
                   }`}
                 >
                   {uploadingAvatar ? (
-                    <Loader2 className="h-5 w-5 text-[#00DFFF] animate-spin" />
+                    <Loader2 className="h-5 w-5 text-orange-300 animate-spin" />
                   ) : (
                     <>
-                      <Camera className="h-4 w-4 text-[#00DFFF]" />
+                      <Camera className="h-4 w-4 text-orange-300" />
                       <span className="text-[10px] font-bold text-white">
                         {avatarUrl ? 'Đổi ảnh' : 'Tải ảnh'}
                       </span>
@@ -429,22 +412,10 @@ export default function StudentProfileHero({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingAvatar}
                 aria-label="Tải ảnh học sinh"
-                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-white text-[#1746D1] border border-blue-200 shadow-md flex items-center justify-center hover:bg-[#00DFFF] hover:text-[#0B1B55] transition-colors cursor-pointer"
+                className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-white text-[#F26F21] border-2 border-[#F26F21] shadow-md flex items-center justify-center hover:bg-orange-50 transition-colors cursor-pointer"
               >
-                <Camera className="h-3.5 w-3.5" />
+                <Camera className="h-3 w-3" />
               </button>
-
-              {/* Nút gỡ ảnh nhỏ góc trên phải khi đã có ảnh */}
-              {avatarUrl && !uploadingAvatar && (
-                <button
-                  type="button"
-                  onClick={handleRemoveAvatar}
-                  title="Gỡ ảnh đại diện"
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 hover:bg-rose-600 text-white shadow-sm flex items-center justify-center cursor-pointer transition-colors"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
             </div>
 
             {/* Thông tin trường, họ tên, lớp, niên khóa */}

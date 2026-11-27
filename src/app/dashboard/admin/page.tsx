@@ -28,6 +28,7 @@ export default async function AdminDashboardPage() {
     profilesRes,
     auditLogsRes,
     studyLogsRes,
+    studyProgressRes,
     studentDetailsRes,
     lessonsRes,
     classesRes,
@@ -41,6 +42,7 @@ export default async function AdminDashboardPage() {
     supabase.from('profiles').select('*').order('created_at', { ascending: false }),
     supabase.from('audit_logs').select('*, actor:profiles(email)').order('created_at', { ascending: false }),
     supabase.from('study_logs').select('*').order('created_at', { ascending: false }),
+    supabase.from('study_progress').select('student_id, lesson_id, completed'),
     supabase.from('student_details').select('*'),
     supabase.from('lessons').select('*'),
     supabase.from('classes').select('*').order('name', { ascending: true }),
@@ -108,6 +110,7 @@ export default async function AdminDashboardPage() {
         initialProfiles={profilesRes.data || []}
         auditLogs={auditLogsRes.data || []}
         studyLogs={studyLogsRes.data || []}
+        studyProgress={studyProgressRes.data || []}
         studentDetails={studentDetailsRes.data || []}
         lessons={lessonsRes.data || []}
         initialClasses={classesRes.data || []}
